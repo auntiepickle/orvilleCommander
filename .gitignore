@@ -1,0 +1,28 @@
+# Node dependencies
+node_modules/
+
+# Vite build output
+dist/
+
+# Local env files
+.env
+.env.*
+
+# Log files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local config files
+*.local
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Project-specific
+project-files.txt
+
+# Git internals (should never be committed)
+.git/

@@ -1,0 +1,27 @@
+{
+  "name": "orvillecommander",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/auntiepickle/orvilleCommander.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/auntiepickle/orvilleCommander/issues"
+  },
+  "homepage": "https://github.com/auntiepickle/orvilleCommander#readme",
+  "devDependencies": {
+    "vite": "^7.1.6"
+  },
+  "dependencies": {
+    "webmidi": "^3.1.12"
+  }
+}

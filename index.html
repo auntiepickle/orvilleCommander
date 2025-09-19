@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Orville Remote Viewer</title>
+  <style>
+    body { font-family: monospace; background: #222; color: #eee; }
+    #screen { border: 1px solid #fff; padding: 10px; white-space: pre; font-size: 16px; }
+    #log-area { width: 100%; height: 200px; background: #333; color: #eee; border: 1px solid #fff; padding: 5px; }
+    button, select, input { margin: 10px; }
+    .keypress-btn { width: 80px; }
+  </style>
+</head>
+<body>
+  <h1>Orville Screen Viewer</h1>
+  <button id="connect">Connect MIDI</button>
+  <label for="output-select">Output Port:</label>
+  <select id="output-select"></select>
+  <label for="input-select">Input Port:</label>
+  <select id="input-select"></select>
+  <label for="device-id">Device ID (try 0 or 1):</label>
+  <input id="device-id" type="number" value="0" min="0" max="127">
+  <button id="select-ports">Select Ports</button>
+  <button id="save-config">Save Config</button>
+  <button id="clear-config">Clear Config</button>
+  <label for="key-input">Key to Query (e.g., 10030045):</label>
+  <input id="key-input" type="text" value="0">
+  <button id="send-request">Get Object Info</button>
+  <button id="get-value">Get Value</button>
+  <label for="poll-toggle">Auto-Poll (every 1s):</label>
+  <input id="poll-toggle" type="checkbox">
+  <div>Keypress Controls:
+    <button id="up-btn" class="keypress-btn">UP</button>
+    <button id="down-btn" class="keypress-btn">DOWN</button>
+    <button id="left-btn" class="keypress-btn">LEFT</button>
+    <button id="right-btn" class="keypress-btn">RIGHT</button>
+    <button id="enter-btn" class="keypress-btn">ENTER</button>
+    <button id="select-btn" class="keypress-btn">SELECT</button>
+    <button id="program-btn" class="keypress-btn">PROGRAM</button>
+    <button id="parameter-btn" class="keypress-btn">PARAM</button>
+    <button id="levels-btn" class="keypress-btn">LEVELS</button>
+    <button id="setup-btn" class="keypress-btn">SETUP</button>
+    <button id="bypass-btn" class="keypress-btn">BYPASS</button>
+    <button id="inc-btn" class="keypress-btn">INC</button>
+    <button id="dec-btn" class="keypress-btn">DEC</button>
+  </div>
+  <label for="custom-sysex">Custom SysEx (hex space-separated):</label>
+  <input id="custom-sysex" type="text" placeholder="e.g., 1C 70 00 2D 31 30 30 33 30 30 34 36">
+  <button id="send-custom">Send Custom</button>
+  <pre id="screen">Waiting for connection...</pre>
+  <h3>Log (copy-paste friendly):</h3>
+  <textarea id="log-area" readonly></textarea>
+  <button id="copy-log">Copy Log</button>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

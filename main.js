@@ -12,6 +12,9 @@ const clearConfigBtn = document.getElementById('clear-config');
 const keyInput = document.getElementById('key-input');
 const sendRequestBtn = document.getElementById('send-request');
 const getValueBtn = document.getElementById('get-value');
+const setValueInput = document.getElementById('set-value-input');
+const setValueBtn = document.getElementById('set-value');
+const backBtn = document.getElementById('back-btn');
 const pollToggle = document.getElementById('poll-toggle');
 const customSysexInput = document.getElementById('custom-sysex');
 const sendCustomBtn = document.getElementById('send-custom');
@@ -35,6 +38,7 @@ const decBtn = document.getElementById('dec-btn');
 let selectedOutput = null;
 let selectedInput = null;
 let pollInterval = null;
+let keyStack = []; // For back navigation
 
 function log(message) {
   const timestamp = new Date().toISOString();
@@ -144,11 +148,12 @@ selectPortsBtn.addEventListener('click', () => {
         log('Success: Received object info dump reply.');
         log(`Decoded ASCII: ${asciiData}`);
         const formatted = parseAsciiData(asciiData);
-        screenEl.textContent = formatted;
+        screenEl.innerHTML = formatted; // Use innerHTML for links
+        addKeyLinks();
       } else if (code === 0x2E) { // VALUE_DUMP
         log('Success: Received value dump reply.');
         log(`Decoded value: ${asciiData}`);
-        screenEl.textContent += `\nCurrent Value: ${asciiData.split(' ')[1] || 'triggered'}`;
+        screenEl.innerHTML += `<br>Current Value: ${asciiData.split(' ')[1] || 'triggered'}`;
       } else {
         log('Received sysex, but unrecognized code.');
       }
@@ -162,19 +167,38 @@ function parseAsciiData(asciiData) {
   lines.forEach(line => {
     if (line.startsWith('COL')) {
       const parts = line.match(/COL\s+(\d+)\s+(\w+)\s+\w+\s+'([^']*)'\s+'?([^']*)'?\s+(\d+)/);
-      if (parts) formatted += `- Menu: Key ${parts[2]}, Label: ${parts[3]}, Tag: ${parts[4]}, Items: ${parts[5]}\n`;
+      if (parts) formatted += `- Menu: <span class="key-link" data-key="${parts[2]}">Key ${parts[2]}, Label: ${parts[3]}, Tag: ${parts[4]}, Items: ${parts[5]}</span>\n`;
     } else if (line.startsWith('SET')) {
       const parts = line.match(/SET\s+(\d+)\s+(\w+)\s+\w+\s+'([^']*)'\s+(\w+)\s+(\d+)\s+'([^']*)'\s+(\d+)/);
-      if (parts) formatted += `- Set: Key ${parts[2]}, Label: ${parts[3]}, Current: ${parts[5]} ('${parts[6]}'), Options: ${parts[7]}\n`;
+      if (parts) formatted += `- Set: <span class="key-link" data-key="${parts[2]}">Key ${parts[2]}, Label: ${parts[3]}, Current: ${parts[5]} ('${parts[6]}'), Options: ${parts[7]}</span>\n`;
     } else if (line.startsWith('NUM')) {
       const parts = line.match(/NUM\s+(\d+)\s+(\w+)\s+\w+\s+'([^']*)'\s+(\w+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
-      if (parts) formatted += `- Num: Key ${parts[2]}, Label: ${parts[3]}, Value: ${parts[5]}, Range: ${parts[6]}-${parts[7]}, Step: ${parts[8]}\n`;
+      if (parts) formatted += `- Num: <span class="key-link" data-key="${parts[2]}">Key ${parts[2]}, Label: ${parts[3]}, Value: ${parts[5]}, Range: ${parts[6]}-${parts[7]}, Step: ${parts[8]}</span>\n`;
     } else {
       formatted += line + '\n';
     }
   });
   return formatted || asciiData;
 }
+
+function addKeyLinks() {
+  screenEl.querySelectorAll('.key-link').forEach(link => {
+    link.addEventListener('click', () => {
+      keyStack.push(keyInput.value);
+      keyInput.value = link.dataset.key;
+      sendObjectRequest();
+      if (pollToggle.checked) getValueBtn.click();
+    });
+  });
+}
+
+backBtn.addEventListener('click', () => {
+  if (keyStack.length) {
+    keyInput.value = keyStack.pop();
+    sendObjectRequest();
+    if (pollToggle.checked) getValueBtn.click();
+  }
+});
 
 sendRequestBtn.addEventListener('click', sendObjectRequest);
 
@@ -200,6 +224,29 @@ getValueBtn.addEventListener('click', () => {
   const keyBytes = Array.from(key).map(char => char.charCodeAt(0));
   selectedOutput.sendSysex(0x1C, [0x70, deviceId, 0x2D, ...keyBytes]);
   log(`Sent value request for key '${key}'. Waiting for response...`);
+});
+
+setValueBtn.addEventListener('click', () => {
+  if (!selectedOutput || !selectedInput) {
+    log('Select ports first.');
+    return;
+  }
+  const deviceId = parseInt(deviceIdInput.value, 10);
+  const key = keyInput.value.trim();
+  const value = setValueInput.value.trim();
+  if (!value) {
+    log('Enter a new value to set.');
+    return;
+  }
+  const keyBytes = Array.from(key).map(char => char.charCodeAt(0));
+  const spaceByte = 0x20;
+  const valueBytes = Array.from(value).map(char => char.charCodeAt(0));
+  selectedOutput.sendSysex(0x1C, [0x70, deviceId, 0x2D, ...keyBytes, spaceByte, ...valueBytes]);
+  log(`Sent set value for key '${key}' to '${value}'. Waiting for acknowledgement...`);
+  if (pollToggle.checked) {
+    setTimeout(sendObjectRequest, 200);
+  }
+  setValueInput.value = '';
 });
 
 pollToggle.addEventListener('change', () => {
@@ -235,7 +282,7 @@ const keyMasks = {
   up: [0x0F, 0x0E, 0x0F, 0x0F, 0x0F, 0x0D, 0x0F, 0x0F],
   down: [0x0F, 0x0F, 0x0F, 0x0E, 0x0F, 0x0D, 0x0F, 0x0F],
   left: [0x0F, 0x0F, 0x0F, 0x0E, 0x0F, 0x0F, 0x0F, 0x0F],
-  right: [0x0E, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F],
+  right: [0x0F, 0x0E, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F],
   enter: [0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0F],
   select: [0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0E, 0x0F, 0x0F],
   program: [0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x0F, 0x07],
@@ -255,9 +302,8 @@ function sendKeypress(mask) {
   const deviceId = parseInt(deviceIdInput.value, 10);
   selectedOutput.sendSysex(0x1C, [0x70, deviceId, 0x01, ...mask]);
   log(`Sent keypress SysEx with mask: ${mask.map(b => b.toString(16).toUpperCase()).join(' ')}`);
-  // If polling, trigger immediate refresh
   if (pollToggle.checked) {
-    setTimeout(sendObjectRequest, 200); // Delay to let Orville process
+    setTimeout(sendObjectRequest, 200);
   }
 }
 

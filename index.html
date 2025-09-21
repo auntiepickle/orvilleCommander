@@ -10,6 +10,7 @@
     #log-area { width: 100%; height: 200px; background: #333; color: #eee; border: 1px solid #fff; padding: 5px; }
     button, select, input { margin: 10px; }
     .keypress-btn { width: 80px; }
+    .key-link { color: #0ff; cursor: pointer; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -28,6 +29,10 @@
   <input id="key-input" type="text" value="0">
   <button id="send-request">Get Object Info</button>
   <button id="get-value">Get Value</button>
+  <label for="set-value-input">New Value to Set:</label>
+  <input id="set-value-input" type="text" placeholder="e.g., 0.5 for NUM">
+  <button id="set-value">Set Value</button>
+  <button id="back-btn">Back</button>
   <label for="poll-toggle">Auto-Poll (every 1s):</label>
   <input id="poll-toggle" type="checkbox">
   <div>Keypress Controls:

@@ -43,6 +43,8 @@ export function renderScreen(subs, ascii, log) {
   if (appState.currentKey === '0') {
     const progA = subs.find(s => s.key === '401000b') || {key: '401000b', statement: ''};
     const progB = subs.find(s => s.key === '801000b') || {key: '801000b', statement: ''};
+    appState.dspAKey = progA.key;
+    appState.dspBKey = progB.key;
     displayLines.push(` A: ${progA.statement} B: ${progB.statement}`);
     displayLines.push('');
     displayLines.push('');

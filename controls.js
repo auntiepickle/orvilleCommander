@@ -1,6 +1,8 @@
 // controls.js
+// controls.js
 import { sendKeypress } from './midi.js';
 import { updateScreen } from './renderer.js';
+import { appState } from './state.js';
 
 export const keypressMasks = {
   'up': [0xFE, 0xFF, 0xFD, 0xFF],
@@ -38,6 +40,18 @@ export const keypressMasks = {
   'minus': [0xFF, 0xFF, 0xEF, 0xFF],
   'cxl': [0xFF, 0xFF, 0xFF, 0xDF],
 };
+
+function toggleDspKey(key) {
+  if (key === '0') {
+    return appState.currentKey === appState.dspAKey ? appState.dspBKey : appState.dspAKey;
+  } else if (key.startsWith('4')) {
+    return '8' + key.slice(1);
+  } else if (key.startsWith('8')) {
+    return '4' + key.slice(1);
+  } else {
+    return key;
+  }
+}
 
 export function setupKeypressControls(log) {
   const buttons = {
@@ -85,7 +99,12 @@ export function setupKeypressControls(log) {
         if (mask) {
           sendKeypress(mask);
           log(`Sent keypress for ${key}: ${mask.map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
-          setTimeout(updateScreen, 200);
+          setTimeout(() => {
+            if (key === 'ab') {
+              appState.currentKey = toggleDspKey(appState.currentKey);
+            }
+            updateScreen();
+          }, 200);
         }
       });
     }

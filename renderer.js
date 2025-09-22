@@ -10,6 +10,28 @@ export function updateScreen() {
   sendValueDump(appState.currentKey);
 }
 
+const handleLcdClick = (e) => {
+  if (e.target.classList.contains('dsp-clickable')) {
+    appState.presetKey = e.target.dataset.key;
+    appState.currentKey = e.target.dataset.key;
+    appState.autoLoad = true;
+    updateScreen();
+  } else if (e.target.classList.contains('softkey')) {
+    appState.currentKey = e.target.dataset.key;
+    appState.paramOffset = 0; // Reset offset for new menu
+    updateScreen();
+  } else if (e.target.classList.contains('param-value')) {
+    const key = e.target.dataset.key;
+    const currentValue = e.target.innerText.trim();
+    const newValue = prompt(`Edit value for key ${key}:`, currentValue);
+    if (newValue !== null && newValue !== currentValue) {
+      sendValuePut(key, newValue);
+      appState.currentValues[key] = newValue;
+      setTimeout(updateScreen, 200); // Delay to allow MIDI update
+    }
+  }
+};
+
 export function renderScreen(subs, ascii, log) {
   const lcdEl = document.getElementById('lcd');
   if (!subs) {
@@ -80,15 +102,11 @@ export function renderScreen(subs, ascii, log) {
     }
   });
   lcdEl.innerHTML = htmlLines.join('\n');
-  // Add event delegation for dsp-clickable
-  lcdEl.addEventListener('click', (e) => {
-    if (e.target.classList.contains('dsp-clickable')) {
-      appState.presetKey = e.target.dataset.key;
-      appState.currentKey = e.target.dataset.key;
-      appState.autoLoad = true;
-      updateScreen();
-    }
-  });
+  
+  // Remove and re-add the event listener to ensure only one is active
+  lcdEl.removeEventListener('click', handleLcdClick);
+  lcdEl.addEventListener('click', handleLcdClick);
+  
   // Auto load first menu if applicable
   if (appState.autoLoad && appState.currentKey === appState.presetKey) {
     appState.autoLoad = false;

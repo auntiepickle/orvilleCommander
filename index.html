@@ -2,43 +2,10 @@
 <html>
 <head>
   <title>OrvilleCommander v0.2</title>
-  <style>
-    .lcd {
-      font-family: monospace;
-      background: #0f0; /* Green backlit LCD simulation */
-      color: #000;
-      padding: 10px;
-      width: 40ch;
-      height: 4em;
-      white-space: pre;
-      line-height: 1.2em;
-      border: 2px solid #000;
-      overflow: hidden;
-    }
-    .line {
-      height: 1.2em;
-    }
-    .softkey {
-      cursor: pointer;
-      text-decoration: underline;
-      display: inline-block;
-      width: 10ch;
-    }
-    .param-value {
-      cursor: pointer;
-      background: #0a0;
-      text-decoration: underline;
-    }
-    #log-area {
-      height: 200px;
-      overflow: auto;
-      font-family: monospace;
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <h1>Orville Commander</h1>
-  <div id="lcd" class="lcd">Waiting for connection...</div>
   <button id="connect">Connect MIDI</button>
   <select id="output-select"></select>
   <select id="input-select"></select>
@@ -46,39 +13,86 @@
   <button id="select-ports">Select Ports</button>
   <button id="save-config">Save Config</button>
   <button id="clear-config">Clear Config</button><br>
-  <button id="test-keypress">Test Keypress</button><br>
-  <input id="key-input" type="text" placeholder="Key (e.g. 0)">
-  <button id="send-request">Send Object Info Request</button>
-  <button id="get-value">Get Value</button>
-  <input id="set-value-input" type="text" placeholder="Set Value">
-  <button id="set-value">Set Value</button><br>
-  <button id="back-btn">Back</button>
-  <button id="poll-toggle">Toggle Polling</button>
-  <button id="sync-btn">Sync to Hardware</button>
-  <input id="custom-sysex" type="text" placeholder="Custom SysEx (hex)">
-  <button id="send-custom">Send Custom</button>
-  <button id="copy-log">Copy Log</button>
-  <h2>Keypress Controls</h2>
-  <button id="up-btn">Up</button>
-  <button id="down-btn">Down</button>
-  <button id="left-btn">Left</button>
-  <button id="right-btn">Right</button>
-  <button id="enter-btn">Enter</button>
-  <button id="select-btn">Select</button>
-  <button id="program-btn">Program</button>
-  <button id="parameter-btn">Parameter</button>
-  <button id="levels-btn">Levels</button>
-  <button id="setup-btn">Setup</button>
-  <button id="bypass-btn">Bypass</button>
-  <button id="inc-btn">Inc</button>
-  <button id="dec-btn">Dec</button>
-  <br>
-  <h2>Soft Keys (Physical Simulation)</h2>
-<button id="soft1-btn">Soft1</button>
-<button id="soft2-btn">Soft2</button>
-<button id="soft3-btn">Soft3</button>
-<button id="soft4-btn">Soft4</button><br>
-  <textarea id="log-area" readonly style="width:500px"></textarea>
+  <div class="front-panel">
+    <!-- Left: Level Meters -->
+    <div class="level-meters">
+      <div class="meter">IN1</div><div class="meter">IN2</div><div class="meter">IN3</div><div class="meter">IN4</div>
+      <div class="meter">OUT1</div><div class="meter">OUT2</div><div class="meter">OUT3</div><div class="meter">OUT4</div>
+    </div>
+   
+    <!-- Left: Function Buttons -->
+    <div class="function-buttons">
+      <button id="ab-btn">A/B</button>
+      <button id="bypass-btn">BYPASS</button>
+    </div>
+   
+    <!-- Center: LCD Screen -->
+    <div id="lcd"></div>
+   
+    <!-- Center Bottom: Soft Keys -->
+    <div class="soft-keys">
+      <button id="soft1-btn">SOFT 1</button>
+      <button id="soft2-btn">SOFT 2</button>
+      <button id="soft3-btn">SOFT 3</button>
+      <button id="soft4-btn">SOFT 4</button>
+    </div>
+   
+    <!-- Right: Navigation Buttons -->
+    <div class="nav-buttons">
+      <button id="program-btn">PROGRAM</button>
+      <button id="program-hold-btn">PROGRAM (HOLD)</button>
+      <button id="parameter-btn">PARAMETER</button>
+      <button id="parameter-hold-btn">PARAMETER (HOLD)</button>
+      <button id="select-btn">SELECT</button>
+      <button id="select-hold-btn">SELECT (HOLD)</button>
+      <button id="levels-btn">LEVELS</button>
+      <button id="setup-btn">SETUP</button>
+    </div>
+   
+    <!-- Right: Cursor Keys (Diamond Layout) -->
+    <div class="cursor-keys">
+      <button id="up-btn">↑</button> <!-- Cursor Up -->
+      <button id="left-btn">←</button>
+      <button id="down-btn">↓</button> <!-- Cursor Down -->
+      <button id="right-btn">→</button>
+    </div>
+   
+    <!-- Right: Keypad Grid -->
+    <div class="keypad">
+      <button id="1-btn">1</button>
+      <button id="2-btn">2</button>
+      <button id="3-btn">3</button>
+      <button id="4-btn">4</button>
+      <button id="5-btn">5</button>
+      <button id="6-btn">6</button>
+      <button id="7-btn">7</button>
+      <button id="8-btn">8</button>
+      <button id="9-btn">9</button>
+      <button id="dot-btn">.</button>
+      <button id="0-btn">0</button>
+      <button id="minus-btn">-</button>
+      <button id="inc-btn">UP</button> <!-- Scroll Inc -->
+      <button id="dec-btn">DOWN</button> <!-- Scroll Dec -->
+      <button id="cxl-btn">CXL</button>
+      <button id="enter-btn">ENT</button> <!-- Note: Matches 'enter' in masks -->
+    </div>
+  </div>
+  <details>
+    <summary>Debug Tools</summary>
+    <button id="test-keypress">Test Keypress</button><br>
+    <input id="key-input" type="text" placeholder="Key (e.g. 0)">
+    <button id="send-request">Send Object Info Request</button>
+    <button id="get-value">Get Value</button>
+    <input id="set-value-input" type="text" placeholder="Set Value">
+    <button id="set-value">Set Value</button><br>
+    <button id="back-btn">Back</button>
+    <button id="poll-toggle">Toggle Polling</button>
+    <button id="sync-btn">Sync to Hardware</button>
+    <input id="custom-sysex" type="text" placeholder="Custom SysEx (hex)">
+    <button id="send-custom">Send Custom</button>
+    <button id="copy-log">Copy Log</button>
+    <textarea id="log-area" readonly></textarea>
+  </details>
   <script type="module" src="main.js"></script>
 </body>
 </html>

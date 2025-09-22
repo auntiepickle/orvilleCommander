@@ -4,10 +4,10 @@ import { sendObjectInfoDump, sendValueDump, sendValuePut, sendKeypress } from '.
 import { keypressMasks } from './controls.js';
 import { parseSubObject } from './parser.js';
 
-export function updateScreen() {
+export function updateScreen(log = null) {
   appState.currentValues = {};
-  sendObjectInfoDump(appState.currentKey);
-  sendValueDump(appState.currentKey);
+  sendObjectInfoDump(appState.currentKey, log);
+  sendValueDump(appState.currentKey, log);
 }
 
 const handleLcdClick = (e) => {
@@ -22,7 +22,7 @@ const handleLcdClick = (e) => {
     updateScreen();
   } else if (e.target.classList.contains('param-value')) {
     const key = e.target.dataset.key;
-    const currentValue = e.target.innerText.trim();
+    const currentValue = appState.currentValues[key] || e.target.innerText.trim().replace(/[^0-9.-]/g, ''); // Fallback to parsing number from display
     const newValue = prompt(`Edit value for key ${key}:`, currentValue);
     if (newValue !== null && newValue !== currentValue) {
       sendValuePut(key, newValue);

@@ -78,7 +78,7 @@ selectPortsBtn.addEventListener('click', () => {
   addSysexListener(log);
   log('Ports selected and listener added. Device ID set to ' + devId);
   lcdEl.innerText = 'Connected. Fetching root screen...';
-  updateScreen();
+  updateScreen(log);
 });
 
 saveConfigBtn.addEventListener('click', () => {
@@ -91,17 +91,17 @@ clearConfigBtn.addEventListener('click', () => {
 
 sendRequestBtn.addEventListener('click', () => {
   appState.currentKey = keyInput.value;
-  updateScreen();
+  updateScreen(log);
   log(`Requested object info for key ${appState.currentKey}`);
 });
 
 getValueBtn.addEventListener('click', () => {
-  sendValueDump(appState.currentKey);
+  sendValueDump(appState.currentKey, log);
 });
 
 setValueBtn.addEventListener('click', () => {
   const value = setValueInput.value;
-  sendValuePut(appState.currentKey, value);
+  sendValuePut(appState.currentKey, value, log);
 });
 
 backBtn.addEventListener('click', () => {
@@ -109,7 +109,7 @@ backBtn.addEventListener('click', () => {
     appState.currentKey = appState.keyStack.pop();
     appState.paramOffset = 0;
     appState.autoNavigated = false;
-    updateScreen();
+    updateScreen(log);
     log(`Back to key ${appState.currentKey}`);
   }
 });
@@ -117,7 +117,7 @@ backBtn.addEventListener('click', () => {
 pollToggle.addEventListener('click', () => {
   isPolling = !isPolling;
   if (isPolling) {
-    pollInterval = setInterval(updateScreen, 500);
+    pollInterval = setInterval(() => updateScreen(log), 500);
     log('Polling started.');
     pollToggle.innerText = 'Stop Polling';
   } else {
@@ -133,7 +133,7 @@ sendCustomBtn.addEventListener('click', () => {
   for (let i = 0; i < hex.length; i += 2) {
     bytes.push(parseInt(hex.substr(i, 2), 16));
   }
-  sendSysEx(bytes[0], bytes.slice(1));
+  sendSysEx(bytes[0], bytes.slice(1), log);
 });
 
 testKeypressBtn.addEventListener('click', () => {
@@ -142,7 +142,7 @@ testKeypressBtn.addEventListener('click', () => {
 
 syncBtn.addEventListener('click', () => {
   appState.currentKey = '0';
-  updateScreen();
+  updateScreen(log);
   log('Synced to root');
 });
 

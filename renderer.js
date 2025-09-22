@@ -39,6 +39,7 @@ export function renderScreen(subs, ascii, log) {
   }
   const main = subs[0];
   let displayLines = [];
+  let paramDisplayedHtml = [];
   if (appState.currentKey === '0') {
     const progA = subs.find(s => s.key === '401000b') || {key: '401000b', statement: ''};
     const progB = subs.find(s => s.key === '801000b') || {key: '801000b', statement: ''};
@@ -56,19 +57,26 @@ export function renderScreen(subs, ascii, log) {
     displayLines.push(title);
     displayLines.push('--------------------------------');
     let paramLines = [];
+    let paramHtmlLines = [];
     subs.slice(1).forEach(s => {
       if (s.type === 'NUM') {
         const value = appState.currentValues[s.key] || parseFloat(s.value || 0).toFixed(3);
         let fullText = (s.statement || '').replace(/%f/g, value).replace(/%/g, '%');
+        let fullHtml = (s.statement || '').replace(/%f/g, `<span class="param-value" data-key="${s.key}">${value}</span>`).replace(/%/g, '%');
         paramLines.push(fullText);
+        paramHtmlLines.push(fullHtml);
         if (!appState.currentValues[s.key]) sendValueDump(s.key);
       } else if (s.type === 'INF') {
-        paramLines.push(s.statement || s.tag || '');
+        const info = s.statement || s.tag || '';
+        paramLines.push(info);
+        paramHtmlLines.push(info);
       }
     });
     let paramDisplayed = paramLines.slice(appState.paramOffset, appState.paramOffset + 3);
     while (paramDisplayed.length < 3) paramDisplayed.push('');
     displayLines = displayLines.concat(paramDisplayed);
+    paramDisplayedHtml = paramHtmlLines.slice(appState.paramOffset, appState.paramOffset + 3);
+    while (paramDisplayedHtml.length < 3) paramDisplayedHtml.push('');
     let softSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
     if (appState.menus.length > 0 && appState.currentKey !== appState.presetKey) {
       softSubs = appState.menus;
@@ -89,10 +97,9 @@ export function renderScreen(subs, ascii, log) {
         softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
       });
       return softHtml;
-    } else if (index > 1 && index < displayLines.length - 1 && l.includes(':')) {
-      const [tag, val] = l.split(':');
-      const paramSub = subs.find(s => s.type === 'NUM' && (s.statement || '').includes(tag));
-      return `${tag}: <span class="param-value" data-key="${paramSub.key}">${val}</span>`;
+    } else if (index > 1 && index < displayLines.length - 1) {
+      const html = paramDisplayedHtml[index - 2];
+      return html || l;
     } else if (index === 0 && appState.currentKey === '0') {
       const progA = subs.find(s => s.key === '401000b') || {key: '401000b', statement: ''};
       const progB = subs.find(s => s.key === '801000b') || {key: '801000b', statement: ''};

@@ -1,62 +1,84 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Orville Remote Viewer</title>
+  <title>OrvilleCommander v0.2</title>
   <style>
-    body { font-family: monospace; background: #222; color: #eee; }
-    #screen { border: 1px solid #fff; padding: 10px; white-space: pre; font-size: 16px; }
-    #log-area { width: 100%; height: 200px; background: #333; color: #eee; border: 1px solid #fff; padding: 5px; }
-    button, select, input { margin: 10px; }
-    .keypress-btn { width: 80px; }
-    .key-link { color: #0ff; cursor: pointer; text-decoration: underline; }
+    .lcd {
+      font-family: monospace;
+      background: #0f0; /* Green backlit LCD simulation */
+      color: #000;
+      padding: 10px;
+      width: 40ch;
+      height: 4em;
+      white-space: pre;
+      line-height: 1.2em;
+      border: 2px solid #000;
+      overflow: hidden;
+    }
+    .line {
+      height: 1.2em;
+    }
+    .softkey {
+      cursor: pointer;
+      text-decoration: underline;
+      display: inline-block;
+      width: 10ch;
+    }
+    .param-value {
+      cursor: pointer;
+      background: #0a0;
+      text-decoration: underline;
+    }
+    #log-area {
+      height: 200px;
+      overflow: auto;
+      font-family: monospace;
+    }
   </style>
 </head>
 <body>
-  <h1>Orville Screen Viewer</h1>
+  <h1>Orville Commander</h1>
+  <div id="lcd" class="lcd">Waiting for connection...</div>
   <button id="connect">Connect MIDI</button>
-  <label for="output-select">Output Port:</label>
   <select id="output-select"></select>
-  <label for="input-select">Input Port:</label>
   <select id="input-select"></select>
-  <label for="device-id">Device ID (try 0 or 1):</label>
-  <input id="device-id" type="number" value="0" min="0" max="127">
+  <input id="device-id" type="number" value="0">
   <button id="select-ports">Select Ports</button>
   <button id="save-config">Save Config</button>
-  <button id="clear-config">Clear Config</button>
-  <label for="key-input">Key to Query (e.g., 10030045):</label>
-  <input id="key-input" type="text" value="0">
-  <button id="send-request">Get Object Info</button>
+  <button id="clear-config">Clear Config</button><br>
+  <button id="test-keypress">Test Keypress</button><br>
+  <input id="key-input" type="text" placeholder="Key (e.g. 0)">
+  <button id="send-request">Send Object Info Request</button>
   <button id="get-value">Get Value</button>
-  <label for="set-value-input">New Value to Set:</label>
-  <input id="set-value-input" type="text" placeholder="e.g., 0.5 for NUM">
-  <button id="set-value">Set Value</button>
+  <input id="set-value-input" type="text" placeholder="Set Value">
+  <button id="set-value">Set Value</button><br>
   <button id="back-btn">Back</button>
-  <label for="poll-toggle">Auto-Poll (every 1s):</label>
-  <input id="poll-toggle" type="checkbox">
-  <div>Keypress Controls:
-    <button id="up-btn" class="keypress-btn">UP</button>
-    <button id="down-btn" class="keypress-btn">DOWN</button>
-    <button id="left-btn" class="keypress-btn">LEFT</button>
-    <button id="right-btn" class="keypress-btn">RIGHT</button>
-    <button id="enter-btn" class="keypress-btn">ENTER</button>
-    <button id="select-btn" class="keypress-btn">SELECT</button>
-    <button id="program-btn" class="keypress-btn">PROGRAM</button>
-    <button id="parameter-btn" class="keypress-btn">PARAM</button>
-    <button id="levels-btn" class="keypress-btn">LEVELS</button>
-    <button id="setup-btn" class="keypress-btn">SETUP</button>
-    <button id="bypass-btn" class="keypress-btn">BYPASS</button>
-    <button id="inc-btn" class="keypress-btn">INC</button>
-    <button id="dec-btn" class="keypress-btn">DEC</button>
-  </div>
-  <label for="custom-sysex">Custom SysEx (hex space-separated):</label>
-  <input id="custom-sysex" type="text" placeholder="e.g., 1C 70 00 2D 31 30 30 33 30 30 34 36">
+  <button id="poll-toggle">Toggle Polling</button>
+  <button id="sync-btn">Sync to Hardware</button>
+  <input id="custom-sysex" type="text" placeholder="Custom SysEx (hex)">
   <button id="send-custom">Send Custom</button>
-  <pre id="screen">Waiting for connection...</pre>
-  <h3>Log (copy-paste friendly):</h3>
-  <textarea id="log-area" readonly></textarea>
   <button id="copy-log">Copy Log</button>
-  <script type="module" src="./main.js"></script>
+  <h2>Keypress Controls</h2>
+  <button id="up-btn">Up</button>
+  <button id="down-btn">Down</button>
+  <button id="left-btn">Left</button>
+  <button id="right-btn">Right</button>
+  <button id="enter-btn">Enter</button>
+  <button id="select-btn">Select</button>
+  <button id="program-btn">Program</button>
+  <button id="parameter-btn">Parameter</button>
+  <button id="levels-btn">Levels</button>
+  <button id="setup-btn">Setup</button>
+  <button id="bypass-btn">Bypass</button>
+  <button id="inc-btn">Inc</button>
+  <button id="dec-btn">Dec</button>
+  <br>
+  <h2>Soft Keys (Physical Simulation)</h2>
+<button id="soft1-btn">Soft1</button>
+<button id="soft2-btn">Soft2</button>
+<button id="soft3-btn">Soft3</button>
+<button id="soft4-btn">Soft4</button><br>
+  <textarea id="log-area" readonly style="width:500px"></textarea>
+  <script type="module" src="main.js"></script>
 </body>
 </html>

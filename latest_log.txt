@@ -1,0 +1,234 @@
+[2025-09-22T01:29:03.470Z] Loaded cached config: Output ID output-4, Input ID input-4, Device ID 0
+[2025-09-22T01:29:28.445Z] WebMidi enabled.
+[2025-09-22T01:29:28.445Z] Loaded cached config: Output ID output-4, Input ID input-4, Device ID 0
+[2025-09-22T01:29:28.446Z] Ports populated. Choose and click "Select Ports". If cached, already pre-selected.
+[2025-09-22T01:29:29.421Z] Ports selected and listener added. Device ID set to 0
+[2025-09-22T01:29:29.422Z] Sent SysEx: F0 1C 70 00 31 30 F7
+[2025-09-22T01:29:29.422Z] Sent SysEx: F0 1C 70 00 2d 30 F7
+[2025-09-22T01:29:29.555Z] Received SysEx: f0 1c 70 01 32 43 4f 4c 20 30 20 30 20 30 20 27 4f 52 56 49 4c 4c 45 20 52 4f 4f 54 20 4f 42 4a 45 43 54 27 20 4f 52 56 49 4c 4c 45 20 37 20 0d 0a 20 43 4f 4c 20 30 20 34 30 31 30 30 30 62 20 30 20 27 54 65 63 68 6e 6f 20 52 75 6d 62 6c 65 27 20 27 43 75 73 74 6f 6d 20 27 20 30 20 0d 0a 20 43 4f 4c 20 30 20 38 30 31 30 30 30 62 20 30 20 27 54 65 63 68 6e 6f 20 52 75 6d 62 6c 65 27 20 27 43 75 73 74 6f 6d 20 27 20 30 20 0d 0a 20 43 4f 4c 20 30 20 31 30 30 31 30 30 30 30 20 30 20 27 73 65 74 75 70 20 66 75 6e 63 74 69 6f 6e 73 27 20 73 65 74 75 70 20 30 20 0d 0a 20 20 38 20 30 20 31 30 30 34 30 30 30 30 20 30 20 27 27 20 27 27 20 0d 0a 20 43 4f 4c 20 30 20 31 30 30 32 30 30 30 30 20 30 20 27 70 72 6f 67 72 61 6d 20 66 75 6e 63 74 69 6f 6e 73 27 20 70 72 6f 67 72 61 6d 20 30 20 0d 0a 20 43 4f 4c 20 30 20 31 30 30 33 30 30 30 30 20 30 20 27 6c 65 76 65 6c 20 66 75 6e 63 74 69 6f 6e 73 27 20 6c 65 76 65 6c 20 30 20 0d 0a 20 43 4f 4c 20 30 20 31 30 30 33 30 35 30 30 20 30 20 27 62 79 70 61 73 73 20 66 75 6e 63 74 69 6f 6e 73 27 20 62 79 70 61 73 73 20 30 20 0d 0a 20 00 f7
+[2025-09-22T01:29:29.556Z] Parsed OBJECTINFO_DUMP for key 0: COL 0 0 0 'ORVILLE ROOT OBJECT' ORVILLE 7 
+ COL 0 401000b 0 'Techno Rumble' 'Custom ' 0 
+ COL 0 801000b 0 'Techno Rumble' 'Custom ' 0 
+ COL 0 10010000 0 'setup functions' setup 0 
+  8 0 10040000 0 '' '' 
+ COL 0 10020000 0 'program functions' program 0 
+ COL 0 10030000 0 'level functions' level 0 
+ COL 0 10030500 0 'bypass functions' bypass 0 
+ 
+[2025-09-22T01:29:29.557Z] Rendered screen text: <span class="softkey" data-key="401000b">A: Techno Rumble</span> <span class="softkey" data-key="801000b">B: Techno Rumble</span>
+
+
+setup     program   level     bypass    
+[2025-09-22T01:29:29.560Z] Received SysEx: f0 1c 70 01 2e 30 20 f7
+[2025-09-22T01:29:29.561Z] Parsed VALUE_DUMP for key 0: 
+[2025-09-22T01:29:29.561Z] Rendered screen text: <span class="softkey" data-key="401000b">A: Techno Rumble</span> <span class="softkey" data-key="801000b">B: Techno Rumble</span>
+
+
+setup     program   level     bypass    
+[2025-09-22T01:29:32.149Z] Clicked DSP for key 401000b: A: Techno Rumble, navigating without keypress
+[2025-09-22T01:29:32.151Z] Sent SysEx: F0 1C 70 00 31 34 30 31 30 30 30 62 F7
+[2025-09-22T01:29:32.151Z] Sent SysEx: F0 1C 70 00 2d 34 30 31 30 30 30 62 F7
+[2025-09-22T01:29:32.209Z] Received SysEx: f0 1c 70 01 32 43 4f 4c 20 30 20 34 30 31 30 30 30 62 20 34 30 31 30 30 30 62 20 27 54 65 63 68 6e 6f 20 52 75 6d 62 6c 65 27 20 27 43 75 73 74 6f 6d 20 27 20 32 20 0d 0a 20 43 4f 4c 20 30 20 34 30 65 30 30 30 31 20 34 30 31 30 30 30 62 20 27 52 75 6d 62 6c 65 20 42 61 73 69 63 73 27 20 52 75 6d 62 6c 65 20 30 20 0d 0a 20 43 4f 4c 20 30 20 34 30 64 30 30 30 31 20 34 30 31 30 30 30 62 20 41 64 76 61 6e 63 65 64 20 41 64 76 20 30 20 0d 0a 20 00 f7
+[2025-09-22T01:29:32.210Z] Parsed OBJECTINFO_DUMP for key 401000b: COL 0 401000b 401000b 'Techno Rumble' 'Custom ' 2 
+ COL 0 40e0001 401000b 'Rumble Basics' Rumble 0 
+ COL 0 40d0001 401000b Advanced Adv 0 
+ 
+[2025-09-22T01:29:32.211Z] Rendered screen text: Techno Rumble | Rumble Basics
+--------------------------------
+
+
+[Rumble]  Adv       
+[2025-09-22T01:29:32.214Z] Received SysEx: f0 1c 70 01 2e 34 30 31 30 30 30 62 20 f7
+[2025-09-22T01:29:32.215Z] Parsed VALUE_DUMP for key 401000b: 
+[2025-09-22T01:29:32.216Z] Rendered screen text: Techno Rumble | Rumble Basics
+--------------------------------
+
+
+[Rumble]  Adv       
+[2025-09-22T01:29:37.822Z] Sent SysEx: F0 1C 70 00 01 0f 0f 0f 0f 0b 0f 0f 0f F7
+[2025-09-22T01:29:37.823Z] Sent keypress code: 0f 0f 0f 0f 0b 0f 0f 0f
+[2025-09-22T01:29:37.825Z] Clicked softkey for key 40d0001: Adv, sent press for soft2
+[2025-09-22T01:29:37.826Z] Sent SysEx: F0 1C 70 00 31 34 30 64 30 30 30 31 F7
+[2025-09-22T01:29:37.827Z] Sent SysEx: F0 1C 70 00 2d 34 30 64 30 30 30 31 F7
+[2025-09-22T01:29:37.935Z] Received SysEx: f0 1c 70 01 32 43 4f 4c 20 30 20 34 30 64 30 30 30 31 20 34 30 64 30 30 30 31 20 41 64 76 61 6e 63 65 64 20 41 64 76 20 33 20 0d 0a 20 20 4e 55 4d 20 30 20 34 31 30 30 30 30 31 20 34 30 64 30 30 30 31 20 27 44 69 73 74 20 44 72 69 76 65 3a 20 25 66 20 64 42 27 20 44 69 73 74 44 72 69 76 65 20 32 35 20 30 20 34 30 20 31 20 0d 0a 20 20 4e 55 4d 20 30 20 34 31 31 30 30 30 31 20 34 30 64 30 30 30 31 20 27 44 75 63 6b 20 54 68 72 65 73 68 6f 6c 64 3a 20 25 66 20 64 42 27 20 6b 6e 6f 62 20 2d 32 35 20 2d 36 30 20 30 20 30 2e 31 20 0d 0a 20 20 4e 55 4d 20 30 20 34 30 63 30 30 30 31 20 34 30 64 30 30 30 31 20 27 6b 6e 6f 62 3a 20 25 66 27 20 6b 6e 6f 62 20 30 20 2d 33 32 37 36 37 2e 39 39 39 20 33 32 37 36 37 20 31 20 0d 0a 20 00 f7
+[2025-09-22T01:29:37.936Z] Parsed OBJECTINFO_DUMP for key 40d0001: COL 0 40d0001 40d0001 Advanced Adv 3 
+  NUM 0 4100001 40d0001 'Dist Drive: %f dB' DistDrive 25 0 40 1 
+  NUM 0 4110001 40d0001 'Duck Threshold: %f dB' knob -25 -60 0 0.1 
+  NUM 0 40c0001 40d0001 'knob: %f' knob 0 -32767.999 32767 1 
+ 
+[2025-09-22T01:29:37.938Z] Sent SysEx: F0 1C 70 00 2d 34 31 30 30 30 30 31 F7
+[2025-09-22T01:29:37.939Z] Sent SysEx: F0 1C 70 00 2d 34 31 31 30 30 30 31 F7
+[2025-09-22T01:29:37.940Z] Sent SysEx: F0 1C 70 00 2d 34 30 63 30 30 30 31 F7
+[2025-09-22T01:29:37.941Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25.000 dB
+Duck Threshold: -25.000 dB
+
+[2025-09-22T01:29:37.947Z] Received SysEx: f0 1c 70 01 2e 34 30 64 30 30 30 31 20 f7
+[2025-09-22T01:29:37.949Z] Parsed VALUE_DUMP for key 40d0001: 
+[2025-09-22T01:29:37.950Z] Sent SysEx: F0 1C 70 00 2d 34 31 30 30 30 30 31 F7
+[2025-09-22T01:29:37.952Z] Sent SysEx: F0 1C 70 00 2d 34 31 31 30 30 30 31 F7
+[2025-09-22T01:29:37.954Z] Sent SysEx: F0 1C 70 00 2d 34 30 63 30 30 30 31 F7
+[2025-09-22T01:29:37.955Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25.000 dB
+Duck Threshold: -25.000 dB
+
+[2025-09-22T01:29:37.970Z] Received SysEx: f0 1c 70 01 2e 34 31 30 30 30 30 31 20 32 35 20 f7
+[2025-09-22T01:29:37.971Z] Parsed VALUE_DUMP for key 4100001: 25 
+[2025-09-22T01:29:37.973Z] Sent SysEx: F0 1C 70 00 2d 34 31 31 30 30 30 31 F7
+[2025-09-22T01:29:37.975Z] Sent SysEx: F0 1C 70 00 2d 34 30 63 30 30 30 31 F7
+[2025-09-22T01:29:37.976Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25.000 dB
+
+[2025-09-22T01:29:37.979Z] Received SysEx: f0 1c 70 01 2e 34 31 31 30 30 30 31 20 2d 32 35 20 f7
+[2025-09-22T01:29:37.981Z] Parsed VALUE_DUMP for key 4110001: -25 
+[2025-09-22T01:29:37.983Z] Sent SysEx: F0 1C 70 00 2d 34 30 63 30 30 30 31 F7
+[2025-09-22T01:29:37.984Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:37.988Z] Received SysEx: f0 1c 70 01 2e 34 30 63 30 30 30 31 20 30 20 f7
+[2025-09-22T01:29:37.990Z] Parsed VALUE_DUMP for key 40c0001: 0 
+[2025-09-22T01:29:37.992Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:37.994Z] Received SysEx: f0 1c 70 01 2e 34 31 30 30 30 30 31 20 32 35 20 f7
+[2025-09-22T01:29:37.996Z] Parsed VALUE_DUMP for key 4100001: 25 
+[2025-09-22T01:29:37.998Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.002Z] Received SysEx: f0 1c 70 01 2e 34 31 31 30 30 30 31 20 2d 32 35 20 f7
+[2025-09-22T01:29:38.004Z] Parsed VALUE_DUMP for key 4110001: -25 
+[2025-09-22T01:29:38.006Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.009Z] Received SysEx: f0 1c 70 01 2e 34 30 63 30 30 30 31 20 30 20 f7
+[2025-09-22T01:29:38.012Z] Parsed VALUE_DUMP for key 40c0001: 0 
+[2025-09-22T01:29:38.014Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.020Z] Received SysEx: f0 1c 70 01 2e 34 31 31 30 30 30 31 20 2d 32 35 20 f7
+[2025-09-22T01:29:38.023Z] Parsed VALUE_DUMP for key 4110001: -25 
+[2025-09-22T01:29:38.026Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.029Z] Received SysEx: f0 1c 70 01 2e 34 30 63 30 30 30 31 20 30 20 f7
+[2025-09-22T01:29:38.032Z] Parsed VALUE_DUMP for key 40c0001: 0 
+[2025-09-22T01:29:38.034Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.037Z] Received SysEx: f0 1c 70 01 2e 34 30 63 30 30 30 31 20 30 20 f7
+[2025-09-22T01:29:38.041Z] Parsed VALUE_DUMP for key 40c0001: 0 
+[2025-09-22T01:29:38.043Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.046Z] Sent SysEx: F0 1C 70 00 31 34 30 64 30 30 30 31 F7
+[2025-09-22T01:29:38.049Z] Sent SysEx: F0 1C 70 00 2d 34 30 64 30 30 30 31 F7
+[2025-09-22T01:29:38.154Z] Received SysEx: f0 1c 70 01 32 43 4f 4c 20 30 20 34 30 64 30 30 30 31 20 34 30 64 30 30 30 31 20 41 64 76 61 6e 63 65 64 20 41 64 76 20 33 20 0d 0a 20 20 4e 55 4d 20 30 20 34 31 30 30 30 30 31 20 34 30 64 30 30 30 31 20 27 44 69 73 74 20 44 72 69 76 65 3a 20 25 66 20 64 42 27 20 44 69 73 74 44 72 69 76 65 20 32 35 20 30 20 34 30 20 31 20 0d 0a 20 20 4e 55 4d 20 30 20 34 31 31 30 30 30 31 20 34 30 64 30 30 30 31 20 27 44 75 63 6b 20 54 68 72 65 73 68 6f 6c 64 3a 20 25 66 20 64 42 27 20 6b 6e 6f 62 20 2d 32 35 20 2d 36 30 20 30 20 30 2e 31 20 0d 0a 20 20 4e 55 4d 20 30 20 34 30 63 30 30 30 31 20 34 30 64 30 30 30 31 20 27 6b 6e 6f 62 3a 20 25 66 27 20 6b 6e 6f 62 20 30 20 2d 33 32 37 36 37 2e 39 39 39 20 33 32 37 36 37 20 31 20 0d 0a 20 00 f7
+[2025-09-22T01:29:38.157Z] Parsed OBJECTINFO_DUMP for key 40d0001: COL 0 40d0001 40d0001 Advanced Adv 3 
+  NUM 0 4100001 40d0001 'Dist Drive: %f dB' DistDrive 25 0 40 1 
+  NUM 0 4110001 40d0001 'Duck Threshold: %f dB' knob -25 -60 0 0.1 
+  NUM 0 40c0001 40d0001 'knob: %f' knob 0 -32767.999 32767 1 
+ 
+[2025-09-22T01:29:38.159Z] Sent SysEx: F0 1C 70 00 2d 34 31 30 30 30 30 31 F7
+[2025-09-22T01:29:38.161Z] Sent SysEx: F0 1C 70 00 2d 34 31 31 30 30 30 31 F7
+[2025-09-22T01:29:38.164Z] Sent SysEx: F0 1C 70 00 2d 34 30 63 30 30 30 31 F7
+[2025-09-22T01:29:38.166Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25.000 dB
+Duck Threshold: -25.000 dB
+
+[2025-09-22T01:29:38.171Z] Received SysEx: f0 1c 70 01 2e 34 30 64 30 30 30 31 20 f7
+[2025-09-22T01:29:38.173Z] Parsed VALUE_DUMP for key 40d0001: 
+[2025-09-22T01:29:38.176Z] Sent SysEx: F0 1C 70 00 2d 34 31 30 30 30 30 31 F7
+[2025-09-22T01:29:38.178Z] Sent SysEx: F0 1C 70 00 2d 34 31 31 30 30 30 31 F7
+[2025-09-22T01:29:38.181Z] Sent SysEx: F0 1C 70 00 2d 34 30 63 30 30 30 31 F7
+[2025-09-22T01:29:38.183Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25.000 dB
+Duck Threshold: -25.000 dB
+
+[2025-09-22T01:29:38.189Z] Received SysEx: f0 1c 70 01 2e 34 31 30 30 30 30 31 20 32 35 20 f7
+[2025-09-22T01:29:38.192Z] Parsed VALUE_DUMP for key 4100001: 25 
+[2025-09-22T01:29:38.195Z] Sent SysEx: F0 1C 70 00 2d 34 31 31 30 30 30 31 F7
+[2025-09-22T01:29:38.197Z] Sent SysEx: F0 1C 70 00 2d 34 30 63 30 30 30 31 F7
+[2025-09-22T01:29:38.200Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25.000 dB
+
+[2025-09-22T01:29:38.203Z] Received SysEx: f0 1c 70 01 2e 34 31 31 30 30 30 31 20 2d 32 35 20 f7
+[2025-09-22T01:29:38.206Z] Parsed VALUE_DUMP for key 4110001: -25 
+[2025-09-22T01:29:38.208Z] Sent SysEx: F0 1C 70 00 2d 34 30 63 30 30 30 31 F7
+[2025-09-22T01:29:38.211Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.217Z] Received SysEx: f0 1c 70 01 2e 34 30 63 30 30 30 31 20 30 20 f7
+[2025-09-22T01:29:38.221Z] Parsed VALUE_DUMP for key 40c0001: 0 
+[2025-09-22T01:29:38.223Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.226Z] Received SysEx: f0 1c 70 01 2e 34 31 30 30 30 30 31 20 32 35 20 f7
+[2025-09-22T01:29:38.229Z] Parsed VALUE_DUMP for key 4100001: 25 
+[2025-09-22T01:29:38.232Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.236Z] Received SysEx: f0 1c 70 01 2e 34 31 31 30 30 30 31 20 2d 32 35 20 f7
+[2025-09-22T01:29:38.239Z] Parsed VALUE_DUMP for key 4110001: -25 
+[2025-09-22T01:29:38.242Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.245Z] Received SysEx: f0 1c 70 01 2e 34 30 63 30 30 30 31 20 30 20 f7
+[2025-09-22T01:29:38.248Z] Parsed VALUE_DUMP for key 40c0001: 0 
+[2025-09-22T01:29:38.251Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.255Z] Received SysEx: f0 1c 70 01 2e 34 31 31 30 30 30 31 20 2d 32 35 20 f7
+[2025-09-22T01:29:38.259Z] Parsed VALUE_DUMP for key 4110001: -25 
+[2025-09-22T01:29:38.262Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.265Z] Received SysEx: f0 1c 70 01 2e 34 30 63 30 30 30 31 20 30 20 f7
+[2025-09-22T01:29:38.269Z] Parsed VALUE_DUMP for key 40c0001: 0 
+[2025-09-22T01:29:38.272Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+
+[2025-09-22T01:29:38.279Z] Received SysEx: f0 1c 70 01 2e 34 30 63 30 30 30 31 20 30 20 f7
+[2025-09-22T01:29:38.283Z] Parsed VALUE_DUMP for key 40c0001: 0 
+[2025-09-22T01:29:38.286Z] Rendered screen text: Advanced | Rumble Basics
+--------------------------------
+Dist Drive: 25  dB
+Duck Threshold: -25  dB
+

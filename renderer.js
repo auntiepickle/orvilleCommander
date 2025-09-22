@@ -82,7 +82,7 @@ export function renderScreen(subs, ascii, log) {
       softSubs = appState.menus;
     }
     const softTags = softSubs.map(s => s.tag.trim());
-    displayLines.push(softTags.map((t, idx) => (idx === 0 ? `[${t}]` : t).padEnd(10)).join(''));
+    displayLines.push(softTags.map((t, idx) => (softSubs[idx].key === appState.currentKey ? `[${t}]` : t).padEnd(10)).join(''));
   }
   log(`Rendered screen text: ${displayLines.join('\n')}`);
   let htmlLines = displayLines.map((l, index) => {
@@ -93,7 +93,7 @@ export function renderScreen(subs, ascii, log) {
         softSubsUsed = appState.menus;
       }
       softSubsUsed.forEach((s, idx) => {
-        const text = (idx === 0 && appState.currentKey !== '0' ? '[' + (s.tag || '') + ']' : (s.tag || '')).padEnd(10);
+        const text = (s.key === appState.currentKey ? '[' + (s.tag || '') + ']' : (s.tag || '')).padEnd(10);
         softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
       });
       return softHtml;

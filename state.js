@@ -1,11 +1,8 @@
-// state.js
 export const appState = {
   currentKey: '0',
-  keyStack: [],
-  paramOffset: 0,
-  autoNavigated: false,
-  currentValues: {},
-  lastAscii: '',
   presetKey: null,
+  currentValues: {},
+  paramOffset: 0,
   menus: [],
+  autoLoad: false,
 };

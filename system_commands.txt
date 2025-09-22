@@ -1,0 +1,56 @@
+You may try Orville SysEx code if your controller allows programming of hex strings.
+
+BYTE#    Hex Value      Description
+1             0F0               SYSEX start
+2             1C                 Eventide I.D.
+3             70                 DSP4000 Product I.D.
+4             1~63             Device I.D.
+13            F7                SYSEX stop
+BYTES 5 thru 12 must be filled with datas in the bottom tables
+sysex button presses are ?nibbled?, this means that F = 0F
+Example FFFFFDFF would be 0F 0F 0F 0F 0F 0D 0F 0F (8BYTES)
+Here is a full example of the sys ex string for <bypass>:
+F0 1C 70 01 01 0F 0F 0F 0F 0F 0D 0F 0F F7
+
+ B U T T O N S                  C O D E                        N I B B L E C O D E
+<BYPASS>                       FFFFFDFF                   0F 0F 0F 0F 0F 0D 0F 0F
+<SOFT 1>                         FBFFFFFF                   0F 0B 0F 0F 0F 0F 0F 0F
+<SOFT 2>                         FFFBFFFF                   0F 0F 0F 0B 0F 0F 0F 0F
+<SOFT 3>                         FFFFFBFF                   0F 0F 0F 0F 0F 0B 0F 0F
+<SOFT 4>                         FFFFFFFB                   0F 0F 0F 0F 0F 0F 0F 0B
+<A/B>                               FDFFFDFF                   0F 0D 0F 0F 0F 0D 0F 0F
+<PROGRAM>                    F7FFFFFF                   0F 07 0F 0F 0F 0F 0F 0F
+<PROGRAM-HOLD>          F7FFFFFE                   0F 07 0F 0F 0F 0F 0F 0E
+<PARAMETER>                FFF7FFFF                    0F 0F 0F 07 0F 0F 0F 0F
+<PARAMETER-HOLD>       FFF7FFFE                   0F 0F 0F 07 0F 0F 0F 0E
+<SELECT>                        FFFFFEFF                   0F 0F 0F 0F 0F 0E 0F 0F
+<SELECT-HOLD>              FFFFFEFE                   0F 0F 0F 0F 0F 0E 0F 0E
+<CURSOR-LEFT>              FFFEFFFF                   0F 0F 0F 0E 0F 0F 0F 0F
+<CURSOR-UP>                 FEFFFDFF                   0F 0E 0F 0F 0F 0D 0F 0F
+<CURSOR-DOWN>           FFFEFDFF                   0F 0F 0F 0E 0F 0D 0F 0F
+<CURSOR-RIGHT>            FEFFFFFF                   0F 0E 0F 0F 0F 0F 0F 0F
+<LEVELS>                        FFFFFFFD                   0F 0F 0F 0F 0F 0F 0F 0D
+<SETUP>                          FFFFF7FF                   0F 0F 0F 0F 0F 07 0F 0F
+
+K E Y P A D S                    C O D E                     N I B B L E C O D E
+<1>                                    7FFFFFFF                 07 0F 0F 0F 0F 0F 0F 0F
+<2>                                    FF7FFFFF                 0F 0F 07 0F 0F 0F 0F 0F
+<3>                                    FFFF7FFF                 0F 0F 0F 0F 07 0F 0F 0F
+<4>                                    BFFFFFFF                 0B 0F 0F 0F 0F 0F 0F 0F
+<5>                                    FFBFFFFF                 0F 0F 0B 0F 0F 0F 0F 0F
+<6>                                    FFFFBFFF                 0F 0F 0F 0F 0B 0F 0F 0F
+<7>                                    DFFFFFFF                 0D 0F 0F 0F 0F 0F 0F 0F
+<8>                                    FFDFFFFF                 0F 0F 0D 0F 0F 0F 0F 0F
+<9>                                    FFFFDFFF                 0F 0F 0F 0F 0D 0F 0F 0F
+<0>                                    FFEFFFFF                 0F 0F 0E 0F 0F 0F 0F 0F
+< . > (dot)                           EFFFFFFF                 0E 0F 0F 0F 0F 0F 0F 0F
+< – > (minus)                       FFFFEFFF                 0F 0F 0F 0F 0E 0F 0F 0F
+<UP>                                 FFFFFF7F                  0F 0F 0F 0F 0F 0F 07 0F
+<DOWN>                            FFFFFFBF                0F 0F 0F 0F 0F 0F 0B 0F
+<CXL>                                FFFFFFDF                 0F 0F 0F 0F 0F 0F 0D 0F
+<ENT>                                FFFFFFEF                0F 0F 0F 0F 0F 0F 0E 0F
+
+examples :
+
+<PROGRAM> = F0 1C 70 01 01 0F 07 0F 0F 0F 0F 0F 0F F7
+<SELECT> = F0 1C 70 01 01 0F 0F 0F 0F 0F 0E 0F 0F F7

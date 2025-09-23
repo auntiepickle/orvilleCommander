@@ -1,4 +1,5 @@
 // parser.js
+// parser.js
 import { renderScreen } from './renderer.js';
 import { appState } from './state.js';
 
@@ -58,9 +59,20 @@ export function parseResponse(data, log) {
 export function parseSubObject(line) {
   const parts = splitLine(line);
   const type = parts[0] || '';
+  const position = parseInt(parts[1] || '0', 10);
   const key = parts[2] || '';
+  const parent = parts[3] || '';
   const statement = parts[4] || '';
   const tag = parts[5] || '';
-  const value = parts[6] || '';
-  return { type, key, statement, tag, value };
+  let value = '';
+  let min = '', max = '', step = '';
+  if (type === 'NUM') {
+    value = parts[6] || '0';
+    min = parts[7] || '';
+    max = parts[8] || '';
+    step = parts[9] || '';
+  } else {
+    value = parts[6] || '';
+  }
+  return { type, position, key, parent, statement, tag, value, min, max, step };
 }

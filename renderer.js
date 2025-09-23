@@ -32,6 +32,20 @@ const handleLcdClick = (e) => {
   }
 };
 
+function formatValue(statement, value, isHtml = false, key = '') {
+  return statement.replace(/%(\d*)(\.\d*)?f|%/g, (match, widthStr, precStr) => {
+    if (match === '%') return '%';
+    const width = widthStr ? parseInt(widthStr) : 0;
+    const prec = precStr ? parseInt(precStr.slice(1)) : 0;
+    let valStr = parseFloat(value).toFixed(prec);
+    if (width) valStr = valStr.padStart(width);
+    if (isHtml) {
+      return `<span class="param-value" data-key="${key}">${valStr}</span>`;
+    }
+    return valStr;
+  });
+}
+
 export function renderScreen(subs, ascii, log) {
   const lcdEl = document.getElementById('lcd');
   if (!subs) {
@@ -43,8 +57,6 @@ export function renderScreen(subs, ascii, log) {
   if (appState.currentKey === '0') {
     const progA = subs.find(s => s.key === '401000b') || {key: '401000b', statement: ''};
     const progB = subs.find(s => s.key === '801000b') || {key: '801000b', statement: ''};
-    appState.dspAKey = progA.key;
-    appState.dspBKey = progB.key;
     displayLines.push(` A: ${progA.statement} B: ${progB.statement}`);
     displayLines.push('');
     displayLines.push('');
@@ -61,24 +73,25 @@ export function renderScreen(subs, ascii, log) {
     let paramLines = [];
     let paramHtmlLines = [];
     subs.slice(1).forEach(s => {
+      let fullText = '';
+      let fullHtml = '';
       if (s.type === 'NUM') {
         const value = appState.currentValues[s.key] || parseFloat(s.value || 0).toFixed(3);
-        let fullText = (s.statement || '').replace(/%f/g, value).replace(/%/g, '%');
-        let fullHtml = (s.statement || '').replace(/%f/g, `<span class="param-value" data-key="${s.key}">${value}</span>`).replace(/%/g, '%');
+        fullText = formatValue(s.statement || '', value);
+        fullHtml = formatValue(s.statement || '', value, true, s.key);
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
         if (!appState.currentValues[s.key]) sendValueDump(s.key);
       } else if (s.type === 'INF') {
-        const info = s.statement || s.tag || '';
-        paramLines.push(info);
-        paramHtmlLines.push(info);
+        const replaceWith = s.tag || s.value || '';
+        fullText = (s.statement || '').replace(/%s/g, replaceWith);
+        fullHtml = fullText;
+        paramLines.push(fullText);
+        paramHtmlLines.push(fullHtml);
       }
     });
-    let paramDisplayed = paramLines.slice(appState.paramOffset, appState.paramOffset + 3);
-    while (paramDisplayed.length < 3) paramDisplayed.push('');
-    displayLines = displayLines.concat(paramDisplayed);
-    paramDisplayedHtml = paramHtmlLines.slice(appState.paramOffset, appState.paramOffset + 3);
-    while (paramDisplayedHtml.length < 3) paramDisplayedHtml.push('');
+    displayLines = displayLines.concat(paramLines);
+    paramDisplayedHtml = paramHtmlLines;
     let softSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
     if (appState.menus.length > 0 && appState.currentKey !== appState.presetKey) {
       softSubs = appState.menus;

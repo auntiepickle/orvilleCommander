@@ -5,6 +5,7 @@ import { setupKeypressControls, testKeypress } from './controls.js';
 import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut } from './midi.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
+import { denibble, renderBitmap, extractNibbles, exportBMP } from './parser.js'; // Updated imports
 
 const lcdEl = document.getElementById('lcd');
 const logArea = document.getElementById('log-area');
@@ -27,7 +28,9 @@ const sendCustomBtn = document.getElementById('send-custom');
 const copyLogBtn = document.getElementById('copy-log');
 const testKeypressBtn = document.getElementById('test-keypress');
 const syncBtn = document.getElementById('sync-btn');
-const getScreenBtn = document.getElementById('get-screen-btn'); // NEW: Added this
+const getScreenBtn = document.getElementById('get-screen-btn');
+const uploadDebugFile = document.getElementById('upload-debug-file');
+const processDebugFileBtn = document.getElementById('process-debug-file'); // New button
 
 let pollInterval = null;
 let isPolling = false;
@@ -80,6 +83,9 @@ selectPortsBtn.addEventListener('click', () => {
   log('Ports selected and listener added. Device ID set to ' + devId);
   lcdEl.innerText = 'Connected. Fetching root screen...';
   updateScreen(log);
+  // Fetch screen after connecting
+  sendSysEx(0x18, [], log);
+  log('Fetched initial screen after connecting.');
 });
 
 saveConfigBtn.addEventListener('click', () => {
@@ -150,7 +156,35 @@ syncBtn.addEventListener('click', () => {
 getScreenBtn.addEventListener('click', () => {
   sendSysEx(0x18, [], log);
   log('Sent Get Screen request (0x18)');
-});  // NEW: Added this event listener
+});
+
+// Handle file upload and processing
+processDebugFileBtn.addEventListener('click', () => {
+  const file = uploadDebugFile.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const content = e.target.result.toLowerCase();
+      const hexPattern = /[0-9a-f]{1,2}/g;
+      const hexMatches = content.match(hexPattern);
+      if (hexMatches) {
+        const startIdx = hexMatches.indexOf('17') + 1;
+        const endIdx = hexMatches.indexOf('f7', startIdx) || hexMatches.length;
+        const nibblesStr = hexMatches.slice(startIdx, endIdx);
+        const nibbles = nibblesStr.map(h => parseInt(h, 16));
+        log(`[LOG] Extracted ${nibbles.length} nibbles from uploaded file`);
+        const rawBytes = denibble(nibbles);
+        log(`[LOG] Denibbled to ${rawBytes.length} bytes`);
+        renderBitmap('lcd-canvas', rawBytes, log);
+      } else {
+        log('[ERROR] No hex data found in file');
+      }
+    };
+    reader.readAsText(file);
+  } else {
+    log('[ERROR] No file uploaded');
+  }
+});
 
 setupKeypressControls(log);
 

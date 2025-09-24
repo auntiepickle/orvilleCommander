@@ -32,15 +32,13 @@ export function denibble(nibbles) {
 // Function to render the bitmap on canvas and return pixel data
 export function renderBitmap(canvasId, rawBytes, log) {
     const canvas = document.getElementById(canvasId);
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true }); // Fix warning
     const width = 240;
     const height = 64;
-    // Set internal resolution and display size to prevent stretching
     canvas.width = width;
     canvas.height = height;
-    canvas.style.width = '480px'; // 2x scale
-    canvas.style.height = '128px'; // 2x scale
-    canvas.style.imageRendering = 'pixelated'; // Prevent blurring
+    canvas.style.width = '480px';
+    canvas.style.height = '128px';
     const imgData = ctx.getImageData(0, 0, width, height);
     const data = imgData.data;
     // Skip 13-byte header

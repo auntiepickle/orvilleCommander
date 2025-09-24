@@ -1,4 +1,3 @@
-// main.js
 import { WebMidi } from 'webmidi';
 import { loadConfig, saveConfig, clearConfig } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
@@ -185,6 +184,24 @@ processDebugFileBtn.addEventListener('click', () => {
     log('[ERROR] No file uploaded');
   }
 });
+
+// Function to show loading indicator
+function showLoading() {
+  const canvas = document.getElementById('lcd-canvas');
+  if (canvas) {
+    canvas.classList.add('loading');
+  }
+  log('Loading new screen...');
+}
+
+// Function to hide loading indicator
+function hideLoading() {
+  const canvas = document.getElementById('lcd-canvas');
+  if (canvas) {
+    canvas.classList.remove('loading');
+  }
+  log('Screen loaded.');
+}
 
 setupKeypressControls(log);
 

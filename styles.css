@@ -67,3 +67,11 @@ button:hover { background: #555; }
   font-family: monospace;
   width: 500px;
 }
+#lcd-canvas {
+  background: black;
+  border: 2px solid #000;
+  image-rendering: pixelated;  /* Keep pixels sharp when scaled */
+  width: 480px;  /* Scale up 2x for visibility */
+  height: 128px;
+  margin-top: 10px;
+}

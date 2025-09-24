@@ -27,6 +27,7 @@ const sendCustomBtn = document.getElementById('send-custom');
 const copyLogBtn = document.getElementById('copy-log');
 const testKeypressBtn = document.getElementById('test-keypress');
 const syncBtn = document.getElementById('sync-btn');
+const getScreenBtn = document.getElementById('get-screen-btn'); // NEW: Added this
 
 let pollInterval = null;
 let isPolling = false;
@@ -145,6 +146,11 @@ syncBtn.addEventListener('click', () => {
   updateScreen(log);
   log('Synced to root');
 });
+
+getScreenBtn.addEventListener('click', () => {
+  sendSysEx(0x18, [], log);
+  log('Sent Get Screen request (0x18)');
+});  // NEW: Added this event listener
 
 setupKeypressControls(log);
 

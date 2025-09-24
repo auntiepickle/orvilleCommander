@@ -35,6 +35,12 @@ export function renderBitmap(canvasId, rawBytes, log) {
     const ctx = canvas.getContext('2d');
     const width = 240;
     const height = 64;
+    // Set internal resolution and display size to prevent stretching
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.width = '480px'; // 2x scale
+    canvas.style.height = '128px'; // 2x scale
+    canvas.style.imageRendering = 'pixelated'; // Prevent blurring
     const imgData = ctx.getImageData(0, 0, width, height);
     const data = imgData.data;
     // Skip 13-byte header
@@ -63,18 +69,18 @@ export function renderBitmap(canvasId, rawBytes, log) {
         for (let x = 0; x < 8; x++) {
             for (let y = height - 1; y >= shiftAmount; y--) {
                 const fromIdx = ((y - shiftAmount) * width + x) * 4;
-                const toIdx = (y * width + x) * 4;
-                data[toIdx] = data[fromIdx];
-                data[toIdx + 1] = data[fromIdx + 1];
-                data[toIdx + 2] = data[fromIdx + 2];
-                data[toIdx + 3] = data[fromIdx + 3];
+                const idx = (y * width + x) * 4;
+                data[idx] = data[fromIdx];
+                data[idx + 1] = data[fromIdx + 1];
+                data[idx + 2] = data[fromIdx + 2];
+                data[idx + 3] = data[fromIdx + 3];
             }
             for (let y = 0; y < shiftAmount; y++) {
-                const toIdx = (y * width + x) * 4;
-                data[toIdx] = 0;
-                data[toIdx + 1] = 0;
-                data[toIdx + 2] = 0;
-                data[toIdx + 3] = 255;
+                const idx = (y * width + x) * 4;
+                data[idx] = 0;
+                data[idx + 1] = 0;
+                data[idx + 2] = 0;
+                data[idx + 3] = 255;
             }
         }
     }

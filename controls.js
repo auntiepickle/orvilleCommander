@@ -1,5 +1,4 @@
 // controls.js
-// controls.js
 import { sendKeypress } from './midi.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
@@ -42,15 +41,7 @@ export const keypressMasks = {
 };
 
 function toggleDspKey(key) {
-  if (key === '0') {
-    return appState.currentKey === appState.dspAKey ? appState.dspBKey : appState.dspAKey;
-  } else if (key.startsWith('4')) {
-    return '8' + key.slice(1);
-  } else if (key.startsWith('8')) {
-    return '4' + key.slice(1);
-  } else {
-    return key;
-  }
+  return key.startsWith('4') ? '8' + key.slice(1) : '4' + key.slice(1);
 }
 
 export function setupKeypressControls(log) {
@@ -104,6 +95,9 @@ export function setupKeypressControls(log) {
               appState.currentKey = toggleDspKey(appState.currentKey);
             }
             updateScreen();
+            // New: Fetch screen after button press
+            sendSysEx(0x18, [], log);
+            log('Fetched screen after button press.');
           }, 200);
         }
       });
@@ -112,6 +106,24 @@ export function setupKeypressControls(log) {
 }
 
 export function testKeypress(log) {
-  // Existing test function if any, or add a placeholder
-  log('Test keypress triggered.');
+  log('Starting keypress test to check for duplicates...');
+  // Mock a series of keypresses to simulate button presses
+  const mockKeys = ['up', 'down', 'left'];
+  const sentCommands = [];
+  mockKeys.forEach((mockKey) => {
+    const mask = keypressMasks[mockKey];
+    if (mask) {
+      const commandStr = `Sent keypress for ${mockKey}: ${mask.map(b => b.toString(16).padStart(2, '0')).join(' ')}`;
+      sentCommands.push(commandStr);
+      log(commandStr);
+    }
+  });
+  // Check for duplicates in sent commands
+  const uniqueCommands = new Set(sentCommands);
+  if (uniqueCommands.size < sentCommands.length) {
+    log('Duplicate command detected in test.');
+  } else {
+    log('No duplicate command detected in test.');
+  }
+  log('Keypress test complete.');
 }

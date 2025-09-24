@@ -22,7 +22,6 @@ export function sendSysEx(cmd, dataBytes = [], log = null) {
   const sysex = [deviceId, cmd, ...dataBytes];
   selectedOutput.sendSysex([0x1c, 0x70], sysex);
   const sentMsg = `Sent SysEx: F0 1C 70 ${sysex.map(b => b.toString(16).padStart(2, '0')).join(' ')} F7`;
-  console.log(sentMsg);
   if (log) log(sentMsg);
 }
 

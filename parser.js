@@ -1,4 +1,5 @@
-import { renderScreen } from './renderer.js';
+// parser.js
+import { renderScreen, updateScreen } from './renderer.js';
 import { appState } from './state.js';
 
 // Bit reverse table
@@ -86,45 +87,78 @@ export function renderBitmap(canvasId, rawBytes, log) {
     }
     ctx.putImageData(imgData, 0, 0);
     log('[LOG] Rendered bitmap to canvas');
-    return data; // Return pixel data for BMP export or comparison
+    if (SAVE_MONO_BMP) exportBMP(canvas);
 }
 
-// Function to export BMP
-export function exportBMP(data, width, height) {
-    const bmpData = new Uint8Array(62 + 2048); // Header + padded bitmap (32 bytes/row * 64)
-    // BMP header for 240x64, 1-bit, bottom-up
-    const header = new Uint8Array([
-        66, 77, 78, 8, 0, 0, 0, 0, 0, 0, 62, 0, 0, 0, 40, 0, 0, 0, 240, 0, 0, 0, 64, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 255, 255, 0
-    ]);
-    bmpData.set(header, 0);
-    // Fill bitmap data (bottom-up, padded to 32 bytes/row)
-    let bmpOffset = 62;
-    for (let y = height - 1; y >= 0; y--) {
-        for (let byteX = 0; byteX < 30; byteX++) {
-            let byte = 0;
-            for (let bit = 7; bit >= 0; bit--) {
-                const x = byteX * 8 + (7 - bit);
-                const idx = (y * width + x) * 4 + 1; // Green channel for on/off
-                byte = (byte << 1) | (data[idx] > 0 ? 1 : 0);
-            }
-            bmpData[bmpOffset++] = byte;
-        }
-        bmpOffset += 2; // Padding to 32 bytes
+export function exportBMP(canvas) {
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  const imgData = ctx.getImageData(0, 0, width, height);
+  const data = imgData.data;
+  const buffer = new Uint8Array(54 + width * height);
+  // BMP header
+  buffer[0] = 66; buffer[1] = 77; // 'BM'
+  const fileSize = 54 + width * height;
+  buffer[2] = fileSize & 0xff;
+  buffer[3] = (fileSize >> 8) & 0xff;
+  buffer[4] = (fileSize >> 16) & 0xff;
+  buffer[5] = (fileSize >> 24) & 0xff;
+  buffer[10] = 54; // Pixel data offset
+  buffer[14] = 40; // DIB header size
+  buffer[18] = width & 0xff;
+  buffer[19] = (width >> 8) & 0xff;
+  buffer[22] = height & 0xff;
+  buffer[23] = (height >> 8) & 0xff;
+  buffer[26] = 1; // Planes
+  buffer[28] = 1; // Bits per pixel (1 for mono)
+  buffer[30] = 0; // Compression (0 = none)
+  const imageSize = width * height;
+  buffer[34] = imageSize & 0xff;
+  buffer[35] = (imageSize >> 8) & 0xff;
+  buffer[36] = (imageSize >> 16) & 0xff;
+  buffer[37] = (imageSize >> 24) & 0xff;
+  buffer[38] = 0x0b; buffer[39] = 0x13; // Horizontal resolution (2835 ppm)
+  buffer[42] = 0x0b; buffer[43] = 0x13; // Vertical resolution
+  buffer[46] = 2; // Colors in palette
+  buffer[50] = 0; buffer[51] = 0; buffer[52] = 0; buffer[53] = 0; // Black
+  buffer[54] = 255; buffer[55] = 255; buffer[56] = 255; buffer[57] = 0; // White
+  let offset = 58; // Header + palette
+  for (let y = height - 1; y >= 0; y--) {
+    let byte = 0;
+    let bitCount = 0;
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4 + 1; // Green channel
+      byte = (byte << 1) | (data[idx] > 128 ? 0 : 1); // 1 for off (black), 0 for on (white)? Wait, invert if needed
+      bitCount++;
+      if (bitCount === 8) {
+        buffer[offset++] = byte;
+        byte = 0;
+        bitCount = 0;
+      }
     }
-    const blob = new Blob([bmpData], { type: 'image/bmp' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'decoded.bmp';
-    a.click();
-    URL.revokeObjectURL(url);
+    if (bitCount > 0) {
+      byte <<= (8 - bitCount);
+      buffer[offset++] = byte;
+    }
+    // Pad to 4-byte boundary
+    while ((offset - 58) % 4 !== 0) {
+      buffer[offset++] = 0;
+    }
+  }
+  const blob = new Blob([buffer], { type: 'image/bmp' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'orville_screen.bmp';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
-// Hardcoded flags
 const NO_FLIP = true;
 const ROTATE_COLUMNS = true;
 const SHIFT_FIRST_COLUMN = true;
-const SAVE_MONO_BMP = true;
+const SAVE_MONO_BMP = false;
 
 function splitLine(line) {
   const parts = [];
@@ -199,13 +233,28 @@ export function parseSubObject(line) {
   const tag = parts[5] || '';
   let value = '';
   let min = '', max = '', step = '';
+  let options = [];
   if (type === 'NUM') {
     value = parts[6] || '0';
     min = parts[7] || '';
     max = parts[8] || '';
     step = parts[9] || '';
+  } else if (type === 'SET') {
+    const defaultIndex = parts[6] || '';
+    let i = 7;
+    while (i < parts.length) {
+      const index = parts[i];
+      i++;
+      let desc = '';
+      while (i < parts.length && !/^\d+$/.test(parts[i])) {
+        desc += (desc ? ' ' : '') + parts[i];
+        i++;
+      }
+      options.push({ index, desc: desc.trim() });
+    }
+    value = defaultIndex;
   } else {
     value = parts[6] || '';
   }
-  return { type, position, key, parent, statement, tag, value, min, max, step };
+  return { type, position, key, parent, statement, tag, value, min, max, step, options };
 }

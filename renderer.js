@@ -22,12 +22,40 @@ const handleLcdClick = (e) => {
     updateScreen();
   } else if (e.target.classList.contains('param-value')) {
     const key = e.target.dataset.key;
-    const currentValue = appState.currentValues[key] || e.target.innerText.trim().replace(/[^0-9.-]/g, ''); // Fallback to parsing number from display
-    const newValue = prompt(`Edit value for key ${key}:`, currentValue);
-    if (newValue !== null && newValue !== currentValue) {
-      sendValuePut(key, newValue);
-      appState.currentValues[key] = newValue;
-      setTimeout(updateScreen, 200); // Delay to allow MIDI update
+    const sub = appState.currentSubs.find(s => s.key === key);
+    let currentValue = appState.currentValues[key] || sub.value || '';
+    if (sub && sub.type === 'SET') {
+      const currentIndex = currentValue.split(' ')[0] || sub.value;
+      const currentDesc = currentValue.split(' ').slice(1).join(' ') || (sub.options.find(o => o.index === currentIndex)?.desc || '');
+      let promptMsg = `Edit value for key ${key}. Current: ${currentDesc}\nOptions:\n`;
+      sub.options.forEach((o, idx) => {
+        promptMsg += `${idx + 1}. ${o.desc}\n`;
+      });
+      const newChoice = prompt(promptMsg);
+      if (newChoice !== null) {
+        const choiceNum = parseInt(newChoice);
+        let selected;
+        if (!isNaN(choiceNum) && choiceNum > 0 && choiceNum <= sub.options.length) {
+          selected = sub.options[choiceNum - 1];
+        } else {
+          // Assume input is desc, find matching
+          selected = sub.options.find(o => o.desc.toLowerCase() === newChoice.toLowerCase());
+        }
+        if (selected) {
+          sendValuePut(key, selected.index);
+          appState.currentValues[key] = `${selected.index} ${selected.desc}`;
+          setTimeout(updateScreen, 200); // Delay to allow MIDI update
+        }
+      }
+    } else {
+      const fallbackValue = e.target.innerText.trim().replace(/[^0-9.-]/g, '');
+      const promptValue = currentValue || fallbackValue;
+      const newValue = prompt(`Edit value for key ${key}:`, promptValue);
+      if (newValue !== null && newValue !== promptValue) {
+        sendValuePut(key, newValue);
+        appState.currentValues[key] = newValue;
+        setTimeout(updateScreen, 200); // Delay to allow MIDI update
+      }
     }
   }
 };
@@ -51,6 +79,7 @@ export function renderScreen(subs, ascii, log) {
   if (!subs) {
     subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
   }
+  appState.currentSubs = subs;
   const main = subs[0];
   let displayLines = [];
   let paramDisplayedHtml = [];
@@ -86,6 +115,34 @@ export function renderScreen(subs, ascii, log) {
         const replaceWith = s.tag || s.value || '';
         fullText = (s.statement || '').replace(/%s/g, replaceWith);
         fullHtml = fullText;
+        if (fullText === 'text') {
+          fullText = '';
+          fullHtml = '';
+        }
+        paramLines.push(fullText);
+        paramHtmlLines.push(fullHtml);
+      } else if (s.type === 'SET' || s.type === 'CON') {
+        let value;
+        let isEditable = true;
+        if (s.type === 'CON') {
+          value = s.value || '0';
+          isEditable = false;
+        } else { // SET
+          value = appState.currentValues[s.key] || `${s.value} ${s.options.find(o => o.index === s.value)?.desc || ''}`;
+          if (!appState.currentValues[s.key]) sendValueDump(s.key, log);
+        }
+        let displayValue = value;
+        if (s.type === 'SET' && value) {
+          const valueParts = value.split(' ');
+          displayValue = valueParts.slice(1).join(' ');
+        }
+        if (s.type === 'SET') {
+          fullText = (s.statement || '').replace(/%s/g, displayValue);
+          fullHtml = (s.statement || '').replace(/%s/g, isEditable ? `<span class="param-value" data-key="${s.key}">${displayValue}</span>` : displayValue);
+        } else { // CON
+          fullText = formatValue(s.statement || '', value);
+          fullHtml = isEditable ? formatValue(s.statement || '', value, true, s.key) : fullText;
+        }
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
       }

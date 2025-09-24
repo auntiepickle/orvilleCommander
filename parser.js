@@ -20,23 +20,40 @@ export function extractNibbles(sysExHex) {
 
 // Function to denibble nibbles to bytes
 export function denibble(nibbles) {
-  const rawBytes = [];
-  for (let i = 0; i < nibbles.length; i += 2) {
-      if (i + 1 < nibbles.length) {
-          rawBytes.push((nibbles[i] << 4) | nibbles[i + 1]);
-      }
-  }
-  return rawBytes;
+    const rawBytes = [];
+    for (let i = 0; i < nibbles.length; i += 2) {
+        if (i + 1 < nibbles.length) {
+            rawBytes.push((nibbles[i] << 4) | nibbles[i + 1]);
+        }
+    }
+    return rawBytes;
 }
 
 // Function to render the bitmap on canvas and return pixel data
 export function renderBitmap(canvasId, rawBytes, log) {
-    const canvas = document.getElementById(canvasId);
+    let canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        // Create canvas if it doesn't exist
+        canvas = document.createElement('canvas');
+        canvas.id = canvasId;
+        canvas.style.background = 'black';
+        canvas.style.border = '2px solid #000';
+        canvas.style.imageRendering = 'pixelated'; // Keep pixels sharp
+        document.querySelector('.front-panel').appendChild(canvas); // Assuming front-panel div exists
+    }
+
+    // Set internal resolution (240x64) and display size (480x128 for 2x scale)
+    canvas.width = 240;
+    canvas.height = 64;
+    canvas.style.width = '480px';
+    canvas.style.height = '128px';
+
     const ctx = canvas.getContext('2d');
-    const width = 240;
-    const height = 64;
+    const width = canvas.width;
+    const height = canvas.height;
     const imgData = ctx.getImageData(0, 0, width, height);
     const data = imgData.data;
+
     // Skip 13-byte header
     const bitmap = rawBytes.slice(13, 13 + 1920);
     // Optional bit flip (hardcoded to false)
@@ -80,6 +97,12 @@ export function renderBitmap(canvasId, rawBytes, log) {
     }
     ctx.putImageData(imgData, 0, 0);
     log('[LOG] Rendered bitmap to canvas');
+
+    // Export BMP if requested
+    if (SAVE_MONO_BMP) {
+        exportBMP(data, width, height);
+    }
+
     return data; // Return pixel data for BMP export or comparison
 }
 

@@ -5,36 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Orville Commander</title>
   <link rel="stylesheet" href="styles.css">
-  <script type="module" src="main.js"></script>
 </head>
 <body>
   <div class="front-panel">
-    <!-- Level Meters -->
+    <!-- Existing content -->
     <div class="level-meters">
       <div class="meter">IN1</div>
       <div class="meter">IN2</div>
       <div class="meter">IN3</div>
       <div class="meter">IN4</div>
     </div>
-
-    <!-- Function Buttons -->
     <div class="function-buttons">
       <button id="ab-btn">A/B</button>
       <button id="bypass-btn">BYPASS</button>
     </div>
-
-    <!-- LCD Display -->
     <div id="lcd"></div>
-
-    <!-- Soft Keys -->
+    <canvas id="lcd-canvas"></canvas>
     <div class="soft-keys">
       <button id="soft1-btn">SOFT 1</button>
       <button id="soft2-btn">SOFT 2</button>
       <button id="soft3-btn">SOFT 3</button>
       <button id="soft4-btn">SOFT 4</button>
     </div>
-
-    <!-- Navigation Buttons -->
     <div class="nav-buttons">
       <button id="program-btn">PROGRAM</button>
       <button id="program-hold-btn">PROGRAM (HOLD)</button>
@@ -45,16 +37,12 @@
       <button id="levels-btn">LEVELS</button>
       <button id="setup-btn">SETUP</button>
     </div>
-
-    <!-- Cursor Keys -->
     <div class="cursor-keys">
       <button id="up-btn">↑</button>
       <button id="left-btn">←</button>
       <button id="down-btn">↓</button>
       <button id="right-btn">→</button>
     </div>
-
-    <!-- Keypad -->
     <div class="keypad">
       <button id="1-btn">1</button>
       <button id="2-btn">2</button>
@@ -68,45 +56,43 @@
       <button id="dot-btn">.</button>
       <button id="0-btn">0</button>
       <button id="minus-btn">-</button>
-      <button id="up-key-btn">UP</button>
-      <button id="down-key-btn">DOWN</button>
+      <button id="inc-btn">UP</button>
+      <button id="dec-btn">DOWN</button>
       <button id="cxl-btn">CXL</button>
-      <button id="ent-btn">ENT</button>
+      <button id="enter-btn">ENT</button>
     </div>
   </div>
 
-  <!-- MIDI Connection Controls -->
   <div>
     <button id="connect">Connect MIDI</button>
     <select id="output-select"></select>
     <select id="input-select"></select>
-    <input id="device-id" type="number" value="0" min="0" max="63">
+    <input id="device-id" type="number" value="0">
     <button id="select-ports">Select Ports</button>
     <button id="save-config">Save Config</button>
     <button id="clear-config">Clear Config</button>
   </div>
 
-  <!-- Debug Tools -->
   <div>
     <h3>Debug Tools</h3>
-    <button id="test-keypress">Test Keypress</button>
-    <input id="key-input" type="text" placeholder="Object Key">
+    <input id="key-input" type="text" value="0">
     <button id="send-request">Send Object Info Request</button>
     <button id="get-value">Get Value</button>
-    <input id="set-value-input" type="text" placeholder="Set Value">
+    <input id="set-value-input" type="text">
     <button id="set-value">Set Value</button>
     <button id="back-btn">Back</button>
     <button id="poll-toggle">Toggle Polling</button>
     <button id="sync-btn">Sync to Hardware</button>
-    <input id="custom-sysex" type="text" placeholder="Custom SysEx hex">
+    <input id="custom-sysex" type="text" placeholder="Enter hex Sysex">
     <button id="send-custom">Send Custom</button>
     <button id="copy-log">Copy Log</button>
-    <button id="get-screen-btn">Get Screen Bitmap</button>  <!-- NEW: Added this button -->
+    <button id="test-keypress">Test Keypress</button>
+    <button id="get-screen-btn">Get Screen Bitmap</button>
+    <!-- New button for uploading debug file -->
+    <input id="upload-debug-file" type="file" accept=".txt">
+    <button id="process-debug-file">Process Debug File</button>
   </div>
 
   <textarea id="log-area" readonly></textarea>
 
-  <canvas id="lcd-canvas" width="240" height="64"></canvas>  <!-- NEW: Added this canvas for bitmap rendering -->
-
-</body>
-</html>
+  <script type="module" src="main.js"></script>

@@ -104,32 +104,35 @@ export function exportBMP(canvas) {
   buffer[3] = (fileSize >> 8) & 0xff;
   buffer[4] = (fileSize >> 16) & 0xff;
   buffer[5] = (fileSize >> 24) & 0xff;
-  buffer[10] = 54; // Pixel data offset
+  buffer[10] = 54; // Offset to pixel data
   buffer[14] = 40; // DIB header size
   buffer[18] = width & 0xff;
   buffer[19] = (width >> 8) & 0xff;
   buffer[22] = height & 0xff;
   buffer[23] = (height >> 8) & 0xff;
-  buffer[26] = 1; // Planes
+  buffer[26] = 1; // Color planes
   buffer[28] = 1; // Bits per pixel (1 for mono)
   buffer[30] = 0; // Compression (0 = none)
-  const imageSize = width * height;
-  buffer[34] = imageSize & 0xff;
-  buffer[35] = (imageSize >> 8) & 0xff;
-  buffer[36] = (imageSize >> 16) & 0xff;
-  buffer[37] = (imageSize >> 24) & 0xff;
-  buffer[38] = 0x0b; buffer[39] = 0x13; // Horizontal resolution (2835 ppm)
-  buffer[42] = 0x0b; buffer[43] = 0x13; // Vertical resolution
-  buffer[46] = 2; // Colors in palette
-  buffer[50] = 0; buffer[51] = 0; buffer[52] = 0; buffer[53] = 0; // Black
-  buffer[54] = 255; buffer[55] = 255; buffer[56] = 255; buffer[57] = 0; // White
-  let offset = 58; // Header + palette
-  for (let y = height - 1; y >= 0; y--) {
+  buffer[34] = (width * height) & 0xff;
+  buffer[35] = ((width * height) >> 8) & 0xff;
+  buffer[36] = ((width * height) >> 16) & 0xff;
+  buffer[37] = ((width * height) >> 24) & 0xff;
+  buffer[38] = 0xb1; buffer[39] = 0x0b; // Horizontal resolution (2835 ppm)
+  buffer[42] = 0xb1; buffer[43] = 0x0b; // Vertical resolution
+  buffer[46] = 2; // Number of colors
+  // Color palette: black and white
+  buffer[54] = 0; buffer[55] = 0; buffer[56] = 0; buffer[57] = 0; // Black
+  buffer[58] = 255; buffer[59] = 255; buffer[60] = 255; buffer[61] = 0; // White
+  // Pixel data (monochrome, padded to 4-byte boundaries)
+  let offset = 54;
+  const rowBytes = Math.ceil(width / 8);
+  const padding = (4 - rowBytes % 4) % 4;
+  for (let y = height - 1; y >= 0; y--) { // Bottom-up
     let byte = 0;
     let bitCount = 0;
     for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4 + 1; // Green channel
-      byte = (byte << 1) | (data[idx] > 128 ? 0 : 1); // 1 for off (black), 0 for on (white)? Wait, invert if needed
+      const idx = (y * width + x) * 4 + 1; // Green channel for on/off
+      byte = (byte << 1) | (data[idx] > 0 ? 1 : 0);
       bitCount++;
       if (bitCount === 8) {
         buffer[offset++] = byte;
@@ -141,8 +144,7 @@ export function exportBMP(canvas) {
       byte <<= (8 - bitCount);
       buffer[offset++] = byte;
     }
-    // Pad to 4-byte boundary
-    while ((offset - 58) % 4 !== 0) {
+    for (let p = 0; p < padding; p++) {
       buffer[offset++] = 0;
     }
   }
@@ -150,12 +152,13 @@ export function exportBMP(canvas) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'orville_screen.bmp';
+  a.download = 'lcd_mono.bmp';
   a.click();
   URL.revokeObjectURL(url);
+  log('[LOG] Exported monochrome BMP');
 }
 
-const NO_FLIP = true;
+const NO_FLIP = true; // Hardcoded, adjust if needed
 const ROTATE_COLUMNS = true;
 const SHIFT_FIRST_COLUMN = true;
 const SAVE_MONO_BMP = false;
@@ -258,7 +261,7 @@ export function parseSubObject(line) {
       i++;
       for (let j = 0; j < num; j++) {
         const desc = parts[i];
-        const index = j.toString(16);
+        const index = j.toString(10); // Changed to decimal for correct VALUE_PUT
         options.push({ index, desc });
         i++;
       }

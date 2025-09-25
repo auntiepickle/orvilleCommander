@@ -55,13 +55,10 @@ copyLogBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(logArea.value).then(() => log('Log copied to clipboard.', 'info', 'general'));
 });
 
-connectBtn.addEventListener('click', async () => {
+async function connectMidi(cachedConfig = null) {
   try {
     await WebMidi.enable({ sysex: true });
     log('WebMidi enabled.', 'info', 'general');
-    const cachedConfig = loadConfig(log, deviceIdInput, logLevelSelect);
-    appState.logLevel = logLevelSelect.value;
-    appState.logCategories = cachedConfig?.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
     outputSelect.innerHTML = '';
     WebMidi.outputs.forEach(output => {
       const option = document.createElement('option');
@@ -79,16 +76,18 @@ connectBtn.addEventListener('click', async () => {
       inputSelect.appendChild(option);
     });
     log('Ports populated. Choose and click "Select Ports". If cached, already pre-selected.', 'info', 'general');
+    if (cachedConfig && cachedConfig.outputId && cachedConfig.inputId) {
+      selectPorts();
+    }
   } catch (err) {
     log(`Error: ${err}`, 'error', 'error');
   }
-});
+}
 
-selectPortsBtn.addEventListener('click', () => {
+function selectPorts() {
   const outputId = outputSelect.value;
   const inputId = inputSelect.value;
   const devId = parseInt(deviceIdInput.value, 10);
-  appState.logLevel = logLevelSelect.value;
   setMidiPorts(WebMidi.getOutputById(outputId), WebMidi.getInputById(inputId), devId);
   addSysexListener(log);
   log('Ports selected and listener added. Device ID set to ' + devId, 'info', 'general');
@@ -97,7 +96,11 @@ selectPortsBtn.addEventListener('click', () => {
   // Fetch screen after connecting
   sendSysEx(0x18, [], log);
   log('Fetched initial screen after connecting.', 'info', 'general');
-});
+}
+
+connectBtn.addEventListener('click', () => connectMidi());
+
+selectPortsBtn.addEventListener('click', selectPorts);
 
 saveConfigBtn.addEventListener('click', () => {
   saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, log);
@@ -155,6 +158,8 @@ importConfigBtn.addEventListener('click', () => {
         appState.logLevel = config.logLevel || 'info';
         appState.logCategories = config.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
         log('Config imported from file.', 'info', 'general');
+        // Re-connect with new config
+        connectMidi(config);
       } catch (err) {
         log(`Error importing config: ${err}`, 'error', 'error');
       }
@@ -275,5 +280,7 @@ function hideLoading() {
 
 setupKeypressControls(log);
 
-loadConfig(log, deviceIdInput, logLevelSelect);
+const cachedConfig = loadConfig(log, deviceIdInput, logLevelSelect);
 appState.logLevel = logLevelSelect.value;
+appState.logCategories = cachedConfig?.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
+connectMidi(cachedConfig);

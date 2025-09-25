@@ -21,6 +21,7 @@ export const appState = {
     valueChange: true,
     noChange: true,
     renderScreen: true,
+    bitmap: true,
     error: true,
     general: true
   }

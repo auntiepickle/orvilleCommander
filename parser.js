@@ -21,13 +21,13 @@ export function extractNibbles(sysExHex) {
 
 // Function to denibble nibbles to bytes
 export function denibble(nibbles) {
-  const rawBytes = [];
-  for (let i = 0; i < nibbles.length; i += 2) {
-      if (i + 1 < nibbles.length) {
-          rawBytes.push((nibbles[i] << 4) | nibbles[i + 1]);
-      }
-  }
-  return rawBytes;
+    const rawBytes = [];
+    for (let i = 0; i < nibbles.length; i += 2) {
+        if (i + 1 < nibbles.length) {
+            rawBytes.push((nibbles[i] << 4) | nibbles[i + 1]);
+        }
+    }
+    return rawBytes;
 }
 
 // Function to render the bitmap on canvas and return pixel data
@@ -111,19 +111,27 @@ export function exportBMP(canvas) {
   buffer[22] = height & 0xff;
   buffer[23] = (height >> 8) & 0xff;
   buffer[26] = 1; // Planes
-  buffer[28] = 8; // Bits per pixel (mono with palette)
-  // Palette: black and white (or green, but mono for BMP)
-  buffer[54] = 0; buffer[55] = 0; buffer[56] = 0; buffer[57] = 255; // Black
-  buffer[58] = 255; buffer[59] = 255; buffer[60] = 255; buffer[61] = 255; // White
-  // Pixel data (mono, padded to 4 bytes per row)
+  buffer[28] = 1; // Bits per pixel (1 for mono)
+  buffer[30] = 0; // Compression (0 = none)
+  buffer[34] = (width * height) & 0xff;
+  buffer[35] = ((width * height) >> 8) & 0xff;
+  buffer[36] = ((width * height) >> 16) & 0xff;
+  buffer[37] = ((width * height) >> 24) & 0xff;
+  buffer[38] = 0xb1; buffer[39] = 0x0b; // Horizontal resolution (2835 ppm)
+  buffer[42] = 0xb1; buffer[43] = 0x0b; // Vertical resolution
+  buffer[46] = 2; // Number of colors
+  // Color palette: black and white
+  buffer[54] = 0; buffer[55] = 0; buffer[56] = 0; buffer[57] = 0; // Black
+  buffer[58] = 255; buffer[59] = 255; buffer[60] = 255; buffer[61] = 0; // White
+  // Pixel data (monochrome, padded to 4-byte boundaries)
+  let offset = 54;
   const rowBytes = Math.ceil(width / 8);
   const padding = (4 - rowBytes % 4) % 4;
-  let offset = 62; // After palette
   for (let y = height - 1; y >= 0; y--) { // Bottom-up
     let byte = 0;
     let bitCount = 0;
     for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4 + 1; // Green channel
+      const idx = (y * width + x) * 4 + 1; // Green channel for on/off
       byte = (byte << 1) | (data[idx] > 0 ? 1 : 0);
       bitCount++;
       if (bitCount === 8) {
@@ -144,14 +152,14 @@ export function exportBMP(canvas) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'orville_screen.bmp';
+  a.download = 'lcd_mono.bmp';
   a.click();
   URL.revokeObjectURL(url);
+  log('[LOG] Exported monochrome BMP');
 }
 
-// Configurable flags
-const NO_FLIP = true;
-const ROTATE_COLUMNS = false;
+const NO_FLIP = true; // Hardcoded, adjust if needed
+const ROTATE_COLUMNS = true;
 const SHIFT_FIRST_COLUMN = true;
 const SAVE_MONO_BMP = false;
 

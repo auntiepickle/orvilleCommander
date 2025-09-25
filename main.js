@@ -1,3 +1,4 @@
+// main.js
 import { WebMidi } from 'webmidi';
 import { loadConfig, saveConfig, clearConfig } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
@@ -12,6 +13,9 @@ const connectBtn = document.getElementById('connect');
 const outputSelect = document.getElementById('output-select');
 const inputSelect = document.getElementById('input-select');
 const deviceIdInput = document.getElementById('device-id');
+const logLevelSelect = document.getElementById('log-level');
+const logCategoriesJson = document.getElementById('log-categories-json');
+const applyLogCategoriesBtn = document.getElementById('apply-log-categories');
 const selectPortsBtn = document.getElementById('select-ports');
 const saveConfigBtn = document.getElementById('save-config');
 const clearConfigBtn = document.getElementById('clear-config');
@@ -29,12 +33,17 @@ const testKeypressBtn = document.getElementById('test-keypress');
 const syncBtn = document.getElementById('sync-btn');
 const getScreenBtn = document.getElementById('get-screen-btn');
 const uploadDebugFile = document.getElementById('upload-debug-file');
-const processDebugFileBtn = document.getElementById('process-debug-file'); // New button
+const processDebugFileBtn = document.getElementById('process-debug-file');
+const exportConfigBtn = document.getElementById('export-config');
+const importConfigInput = document.getElementById('import-config');
+const importConfigBtn = document.getElementById('import-config-btn');
 
 let pollInterval = null;
 let isPolling = false;
+const levels = { error: 0, info: 1, debug: 2 };
 
-function log(message) {
+function log(message, level = 'info', category = 'general') {
+  if (levels[appState.logLevel] < levels[level] || !appState.logCategories[category]) return;
   const timestamp = new Date().toISOString();
   const entry = `[${timestamp}] ${message}\n`;
   logArea.value += entry;
@@ -43,14 +52,16 @@ function log(message) {
 }
 
 copyLogBtn.addEventListener('click', () => {
-  navigator.clipboard.writeText(logArea.value).then(() => log('Log copied to clipboard.'));
+  navigator.clipboard.writeText(logArea.value).then(() => log('Log copied to clipboard.', 'info', 'general'));
 });
 
 connectBtn.addEventListener('click', async () => {
   try {
     await WebMidi.enable({ sysex: true });
-    log('WebMidi enabled.');
-    const cachedConfig = loadConfig(log, deviceIdInput);
+    log('WebMidi enabled.', 'info', 'general');
+    const cachedConfig = loadConfig(log, deviceIdInput, logLevelSelect);
+    appState.logLevel = logLevelSelect.value;
+    appState.logCategories = cachedConfig?.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
     outputSelect.innerHTML = '';
     WebMidi.outputs.forEach(output => {
       const option = document.createElement('option');
@@ -67,9 +78,9 @@ connectBtn.addEventListener('click', async () => {
       if (cachedConfig && input.id === cachedConfig.inputId) option.selected = true;
       inputSelect.appendChild(option);
     });
-    log('Ports populated. Choose and click "Select Ports". If cached, already pre-selected.');
+    log('Ports populated. Choose and click "Select Ports". If cached, already pre-selected.', 'info', 'general');
   } catch (err) {
-    log(`Error: ${err}`);
+    log(`Error: ${err}`, 'error', 'error');
   }
 });
 
@@ -77,28 +88,87 @@ selectPortsBtn.addEventListener('click', () => {
   const outputId = outputSelect.value;
   const inputId = inputSelect.value;
   const devId = parseInt(deviceIdInput.value, 10);
+  appState.logLevel = logLevelSelect.value;
   setMidiPorts(WebMidi.getOutputById(outputId), WebMidi.getInputById(inputId), devId);
   addSysexListener(log);
-  log('Ports selected and listener added. Device ID set to ' + devId);
+  log('Ports selected and listener added. Device ID set to ' + devId, 'info', 'general');
   lcdEl.innerText = 'Connected. Fetching root screen...';
   updateScreen(log);
   // Fetch screen after connecting
   sendSysEx(0x18, [], log);
-  log('Fetched initial screen after connecting.');
+  log('Fetched initial screen after connecting.', 'info', 'general');
 });
 
 saveConfigBtn.addEventListener('click', () => {
-  saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), log);
+  saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, log);
+  appState.logLevel = logLevelSelect.value;
 });
 
 clearConfigBtn.addEventListener('click', () => {
-  clearConfig(outputSelect, inputSelect, deviceIdInput, log);
+  clearConfig(outputSelect, inputSelect, deviceIdInput, logLevelSelect, log);
+  appState.logLevel = 'info';
+  appState.logCategories = Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
+});
+
+logLevelSelect.addEventListener('change', () => {
+  appState.logLevel = logLevelSelect.value;
+  log(`Log level changed to ${appState.logLevel}.`, 'info', 'general');
+});
+
+applyLogCategoriesBtn.addEventListener('click', () => {
+  try {
+    const json = logCategoriesJson.value;
+    const newCategories = JSON.parse(json);
+    appState.logCategories = { ...appState.logCategories, ...newCategories };
+    saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, log);
+    log('Applied and saved log categories: ' + JSON.stringify(appState.logCategories), 'info', 'general');
+  } catch (err) {
+    log(`Error applying log categories: ${err}`, 'error', 'error');
+  }
+});
+
+exportConfigBtn.addEventListener('click', () => {
+  const configStr = localStorage.getItem('orvilleConfig');
+  if (configStr) {
+    const blob = new Blob([configStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'orvilleConfig.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    log('Config exported to file.', 'info', 'general');
+  } else {
+    log('No config to export.', 'info', 'general');
+  }
+});
+
+importConfigBtn.addEventListener('click', () => {
+  const file = importConfigInput.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const config = JSON.parse(e.target.result);
+        localStorage.setItem('orvilleConfig', JSON.stringify(config));
+        loadConfig(log, deviceIdInput, logLevelSelect);
+        appState.logLevel = config.logLevel || 'info';
+        appState.logCategories = config.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
+        log('Config imported from file.', 'info', 'general');
+      } catch (err) {
+        log(`Error importing config: ${err}`, 'error', 'error');
+      }
+    };
+    reader.readAsText(file);
+  } else {
+    log('No file selected for import.', 'info', 'general');
+  }
 });
 
 sendRequestBtn.addEventListener('click', () => {
   appState.currentKey = keyInput.value;
   updateScreen(log);
-  log(`Requested object info for key ${appState.currentKey}`);
+  log(`Requested object info for key ${appState.currentKey}`, 'info', 'general');
 });
 
 getValueBtn.addEventListener('click', () => {
@@ -116,7 +186,7 @@ backBtn.addEventListener('click', () => {
     appState.paramOffset = 0;
     appState.autoNavigated = false;
     updateScreen(log);
-    log(`Back to key ${appState.currentKey}`);
+    log(`Back to key ${appState.currentKey}`, 'info', 'general');
   }
 });
 
@@ -124,11 +194,11 @@ pollToggle.addEventListener('click', () => {
   isPolling = !isPolling;
   if (isPolling) {
     pollInterval = setInterval(() => updateScreen(log), 500);
-    log('Polling started.');
+    log('Polling started.', 'info', 'general');
     pollToggle.innerText = 'Stop Polling';
   } else {
     clearInterval(pollInterval);
-    log('Polling stopped.');
+    log('Polling stopped.', 'info', 'general');
     pollToggle.innerText = 'Start Polling';
   }
 });
@@ -149,12 +219,12 @@ testKeypressBtn.addEventListener('click', () => {
 syncBtn.addEventListener('click', () => {
   appState.currentKey = '0';
   updateScreen(log);
-  log('Synced to root');
+  log('Synced to root', 'info', 'general');
 });
 
 getScreenBtn.addEventListener('click', () => {
   sendSysEx(0x18, [], log);
-  log('Sent Get Screen request (0x18)');
+  log('Sent Get Screen request (0x18)', 'info', 'general');
 });
 
 // Handle file upload and processing
@@ -171,17 +241,17 @@ processDebugFileBtn.addEventListener('click', () => {
         const endIdx = hexMatches.indexOf('f7', startIdx) || hexMatches.length;
         const nibblesStr = hexMatches.slice(startIdx, endIdx);
         const nibbles = nibblesStr.map(h => parseInt(h, 16));
-        log(`[LOG] Extracted ${nibbles.length} nibbles from uploaded file`);
+        log(`[LOG] Extracted ${nibbles.length} nibbles from uploaded file`, 'debug', 'general');
         const rawBytes = denibble(nibbles);
-        log(`[LOG] Denibbled to ${rawBytes.length} bytes`);
+        log(`[LOG] Denibbled to ${rawBytes.length} bytes`, 'debug', 'general');
         renderBitmap('lcd-canvas', rawBytes, log);
       } else {
-        log('[ERROR] No hex data found in file');
+        log('[ERROR] No hex data found in file', 'error', 'error');
       }
     };
     reader.readAsText(file);
   } else {
-    log('[ERROR] No file uploaded');
+    log('[ERROR] No file uploaded', 'error', 'error');
   }
 });
 
@@ -191,7 +261,7 @@ function showLoading() {
   if (canvas) {
     canvas.classList.add('loading');
   }
-  log('Loading new screen...');
+  log('Loading new screen...', 'debug', 'general');
 }
 
 // Function to hide loading indicator
@@ -200,9 +270,10 @@ function hideLoading() {
   if (canvas) {
     canvas.classList.remove('loading');
   }
-  log('Screen loaded.');
+  log('Screen loaded.', 'debug', 'general');
 }
 
 setupKeypressControls(log);
 
-loadConfig(log, deviceIdInput);
+loadConfig(log, deviceIdInput, logLevelSelect);
+appState.logLevel = logLevelSelect.value;

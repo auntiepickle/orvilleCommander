@@ -12,5 +12,16 @@ export const appState = {
   dspBKey: '801000b',
   currentSubs: [],
   lastAscii: '',
-  deviceId: 0
+  deviceId: 0,
+  logLevel: 'info',
+  logCategories: {
+    sysexReceived: true,
+    sysexSent: true,
+    parsedDump: true,
+    valueChange: true,
+    noChange: true,
+    renderScreen: true,
+    error: true,
+    general: true
+  }
 };

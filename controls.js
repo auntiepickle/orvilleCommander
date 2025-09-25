@@ -89,15 +89,19 @@ export function setupKeypressControls(log) {
         const mask = keypressMasks[key];
         if (mask) {
           sendKeypress(mask);
-          log(`Sent keypress for ${key}: ${mask.map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+          log(`Sent keypress for ${key}: ${mask.map(b => b.toString(16).padStart(2, '0')).join(' ')}`, 'debug', 'sysexSent');
           setTimeout(() => {
             if (key === 'ab') {
               appState.currentKey = toggleDspKey(appState.currentKey);
             }
             updateScreen();
-            // Fetch screen after button press
-            sendSysEx(0x18, [], log);
-            log('Fetched screen after button press.');
+            // Fetch screen after button press if enabled
+            if (appState.fetchBitmap) {
+              sendSysEx(0x18, [], log);
+              log('Fetched screen after button press.', 'debug', 'bitmap');
+            } else {
+              log('Bitmap fetch disabled; skipped screen after button press.', 'debug', 'bitmap');
+            }
           }, 200);
         }
       });
@@ -106,19 +110,19 @@ export function setupKeypressControls(log) {
 }
 
 export function testKeypress(log) {
-  log('Starting duplicate command test...');
+  log('Starting duplicate command test...', 'info', 'general');
   // Simulate button press flow without actual MIDI send
   const mockKey = 'up';
   const mask = keypressMasks[mockKey];
   if (mask) {
     const commandStr = `Sent keypress for ${mockKey}: ${mask.map(b => b.toString(16).padStart(2, '0')).join(' ')}`;
     // Simulate single send
-    log(`Simulated command: ${commandStr}`);
+    log(`Simulated command: ${commandStr}`, 'debug', 'sysexSent');
     // Check for duplicate by seeing if the same command is logged twice (in real flow, it should not)
     // In test, we only send once
-    log('No duplicate detected in simulation.');
+    log('No duplicate detected in simulation.', 'debug', 'general');
   } else {
-    log('Test failed: no mask found for mock key.');
+    log('Test failed: no mask found for mock key.', 'error', 'error');
   }
-  log('Duplicate command test complete. Check logs for any repeated commands during normal operation.');
+  log('Duplicate command test complete. Check logs for any repeated commands during normal operation.', 'info', 'general');
 }

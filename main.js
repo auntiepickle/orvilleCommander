@@ -16,6 +16,7 @@ const deviceIdInput = document.getElementById('device-id');
 const logLevelSelect = document.getElementById('log-level');
 const logCategoriesJson = document.getElementById('log-categories-json');
 const applyLogCategoriesBtn = document.getElementById('apply-log-categories');
+const fetchBitmapCheckbox = document.getElementById('fetch-bitmap');
 const selectPortsBtn = document.getElementById('select-ports');
 const saveConfigBtn = document.getElementById('save-config');
 const clearConfigBtn = document.getElementById('clear-config');
@@ -93,9 +94,13 @@ function selectPorts() {
   log('Ports selected and listener added. Device ID set to ' + devId, 'info', 'general');
   lcdEl.innerText = 'Connected. Fetching root screen...';
   updateScreen(log);
-  // Fetch screen after connecting
-  sendSysEx(0x18, [], log);
-  log('Fetched initial screen after connecting.', 'info', 'general');
+  // Fetch screen after connecting if enabled
+  if (appState.fetchBitmap) {
+    sendSysEx(0x18, [], log);
+    log('Fetched initial screen after connecting.', 'info', 'general');
+  } else {
+    log('Bitmap fetch disabled; skipped initial screen dump.', 'info', 'bitmap');
+  }
 }
 
 connectBtn.addEventListener('click', () => connectMidi());
@@ -103,14 +108,15 @@ connectBtn.addEventListener('click', () => connectMidi());
 selectPortsBtn.addEventListener('click', selectPorts);
 
 saveConfigBtn.addEventListener('click', () => {
-  saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, log);
+  saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, fetchBitmapCheckbox.checked, log);
   appState.logLevel = logLevelSelect.value;
 });
 
 clearConfigBtn.addEventListener('click', () => {
-  clearConfig(outputSelect, inputSelect, deviceIdInput, logLevelSelect, log);
+  clearConfig(outputSelect, inputSelect, deviceIdInput, logLevelSelect, fetchBitmapCheckbox, log);
   appState.logLevel = 'info';
   appState.logCategories = Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
+  appState.fetchBitmap = true;
 });
 
 logLevelSelect.addEventListener('change', () => {
@@ -123,10 +129,23 @@ applyLogCategoriesBtn.addEventListener('click', () => {
     const json = logCategoriesJson.value;
     const newCategories = JSON.parse(json);
     appState.logCategories = { ...appState.logCategories, ...newCategories };
-    saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, log);
+    saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, appState.fetchBitmap, log);
     log('Applied and saved log categories: ' + JSON.stringify(appState.logCategories), 'info', 'general');
   } catch (err) {
     log(`Error applying log categories: ${err}`, 'error', 'error');
+  }
+});
+
+fetchBitmapCheckbox.addEventListener('change', () => {
+  appState.fetchBitmap = fetchBitmapCheckbox.checked;
+  saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, appState.fetchBitmap, log);
+  log(`Bitmap fetch ${appState.fetchBitmap ? 'enabled' : 'disabled'}.`, 'info', 'general');
+  if (!appState.fetchBitmap) {
+    const canvas = document.getElementById('lcd-canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  } else {
+    updateScreen(log); // Refetch if enabled
   }
 });
 
@@ -154,9 +173,11 @@ importConfigBtn.addEventListener('click', () => {
       try {
         const config = JSON.parse(e.target.result);
         localStorage.setItem('orvilleConfig', JSON.stringify(config));
-        loadConfig(log, deviceIdInput, logLevelSelect);
+        loadConfig(log, deviceIdInput, logLevelSelect, fetchBitmapCheckbox);
         appState.logLevel = config.logLevel || 'info';
         appState.logCategories = config.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
+        appState.fetchBitmap = config.fetchBitmap !== false;
+        fetchBitmapCheckbox.checked = appState.fetchBitmap;
         log('Config imported from file.', 'info', 'general');
         // Re-connect with new config
         connectMidi(config);
@@ -228,8 +249,12 @@ syncBtn.addEventListener('click', () => {
 });
 
 getScreenBtn.addEventListener('click', () => {
-  sendSysEx(0x18, [], log);
-  log('Sent Get Screen request (0x18)', 'info', 'general');
+  if (appState.fetchBitmap) {
+    sendSysEx(0x18, [], log);
+    log('Sent Get Screen request (0x18)', 'info', 'general');
+  } else {
+    log('Bitmap fetch disabled; skipped Get Screen request.', 'info', 'bitmap');
+  }
 });
 
 // Handle file upload and processing
@@ -280,7 +305,8 @@ function hideLoading() {
 
 setupKeypressControls(log);
 
-const cachedConfig = loadConfig(log, deviceIdInput, logLevelSelect);
+const cachedConfig = loadConfig(log, deviceIdInput, logLevelSelect, fetchBitmapCheckbox);
 appState.logLevel = logLevelSelect.value;
 appState.logCategories = cachedConfig?.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
+appState.fetchBitmap = fetchBitmapCheckbox.checked;
 connectMidi(cachedConfig);

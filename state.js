@@ -22,7 +22,9 @@ export const appState = {
     noChange: true,
     renderScreen: true,
     bitmap: true,
+    screenDump: true,
     error: true,
     general: true
-  }
+  },
+  fetchBitmap: true
 };

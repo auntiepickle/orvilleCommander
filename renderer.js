@@ -111,15 +111,17 @@ export function renderScreen(subs, ascii, log) {
           if (!appState.currentValues[s.key]) sendValueDump(s.key, log);
         }
         let displayValue = value;
-        if (s.type === 'SET' && value) {
-          const valueParts = value.split(' ');
-          displayValue = valueParts.slice(1).join(' ');
+        let indexHex = '0';
+        if (value) {
+          indexHex = value.split(' ')[0];
+          displayValue = value.substring(indexHex.length + 1);
         }
         if (s.type === 'SET') {
           fullText = (s.statement || '').replace(/%s/g, displayValue);
           let selectHtml = `<select data-key="${s.key}" style="background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;">`;
           s.options.forEach(option => {
-            selectHtml += `<option value="${option.index}" ${option.index === value.split(' ')[0] ? 'selected' : ''}>${option.desc}</option>`;
+            const isSelected = option.index === indexHex;
+            selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
           });
           selectHtml += `</select>`;
           fullHtml = (s.statement || '').replace(/%s/g, selectHtml);
@@ -140,7 +142,7 @@ export function renderScreen(subs, ascii, log) {
     const softTags = softSubs.map(s => s.tag.trim());
     displayLines.push(softTags.map((t, idx) => (softSubs[idx].key === appState.currentKey ? `[${t}]` : t).padEnd(10)).join(''));
   }
-  log(`Rendered screen text: ${displayLines.join('\n')}`);
+  log(`Rendered screen text: ${displayLines.join('\n')}`, 'debug', 'renderScreen');
   let htmlLines = displayLines.map((l, index) => {
     if (index === displayLines.length - 1) {
       let softHtml = '';

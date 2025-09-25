@@ -20,10 +20,6 @@ export function addSysexListener(log) {
 }
 
 export function sendSysEx(cmd, dataBytes = [], log = null) {
-  if (cmd === 0x18 && !appState.fetchBitmap) {
-    if (log) log('Skipped SysEx screen dump (0x18) as fetchBitmap disabled.', 'debug', 'bitmap');
-    return;
-  }
   const sysex = [appState.deviceId, cmd, ...dataBytes];
   selectedOutput.sendSysex([0x1c, 0x70], sysex);
   const sentMsg = `Sent SysEx: F0 1C 70 ${sysex.map(b => b.toString(16).padStart(2, '0')).join(' ')} F7`;

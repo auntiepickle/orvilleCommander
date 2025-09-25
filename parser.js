@@ -86,7 +86,7 @@ export function renderBitmap(canvasId, rawBytes, log) {
         }
     }
     ctx.putImageData(imgData, 0, 0);
-    log('[LOG] Rendered bitmap to canvas');
+    if (appState.logCategories['bitmap']) log('[LOG] Rendered bitmap to canvas', 'debug', 'bitmap');
     if (SAVE_MONO_BMP) exportBMP(canvas);
 }
 
@@ -110,28 +110,20 @@ export function exportBMP(canvas) {
   buffer[19] = (width >> 8) & 0xff;
   buffer[22] = height & 0xff;
   buffer[23] = (height >> 8) & 0xff;
-  buffer[26] = 1; // Color planes
-  buffer[28] = 1; // Bits per pixel (1 for mono)
-  buffer[30] = 0; // Compression (0 = none)
-  buffer[34] = (width * height) & 0xff;
-  buffer[35] = ((width * height) >> 8) & 0xff;
-  buffer[36] = ((width * height) >> 16) & 0xff;
-  buffer[37] = ((width * height) >> 24) & 0xff;
-  buffer[38] = 0xb1; buffer[39] = 0x0b; // Horizontal resolution (2835 ppm)
-  buffer[42] = 0xb1; buffer[43] = 0x0b; // Vertical resolution
-  buffer[46] = 2; // Number of colors
-  // Color palette: black and white
-  buffer[54] = 0; buffer[55] = 0; buffer[56] = 0; buffer[57] = 0; // Black
-  buffer[58] = 255; buffer[59] = 255; buffer[60] = 255; buffer[61] = 0; // White
-  // Pixel data (monochrome, padded to 4-byte boundaries)
-  let offset = 54;
+  buffer[26] = 1; // Planes
+  buffer[28] = 8; // Bits per pixel (mono with palette)
+  // Palette: black and white (or green, but mono for BMP)
+  buffer[54] = 0; buffer[55] = 0; buffer[56] = 0; buffer[57] = 255; // Black
+  buffer[58] = 255; buffer[59] = 255; buffer[60] = 255; buffer[61] = 255; // White
+  // Pixel data (mono, padded to 4 bytes per row)
   const rowBytes = Math.ceil(width / 8);
   const padding = (4 - rowBytes % 4) % 4;
+  let offset = 62; // After palette
   for (let y = height - 1; y >= 0; y--) { // Bottom-up
     let byte = 0;
     let bitCount = 0;
     for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4 + 1; // Green channel for on/off
+      const idx = (y * width + x) * 4 + 1; // Green channel
       byte = (byte << 1) | (data[idx] > 0 ? 1 : 0);
       bitCount++;
       if (bitCount === 8) {
@@ -152,14 +144,14 @@ export function exportBMP(canvas) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'lcd_mono.bmp';
+  a.download = 'orville_screen.bmp';
   a.click();
   URL.revokeObjectURL(url);
-  log('[LOG] Exported monochrome BMP');
 }
 
-const NO_FLIP = true; // Hardcoded, adjust if needed
-const ROTATE_COLUMNS = true;
+// Configurable flags
+const NO_FLIP = true;
+const ROTATE_COLUMNS = false;
 const SHIFT_FIRST_COLUMN = true;
 const SAVE_MONO_BMP = false;
 
@@ -190,13 +182,13 @@ function splitLine(line) {
 export function parseResponse(data, log) {
   if (appState.deviceId === 0 && data.length > 3) {
     appState.deviceId = data[3];
-    log(`Detected device ID: ${appState.deviceId}`);
+    log(`Detected device ID: ${appState.deviceId}`, 'info', 'general');
   }
   const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).trim();
   if (data[3] === appState.deviceId && data[4] === 0x32) { // OBJECTINFO_DUMP
     appState.lastAscii = ascii;
     const subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
-    log(`Parsed OBJECTINFO_DUMP for key ${subs[0]?.key || 'unknown'}: ${ascii}`);
+    log(`Parsed OBJECTINFO_DUMP for key ${subs[0]?.key || 'unknown'}: ${ascii}`, 'info', 'parsedDump');
     const main = subs[0];
     if (main.key.endsWith('000b')) {
       appState.presetKey = main.key;
@@ -211,27 +203,28 @@ export function parseResponse(data, log) {
     }
     renderScreen(subs, ascii, log);
   } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
-    const parts = ascii.split(/\s+/);
+    const parts = splitLine(ascii);
     const key = parts[0];
-    const value = parts.slice(1).join(' ');
+    const index = parts[1];
+    const desc = parts.slice(2).join(' ');
+    const value = `${index} ${desc}`;
     const oldValue = appState.currentValues[key];
     appState.currentValues[key] = value;
-    log(`Parsed VALUE_DUMP for key ${key}: ${value}`);
+    log(`Parsed VALUE_DUMP for key ${key}: ${value}`, 'info', 'parsedDump');
     if (oldValue && oldValue !== value) {
-      log(`Value changed from ${oldValue} to ${value}`);
+      log(`Value changed from ${oldValue} to ${value}`, 'info', 'valueChange');
     } else if (oldValue) {
-      log(`Value did not change, still ${value}`);
+      log(`Value did not change, still ${value}`, 'debug', 'noChange');
     }
     renderScreen(null, appState.lastAscii, log);
-  } else if (data[3] === appState.deviceId && data[4] === 0x17) {  // Screen dump response
-    log(`Received Screen Dump SysEx: ${data.map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+  } else if (data[3] === appState.deviceId && data[4] === 0x17) { // Screen dump response
     const nibbles = data.slice(5, data.length - 1);
     if (nibbles.length % 2 !== 0) {
-      log('[ERROR] Odd number of nibbles in screen dump');
+      log('[ERROR] Odd number of nibbles in screen dump', 'error', 'error');
       return;
     }
     const rawBytes = denibble(nibbles);
-    log(`[LOG] Denibbled screen data to ${rawBytes.length} bytes`);
+    if (appState.logCategories['bitmap']) log(`[LOG] Denibbled screen data to ${rawBytes.length} bytes`, 'debug', 'bitmap');
     renderBitmap('lcd-canvas', rawBytes, log);
   }
 }
@@ -256,14 +249,12 @@ export function parseSubObject(line) {
     if (type === 'CON') {
       value = parts[6] || '0';
     } else { // SET
-      let i = 8; // skip current index and desc at 6 and 7
-      const num = parseInt(parts[i], 16);
-      i++;
-      for (let j = 0; j < num; j++) {
-        const desc = parts[i];
-        const index = j.toString(10); // Changed to decimal for correct VALUE_PUT
+      let i = 6; // skip tag
+      while (i < parts.length) {
+        const index = parts[i];
+        const desc = parts[i + 1];
         options.push({ index, desc });
-        i++;
+        i += 2;
       }
       console.log('Parsed SET options for key ' + key + ':', options);
     }

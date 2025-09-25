@@ -1,14 +1,14 @@
 // midi.js
 import { parseResponse } from './parser.js';
+import { appState } from './state.js';
 
 let selectedOutput = null;
 let selectedInput = null;
-let deviceId = 0;
 
 export function setMidiPorts(output, input, devId) {
   selectedOutput = output;
   selectedInput = input;
-  deviceId = devId;
+  appState.deviceId = devId;
 }
 
 export function addSysexListener(log) {
@@ -19,7 +19,7 @@ export function addSysexListener(log) {
 }
 
 export function sendSysEx(cmd, dataBytes = [], log = null) {
-  const sysex = [deviceId, cmd, ...dataBytes];
+  const sysex = [appState.deviceId, cmd, ...dataBytes];
   selectedOutput.sendSysex([0x1c, 0x70], sysex);
   const sentMsg = `Sent SysEx: F0 1C 70 ${sysex.map(b => b.toString(16).padStart(2, '0')).join(' ')} F7`;
   if (log) log(sentMsg);
@@ -39,6 +39,7 @@ export function sendValuePut(key, value, log = null) {
   const keyBytes = key.split('').map(c => c.charCodeAt(0));
   const valueBytes = value.split('').map(c => c.charCodeAt(0));
   sendSysEx(0x2d, [...keyBytes, 0x20, ...valueBytes], log);
+  if (log) log(`Sent VALUE_PUT for key ${key}: ${value}`);
 }
 
 function nibble(mask) {

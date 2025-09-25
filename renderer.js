@@ -20,44 +20,27 @@ const handleLcdClick = (e) => {
     appState.currentKey = e.target.dataset.key;
     appState.paramOffset = 0; // Reset offset for new menu
     updateScreen();
-  } else if (e.target.classList.contains('param-value')) {
-    const key = e.target.dataset.key;
-    const sub = appState.currentSubs.find(s => s.key === key);
-    let currentValue = appState.currentValues[key] || sub.value || '';
-    if (sub && sub.type === 'SET') {
-      const currentIndex = currentValue.split(' ')[0] || sub.value;
-      const currentDesc = currentValue.split(' ').slice(1).join(' ') || (sub.options.find(o => o.index === currentIndex)?.desc || '');
-      let promptMsg = `Edit value for key ${key}. Current: ${currentDesc}\nOptions:\n`;
-      sub.options.forEach((o, idx) => {
-        promptMsg += `${idx + 1}. ${o.desc}\n`;
-      });
-      const newChoice = prompt(promptMsg);
-      if (newChoice !== null) {
-        const choiceNum = parseInt(newChoice);
-        let selected;
-        if (!isNaN(choiceNum) && choiceNum > 0 && choiceNum <= sub.options.length) {
-          selected = sub.options[choiceNum - 1];
-        } else {
-          // Assume input is desc, find matching
-          selected = sub.options.find(o => o.desc.toLowerCase() === newChoice.toLowerCase());
-        }
-        if (selected) {
-          sendValuePut(key, selected.index);
-          appState.currentValues[key] = `${selected.index} ${selected.desc}`;
-          setTimeout(updateScreen, 200); // Delay to allow MIDI update
-        }
-      }
-    } else {
-      const fallbackValue = e.target.innerText.trim().replace(/[^0-9.-]/g, '');
-      const promptValue = currentValue || fallbackValue;
-      const newValue = prompt(`Edit value for key ${key}:`, promptValue);
-      if (newValue !== null && newValue !== promptValue) {
-        sendValuePut(key, newValue);
-        appState.currentValues[key] = newValue;
-        setTimeout(updateScreen, 200); // Delay to allow MIDI update
-      }
-    }
   }
+};
+
+const handleSelectChange = (e) => {
+  const key = e.target.dataset.key;
+  const selectedIndex = e.target.value;
+  const selectedDesc = e.target.options[e.target.selectedIndex].text;
+  console.log(`Selected option for key ${key}: index ${selectedIndex}, desc ${selectedDesc}`);
+  sendValuePut(key, selectedIndex);
+  appState.currentValues[key] = `${selectedIndex} ${selectedDesc}`;
+  setTimeout(() => {
+    updateScreen();
+    setTimeout(() => {
+      const newValue = appState.currentValues[key];
+      if (newValue && newValue.includes(selectedDesc)) {
+        console.log(`Value update successful for key ${key}: ${newValue}`);
+      } else {
+        console.log(`Value update failed for key ${key}. Expected desc: ${selectedDesc}, got: ${newValue}`);
+      }
+    }, 500); // Wait for VALUE_DUMP to arrive
+  }, 200); // Delay to allow MIDI update
 };
 
 function formatValue(statement, value, isHtml = false, key = '') {
@@ -128,7 +111,7 @@ export function renderScreen(subs, ascii, log) {
           value = s.value || '0';
           isEditable = false;
         } else { // SET
-          value = appState.currentValues[s.key] || `${s.value} ${s.options.find(o => o.index === s.value)?.desc || ''}`;
+          value = appState.currentValues[s.key] || '';
           if (!appState.currentValues[s.key]) sendValueDump(s.key, log);
         }
         let displayValue = value;
@@ -138,7 +121,12 @@ export function renderScreen(subs, ascii, log) {
         }
         if (s.type === 'SET') {
           fullText = (s.statement || '').replace(/%s/g, displayValue);
-          fullHtml = (s.statement || '').replace(/%s/g, isEditable ? `<span class="param-value" data-key="${s.key}">${displayValue}</span>` : displayValue);
+          let selectHtml = `<select data-key="${s.key}" style="background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;">`;
+          s.options.forEach(option => {
+            selectHtml += `<option value="${option.index}" ${option.index === value.split(' ')[0] ? 'selected' : ''}>${option.desc}</option>`;
+          });
+          selectHtml += `</select>`;
+          fullHtml = (s.statement || '').replace(/%s/g, selectHtml);
         } else { // CON
           fullText = formatValue(s.statement || '', value);
           fullHtml = isEditable ? formatValue(s.statement || '', value, true, s.key) : fullText;
@@ -181,6 +169,12 @@ export function renderScreen(subs, ascii, log) {
     }
   });
   lcdEl.innerHTML = htmlLines.join('\n');
+
+  // Add change listeners to selects
+  lcdEl.querySelectorAll('select[data-key]').forEach(select => {
+    select.removeEventListener('change', handleSelectChange);
+    select.addEventListener('change', handleSelectChange);
+  });
   
   // Remove and re-add the event listener to ensure only one is active
   lcdEl.removeEventListener('click', handleLcdClick);

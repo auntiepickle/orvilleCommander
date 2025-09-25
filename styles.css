@@ -75,3 +75,28 @@ button:hover { background: #555; }
   height: 128px;
   margin-top: 10px;
 }
+#lcd select {
+  background: #000 !important;
+  color: #0f0 !important;
+  border: none !important;
+  font-family: monospace !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: auto !important;
+  display: inline !important;
+  height: 1.2em !important;
+  line-height: 1.2em !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+#lcd select option {
+  background: #000 !important;
+  color: #0f0 !important;
+}
+#lcd select:focus {
+  outline: none !important;
+}

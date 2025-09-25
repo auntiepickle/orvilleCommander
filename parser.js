@@ -185,8 +185,12 @@ function splitLine(line) {
 }
 
 export function parseResponse(data, log) {
+  if (appState.deviceId === 0 && data.length > 3) {
+    appState.deviceId = data[3];
+    log(`Detected device ID: ${appState.deviceId}`);
+  }
   const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).trim();
-  if (data[3] === 0x01 && data[4] === 0x32) { // OBJECTINFO_DUMP
+  if (data[3] === appState.deviceId && data[4] === 0x32) { // OBJECTINFO_DUMP
     appState.lastAscii = ascii;
     const subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
     log(`Parsed OBJECTINFO_DUMP for key ${subs[0]?.key || 'unknown'}: ${ascii}`);
@@ -203,14 +207,20 @@ export function parseResponse(data, log) {
       }
     }
     renderScreen(subs, ascii, log);
-  } else if (data[3] === 0x01 && data[4] === 0x2e) { // VALUE_DUMP
+  } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
     const parts = ascii.split(/\s+/);
     const key = parts[0];
     const value = parts.slice(1).join(' ');
+    const oldValue = appState.currentValues[key];
     appState.currentValues[key] = value;
     log(`Parsed VALUE_DUMP for key ${key}: ${value}`);
+    if (oldValue && oldValue !== value) {
+      log(`Value changed from ${oldValue} to ${value}`);
+    } else if (oldValue) {
+      log(`Value did not change, still ${value}`);
+    }
     renderScreen(null, appState.lastAscii, log);
-  } else if (data[3] === 0x01 && data[4] === 0x17) {  // Screen dump response
+  } else if (data[3] === appState.deviceId && data[4] === 0x17) {  // Screen dump response
     log(`Received Screen Dump SysEx: ${data.map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
     const nibbles = data.slice(5, data.length - 1);
     if (nibbles.length % 2 !== 0) {
@@ -239,20 +249,21 @@ export function parseSubObject(line) {
     min = parts[7] || '';
     max = parts[8] || '';
     step = parts[9] || '';
-  } else if (type === 'SET') {
-    const defaultIndex = parts[6] || '';
-    let i = 7;
-    while (i < parts.length) {
-      const index = parts[i];
+  } else if (type === 'SET' || type === 'CON') {
+    if (type === 'CON') {
+      value = parts[6] || '0';
+    } else { // SET
+      let i = 8; // skip current index and desc at 6 and 7
+      const num = parseInt(parts[i], 16);
       i++;
-      let desc = '';
-      while (i < parts.length && !/^\d+$/.test(parts[i])) {
-        desc += (desc ? ' ' : '') + parts[i];
+      for (let j = 0; j < num; j++) {
+        const desc = parts[i];
+        const index = j.toString(16);
+        options.push({ index, desc });
         i++;
       }
-      options.push({ index, desc: desc.trim() });
+      console.log('Parsed SET options for key ' + key + ':', options);
     }
-    value = defaultIndex;
   } else {
     value = parts[6] || '';
   }

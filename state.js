@@ -1,5 +1,4 @@
 // state.js
-// state.js
 export const appState = {
   currentKey: '0',
   presetKey: null,
@@ -12,5 +11,6 @@ export const appState = {
   dspAKey: '401000b',
   dspBKey: '801000b',
   currentSubs: [],
-  lastAscii: ''
+  lastAscii: '',
+  deviceId: 0
 };

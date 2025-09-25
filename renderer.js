@@ -30,6 +30,7 @@ const handleSelectChange = (e) => {
   console.log(`Selected option for key ${key}: index ${selectedIndex}, desc ${selectedDesc}`);
   sendValuePut(key, selectedIndex);
   appState.currentValues[key] = `${selectedIndex} ${selectedDesc}`;
+  renderScreen(null, appState.lastAscii); // Immediate local update
   setTimeout(() => {
     updateScreen();
     setTimeout(() => {
@@ -98,15 +99,10 @@ export function renderScreen(subs, ascii, log) {
         const replaceWith = s.tag || s.value || '';
         fullText = (s.statement || '').replace(/%s/g, replaceWith);
         fullHtml = fullText;
-        if (fullText === 'text') {
-          fullText = '';
-          fullHtml = '';
-        }
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
-      } else if (s.type === 'SET' || s.type === 'CON') {
-        let value;
-        let isEditable = true;
+      } else if (s.type === 'CON' || s.type === 'SET') {
+        let value, isEditable = (s.type === 'SET');
         if (s.type === 'CON') {
           value = s.value || '0';
           isEditable = false;

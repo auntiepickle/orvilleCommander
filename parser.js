@@ -213,10 +213,9 @@ export function parseResponse(data, log) {
   } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
     const parts = splitLine(ascii);
     const key = parts[0];
-    const indexHex = parts[1];
-    const desc = parts[2];
-    const index = parseInt(indexHex, 16).toString(10);
-    const value = `${index} ${desc}`;
+    const index = parts[1];
+    const desc = parts.slice(2).join(' ');
+    const value = desc ? `${index} ${desc}` : index;
     const oldValue = appState.currentValues[key];
     appState.currentValues[key] = value;
     log(`Parsed VALUE_DUMP for key ${key}: ${value}`, 'info', 'parsedDump');
@@ -226,7 +225,7 @@ export function parseResponse(data, log) {
       log(`Value did not change, still ${value}`, 'debug', 'noChange');
     }
     renderScreen(null, appState.lastAscii, log);
-  } else if (data[3] === appState.deviceId && data[4] === 0x17) {  // Screen dump response
+  } else if (data[3] === appState.deviceId && data[4] === 0x17) { // Screen dump response
     const nibbles = data.slice(5, data.length - 1);
     if (nibbles.length % 2 !== 0) {
       log('[ERROR] Odd number of nibbles in screen dump', 'error', 'error');
@@ -264,10 +263,9 @@ export function parseSubObject(line) {
       const num = parseInt(parts[i], 16);
       i++;
       for (let j = 0; j < num; j++) {
-        const desc = parts[i];
+        const desc = parts[i + j].replace(/'/g, '');
         const index = j.toString(10);
         options.push({ index, desc });
-        i++;
       }
       console.log('Parsed SET options for key ' + key + ':', options);
     }

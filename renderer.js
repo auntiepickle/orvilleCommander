@@ -48,6 +48,31 @@ const handleSelectChange = (e, log) => {
   }, 200); // Delay to allow MIDI update
 };
 
+const handleParamClick = (e, log) => {
+  if (e.target.classList.contains('param-value')) {
+    const key = e.target.dataset.key;
+    // Find the sub for title
+    const sub = appState.currentSubs.find(s => s.key === key);
+    if (sub && sub.type === 'NUM') {
+      const title = sub.statement.replace(/%.*f/, '').trim(); // Clean format specifier
+      const currentValue = appState.currentValues[key] || sub.value;
+      const newValue = prompt(`Enter new value for ${title}:`, currentValue);
+      if (newValue !== null && !isNaN(newValue)) {
+        sendValuePut(key, newValue, log);
+        appState.currentValues[key] = newValue;
+        renderScreen(null, appState.lastAscii, log); // Immediate local update
+        setTimeout(() => {
+          updateScreen(log);
+          if (appState.updateBitmapOnChange) {
+            sendSysEx(0x18, [], log);
+            log('Triggered bitmap update after value change.', 'debug', 'bitmap');
+          }
+        }, 200);
+      }
+    }
+  }
+};
+
 function formatValue(statement, value, isHtml = false, key = '') {
   return statement.replace(/%(\d*)(\.\d*)?f|%/g, (match, widthStr, precStr) => {
     if (match === '%') return '%';
@@ -176,6 +201,12 @@ export function renderScreen(subs, ascii, log) {
   lcdEl.querySelectorAll('select[data-key]').forEach(select => {
     select.removeEventListener('change', handleSelectChange);
     select.addEventListener('change', (e) => handleSelectChange(e, log));
+  });
+  
+  // Add click listeners to param-value for NUM editing
+  lcdEl.querySelectorAll('.param-value').forEach(span => {
+    span.removeEventListener('click', handleParamClick);
+    span.addEventListener('click', (e) => handleParamClick(e, log));
   });
   
   // Remove and re-add the event listener to ensure only one is active

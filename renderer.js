@@ -51,23 +51,30 @@ const handleSelectChange = (e, log) => {
 const handleParamClick = (e, log) => {
   if (e.target.classList.contains('param-value')) {
     const key = e.target.dataset.key;
-    // Find the sub for title
+    // Find the sub for title and limits
     const sub = appState.currentSubs.find(s => s.key === key);
     if (sub && sub.type === 'NUM') {
       const title = sub.statement.replace(/%.*f/, '').trim(); // Clean format specifier
       const currentValue = appState.currentValues[key] || sub.value;
-      const newValue = prompt(`Enter new value for ${title}:`, currentValue);
-      if (newValue !== null && !isNaN(newValue)) {
-        sendValuePut(key, newValue, log);
-        appState.currentValues[key] = newValue;
-        renderScreen(null, appState.lastAscii, log); // Immediate local update
-        setTimeout(() => {
-          updateScreen(log);
-          if (appState.updateBitmapOnChange) {
-            sendSysEx(0x18, [], log);
-            log('Triggered bitmap update after value change.', 'debug', 'bitmap');
-          }
-        }, 200);
+      const newValueStr = prompt(`Enter new value for ${title}:`, currentValue);
+      if (newValueStr !== null) {
+        const newValue = parseFloat(newValueStr);
+        const min = parseFloat(sub.min) || -Infinity;
+        const max = parseFloat(sub.max) || Infinity;
+        if (!isNaN(newValue) && newValue >= min && newValue <= max) {
+          sendValuePut(key, newValueStr, log);
+          appState.currentValues[key] = newValueStr;
+          renderScreen(null, appState.lastAscii, log); // Immediate local update
+          setTimeout(() => {
+            updateScreen(log);
+            if (appState.updateBitmapOnChange) {
+              sendSysEx(0x18, [], log);
+              log('Triggered bitmap update after value change.', 'debug', 'bitmap');
+            }
+          }, 200);
+        } else {
+          alert(`Invalid value. Must be a number between ${min} and ${max}.`);
+        }
       }
     }
   }

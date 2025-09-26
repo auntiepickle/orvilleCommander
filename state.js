@@ -26,5 +26,6 @@ export const appState = {
     error: true,
     general: true
   },
-  fetchBitmap: true
+  fetchBitmap: true,
+  updateBitmapOnChange: true
 };

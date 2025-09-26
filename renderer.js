@@ -1,6 +1,6 @@
 // renderer.js
 import { appState } from './state.js';
-import { sendObjectInfoDump, sendValueDump, sendValuePut, sendKeypress } from './midi.js';
+import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { keypressMasks } from './controls.js';
 import { parseSubObject } from './parser.js';
 
@@ -23,16 +23,20 @@ const handleLcdClick = (e) => {
   }
 };
 
-const handleSelectChange = (e) => {
+const handleSelectChange = (e, log) => {
   const key = e.target.dataset.key;
   const selectedIndex = e.target.value;
   const selectedDesc = e.target.options[e.target.selectedIndex].text;
   console.log(`Selected option for key ${key}: index ${selectedIndex}, desc ${selectedDesc}`);
-  sendValuePut(key, selectedIndex);
+  sendValuePut(key, selectedIndex, log);
   appState.currentValues[key] = `${selectedIndex} ${selectedDesc}`;
-  renderScreen(null, appState.lastAscii); // Immediate local update
+  renderScreen(null, appState.lastAscii, log); // Immediate local update
   setTimeout(() => {
-    updateScreen();
+    updateScreen(log);
+    if (appState.updateBitmapOnChange) {
+      sendSysEx(0x18, [], log);
+      log('Triggered bitmap update after value change.', 'debug', 'bitmap');
+    }
     setTimeout(() => {
       const newValue = appState.currentValues[key];
       if (newValue && newValue.includes(selectedDesc)) {
@@ -171,7 +175,7 @@ export function renderScreen(subs, ascii, log) {
   // Add change listeners to selects
   lcdEl.querySelectorAll('select[data-key]').forEach(select => {
     select.removeEventListener('change', handleSelectChange);
-    select.addEventListener('change', handleSelectChange);
+    select.addEventListener('change', (e) => handleSelectChange(e, log));
   });
   
   // Remove and re-add the event listener to ensure only one is active

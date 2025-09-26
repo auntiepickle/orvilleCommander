@@ -17,6 +17,7 @@ const logLevelSelect = document.getElementById('log-level');
 const logCategoriesJson = document.getElementById('log-categories-json');
 const applyLogCategoriesBtn = document.getElementById('apply-log-categories');
 const fetchBitmapCheckbox = document.getElementById('fetch-bitmap');
+const updateBitmapOnChangeCheckbox = document.getElementById('update-bitmap-on-change');
 const selectPortsBtn = document.getElementById('select-ports');
 const saveConfigBtn = document.getElementById('save-config');
 const clearConfigBtn = document.getElementById('clear-config');
@@ -109,15 +110,16 @@ connectBtn.addEventListener('click', () => connectMidi());
 selectPortsBtn.addEventListener('click', selectPorts);
 
 saveConfigBtn.addEventListener('click', () => {
-  saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, fetchBitmapCheckbox.checked, log);
+  saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, log);
   appState.logLevel = logLevelSelect.value;
 });
 
 clearConfigBtn.addEventListener('click', () => {
-  clearConfig(outputSelect, inputSelect, deviceIdInput, logLevelSelect, fetchBitmapCheckbox, log);
+  clearConfig(outputSelect, inputSelect, deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox, log);
   appState.logLevel = 'info';
   appState.logCategories = Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
   appState.fetchBitmap = true;
+  appState.updateBitmapOnChange = true;
 });
 
 logLevelSelect.addEventListener('change', () => {
@@ -130,7 +132,7 @@ applyLogCategoriesBtn.addEventListener('click', () => {
     const json = logCategoriesJson.value;
     const newCategories = JSON.parse(json);
     appState.logCategories = { ...appState.logCategories, ...newCategories };
-    saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, appState.fetchBitmap, log);
+    saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, appState.fetchBitmap, appState.updateBitmapOnChange, log);
     log('Applied and saved log categories: ' + JSON.stringify(appState.logCategories), 'info', 'general');
   } catch (err) {
     log(`Error applying log categories: ${err}`, 'error', 'error');
@@ -139,7 +141,7 @@ applyLogCategoriesBtn.addEventListener('click', () => {
 
 fetchBitmapCheckbox.addEventListener('change', () => {
   appState.fetchBitmap = fetchBitmapCheckbox.checked;
-  saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, appState.fetchBitmap, log);
+  saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, appState.fetchBitmap, appState.updateBitmapOnChange, log);
   log(`Bitmap fetch ${appState.fetchBitmap ? 'enabled' : 'disabled'}.`, 'info', 'general');
   if (!appState.fetchBitmap) {
     const canvas = document.getElementById('lcd-canvas');
@@ -148,6 +150,12 @@ fetchBitmapCheckbox.addEventListener('change', () => {
   } else {
     updateScreen(log); // Refetch if enabled
   }
+});
+
+updateBitmapOnChangeCheckbox.addEventListener('change', () => {
+  appState.updateBitmapOnChange = updateBitmapOnChangeCheckbox.checked;
+  saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, appState.fetchBitmap, appState.updateBitmapOnChange, log);
+  log(`Update Bitmap on Virtual Change ${appState.updateBitmapOnChange ? 'enabled' : 'disabled'}.`, 'info', 'general');
 });
 
 exportConfigBtn.addEventListener('click', () => {
@@ -174,11 +182,13 @@ importConfigBtn.addEventListener('click', () => {
       try {
         const config = JSON.parse(e.target.result);
         localStorage.setItem('orvilleConfig', JSON.stringify(config));
-        loadConfig(log, deviceIdInput, logLevelSelect, fetchBitmapCheckbox);
+        loadConfig(log, deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox);
         appState.logLevel = config.logLevel || 'info';
         appState.logCategories = config.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
         appState.fetchBitmap = config.fetchBitmap !== false;
         fetchBitmapCheckbox.checked = appState.fetchBitmap;
+        appState.updateBitmapOnChange = config.updateBitmapOnChange !== false;
+        updateBitmapOnChangeCheckbox.checked = appState.updateBitmapOnChange;
         log('Config imported from file.', 'info', 'general');
         // Re-connect with new config
         connectMidi(config);
@@ -205,6 +215,12 @@ getValueBtn.addEventListener('click', () => {
 setValueBtn.addEventListener('click', () => {
   const value = setValueInput.value;
   sendValuePut(appState.currentKey, value, log);
+  if (appState.updateBitmapOnChange) {
+    setTimeout(() => {
+      sendSysEx(0x18, [], log);
+      log('Triggered bitmap update after value change.', 'debug', 'bitmap');
+    }, 200); // Delay to allow device update
+  }
 });
 
 backBtn.addEventListener('click', () => {
@@ -305,60 +321,63 @@ function hideLoading() {
 }
 
 // New testing feature
-testTRateBtn.addEventListener('click', async () => {
-  log('Starting t_rate test...', 'info', 'general');
-  // Navigate to Auto Tape Flanger
-  appState.currentKey = '801000b';
-  updateScreen(log);
-  await new Promise(r => setTimeout(r, 1000));
-  log('Navigated to Auto Tape Flanger', 'info', 'general');
-  // Navigate to delay parameters
-  appState.currentKey = '8040001';
-  updateScreen(log);
-  await new Promise(r => setTimeout(r, 1000));
-  log('Navigated to delay parameters', 'info', 'general');
+if (testTRateBtn) {
+  testTRateBtn.addEventListener('click', async () => {
+    log('Starting t_rate test...', 'info', 'general');
+    // Navigate to Auto Tape Flanger
+    appState.currentKey = '801000b';
+    updateScreen(log);
+    await new Promise(r => setTimeout(r, 1000));
+    log('Navigated to Auto Tape Flanger', 'info', 'general');
+    // Navigate to delay parameters
+    appState.currentKey = '8040001';
+    updateScreen(log);
+    await new Promise(r => setTimeout(r, 1000));
+    log('Navigated to delay parameters', 'info', 'general');
 
-  // Get the SET sub for t_rate
-  const setSub = appState.currentSubs.find(s => s.type === 'SET' && s.key === '8060001');
-  if (!setSub) {
-    log('Test failed: t_rate SET not found', 'error', 'error');
-    return;
-  }
-  log('Found t_rate with options: ' + setSub.options.length, 'info', 'general');
-  for (let opt of setSub.options) { // Test all, but can limit if too long
-    log(`Testing option: ${opt.index} ${opt.desc}`, 'info', 'general');
-    sendValuePut('8060001', opt.index, log);
-    await new Promise(r => setTimeout(r, 500));
-    sendValueDump('8060001', log);
-    await new Promise(r => setTimeout(r, 500));
-    const currentValue = appState.currentValues['8060001'];
-    const expected = `${opt.index} ${opt.desc}`;
-    if (currentValue === expected) {
-      log('Value match', 'info', 'general');
-    } else {
-      log(`Value mismatch: expected ${expected}, got ${currentValue}`, 'error', 'error');
+    // Get the SET sub for t_rate
+    const setSub = appState.currentSubs.find(s => s.type === 'SET' && s.key === '8060001');
+    if (!setSub) {
+      log('Test failed: t_rate SET not found', 'error', 'error');
+      return;
     }
-    // Check UI
-    const select = document.querySelector(`select[data-key="8060001"]`);
-    if (select) {
-      const selectedValue = select.value;
-      const selectedText = select.options[select.selectedIndex].text;
-      if (selectedValue === opt.index && selectedText === opt.desc) {
-        log('UI match', 'info', 'general');
+    log('Found t_rate with options: ' + setSub.options.length, 'info', 'general');
+    for (let opt of setSub.options) { // Test all, but can limit if too long
+      log(`Testing option: ${opt.index} ${opt.desc}`, 'info', 'general');
+      sendValuePut('8060001', opt.index, log);
+      await new Promise(r => setTimeout(r, 500));
+      sendValueDump('8060001', log);
+      await new Promise(r => setTimeout(r, 500));
+      const currentValue = appState.currentValues['8060001'];
+      const expected = `${opt.index} ${opt.desc}`;
+      if (currentValue === expected) {
+        log('Value match', 'info', 'general');
       } else {
-        log(`UI mismatch: selected value ${selectedValue}, text ${selectedText}, expected ${opt.index} ${opt.desc}`, 'error', 'error');
+        log(`Value mismatch: expected ${expected}, got ${currentValue}`, 'error', 'error');
       }
-    } else {
-      log('Select not found in UI', 'error', 'error');
+      // Check UI
+      const select = document.querySelector(`select[data-key="8060001"]`);
+      if (select) {
+        const selectedValue = select.value;
+        const selectedText = select.options[select.selectedIndex].text;
+        if (selectedValue === opt.index && selectedText === opt.desc) {
+          log('UI match', 'info', 'general');
+        } else {
+          log(`UI mismatch: selected value ${selectedValue}, text ${selectedText}, expected ${opt.index} ${opt.desc}`, 'error', 'error');
+        }
+      } else {
+        log('Select not found in UI', 'error', 'error');
+      }
     }
-  }
-  log('t_rate test complete', 'info', 'general');
-});
+    log('t_rate test complete', 'info', 'general');
+  });
+}
 
 setupKeypressControls(log);
 
-const cachedConfig = loadConfig(log, deviceIdInput, logLevelSelect, fetchBitmapCheckbox);
+const cachedConfig = loadConfig(log, deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox);
 appState.logLevel = logLevelSelect.value;
 appState.logCategories = cachedConfig?.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
 appState.fetchBitmap = fetchBitmapCheckbox.checked;
+appState.updateBitmapOnChange = updateBitmapOnChangeCheckbox.checked;
 connectMidi(cachedConfig);

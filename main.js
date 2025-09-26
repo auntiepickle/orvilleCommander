@@ -38,6 +38,7 @@ const processDebugFileBtn = document.getElementById('process-debug-file');
 const exportConfigBtn = document.getElementById('export-config');
 const importConfigInput = document.getElementById('import-config');
 const importConfigBtn = document.getElementById('import-config-btn');
+const testTRateBtn = document.getElementById('test-t-rate');
 
 let pollInterval = null;
 let isPolling = false;
@@ -302,6 +303,57 @@ function hideLoading() {
   }
   log('Screen loaded.', 'debug', 'general');
 }
+
+// New testing feature
+testTRateBtn.addEventListener('click', async () => {
+  log('Starting t_rate test...', 'info', 'general');
+  // Navigate to Auto Tape Flanger
+  appState.currentKey = '801000b';
+  updateScreen(log);
+  await new Promise(r => setTimeout(r, 1000));
+  log('Navigated to Auto Tape Flanger', 'info', 'general');
+  // Navigate to delay parameters
+  appState.currentKey = '8040001';
+  updateScreen(log);
+  await new Promise(r => setTimeout(r, 1000));
+  log('Navigated to delay parameters', 'info', 'general');
+
+  // Get the SET sub for t_rate
+  const setSub = appState.currentSubs.find(s => s.type === 'SET' && s.key === '8060001');
+  if (!setSub) {
+    log('Test failed: t_rate SET not found', 'error', 'error');
+    return;
+  }
+  log('Found t_rate with options: ' + setSub.options.length, 'info', 'general');
+  for (let opt of setSub.options) { // Test all, but can limit if too long
+    log(`Testing option: ${opt.index} ${opt.desc}`, 'info', 'general');
+    sendValuePut('8060001', opt.index, log);
+    await new Promise(r => setTimeout(r, 500));
+    sendValueDump('8060001', log);
+    await new Promise(r => setTimeout(r, 500));
+    const currentValue = appState.currentValues['8060001'];
+    const expected = `${opt.index} ${opt.desc}`;
+    if (currentValue === expected) {
+      log('Value match', 'info', 'general');
+    } else {
+      log(`Value mismatch: expected ${expected}, got ${currentValue}`, 'error', 'error');
+    }
+    // Check UI
+    const select = document.querySelector(`select[data-key="8060001"]`);
+    if (select) {
+      const selectedValue = select.value;
+      const selectedText = select.options[select.selectedIndex].text;
+      if (selectedValue === opt.index && selectedText === opt.desc) {
+        log('UI match', 'info', 'general');
+      } else {
+        log(`UI mismatch: selected value ${selectedValue}, text ${selectedText}, expected ${opt.index} ${opt.desc}`, 'error', 'error');
+      }
+    } else {
+      log('Select not found in UI', 'error', 'error');
+    }
+  }
+  log('t_rate test complete', 'info', 'general');
+});
 
 setupKeypressControls(log);
 

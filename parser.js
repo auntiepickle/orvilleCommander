@@ -110,7 +110,7 @@ export function exportBMP(canvas) {
   buffer[19] = (width >> 8) & 0xff;
   buffer[22] = height & 0xff;
   buffer[23] = (height >> 8) & 0xff;
-  buffer[26] = 1; // Color planes
+  buffer[26] = 1; // Planes
   buffer[28] = 1; // Bits per pixel (1 for mono)
   buffer[30] = 0; // Compression (0 = none)
   buffer[34] = (width * height) & 0xff;
@@ -190,13 +190,13 @@ function splitLine(line) {
 export function parseResponse(data, log) {
   if (appState.deviceId === 0 && data.length > 3) {
     appState.deviceId = data[3];
-    log(`Detected device ID: ${appState.deviceId}`);
+    log(`Detected device ID: ${appState.deviceId}`, 'info', 'general');
   }
   const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).trim();
   if (data[3] === appState.deviceId && data[4] === 0x32) { // OBJECTINFO_DUMP
     appState.lastAscii = ascii;
     const subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
-    log(`Parsed OBJECTINFO_DUMP for key ${subs[0]?.key || 'unknown'}: ${ascii}`);
+    log(`Parsed OBJECTINFO_DUMP for key ${subs[0]?.key || 'unknown'}: ${ascii}`, 'info', 'parsedDump');
     const main = subs[0];
     if (main.key.endsWith('000b')) {
       appState.presetKey = main.key;
@@ -211,27 +211,29 @@ export function parseResponse(data, log) {
     }
     renderScreen(subs, ascii, log);
   } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
-    const parts = ascii.split(/\s+/);
+    const parts = splitLine(ascii);
     const key = parts[0];
-    const value = parts.slice(1).join(' ');
+    const indexHex = parts[1];
+    const desc = parts[2];
+    const index = parseInt(indexHex, 16).toString(10);
+    const value = `${index} ${desc}`;
     const oldValue = appState.currentValues[key];
     appState.currentValues[key] = value;
-    log(`Parsed VALUE_DUMP for key ${key}: ${value}`);
+    log(`Parsed VALUE_DUMP for key ${key}: ${value}`, 'info', 'parsedDump');
     if (oldValue && oldValue !== value) {
-      log(`Value changed from ${oldValue} to ${value}`);
+      log(`Value changed from ${oldValue} to ${value}`, 'info', 'valueChange');
     } else if (oldValue) {
-      log(`Value did not change, still ${value}`);
+      log(`Value did not change, still ${value}`, 'debug', 'noChange');
     }
     renderScreen(null, appState.lastAscii, log);
   } else if (data[3] === appState.deviceId && data[4] === 0x17) {  // Screen dump response
-    log(`Received Screen Dump SysEx: ${data.map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
     const nibbles = data.slice(5, data.length - 1);
     if (nibbles.length % 2 !== 0) {
-      log('[ERROR] Odd number of nibbles in screen dump');
+      log('[ERROR] Odd number of nibbles in screen dump', 'error', 'error');
       return;
     }
     const rawBytes = denibble(nibbles);
-    log(`[LOG] Denibbled screen data to ${rawBytes.length} bytes`);
+    if (appState.logCategories['bitmap']) log(`[LOG] Denibbled screen data to ${rawBytes.length} bytes`, 'debug', 'bitmap');
     renderBitmap('lcd-canvas', rawBytes, log);
   }
 }
@@ -256,12 +258,14 @@ export function parseSubObject(line) {
     if (type === 'CON') {
       value = parts[6] || '0';
     } else { // SET
-      let i = 8; // skip current index and desc at 6 and 7
+      let i = 6; // skip tag
+      // Skip current_index and current_desc
+      i += 2;
       const num = parseInt(parts[i], 16);
       i++;
       for (let j = 0; j < num; j++) {
         const desc = parts[i];
-        const index = j.toString(10); // Changed to decimal for correct VALUE_PUT
+        const index = j.toString(10);
         options.push({ index, desc });
         i++;
       }

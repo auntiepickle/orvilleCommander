@@ -132,7 +132,7 @@ export function renderScreen(subs, ascii, log) {
         paramHtmlLines.push(fullHtml);
         if (!appState.currentValues[s.key]) sendValueDump(s.key);
       } else if (s.type === 'INF') {
-        const replaceWith = s.tag || s.value || '';
+        const replaceWith = s.value || s.tag || '';
         fullText = (s.statement || '').replace(/%s/g, replaceWith);
         fullHtml = fullText;
         paramLines.push(fullText);

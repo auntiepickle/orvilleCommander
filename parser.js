@@ -167,14 +167,16 @@ function splitLine(line) {
   const parts = [];
   let current = '';
   let inQuote = false;
+  let quoteChar = '';
   for (let char of line) {
-    if (char === "'" && !inQuote) {
+    if ((char === "'" || char === '"') && !inQuote) {
       inQuote = true;
+      quoteChar = char;
       if (current.trim()) parts.push(current.trim());
       current = '';
-    } else if (char === "'" && inQuote) {
+    } else if (char === quoteChar && inQuote) {
       inQuote = false;
-      parts.push(current);
+      parts.push(current.trim()); // Strip extra spaces
       current = '';
     } else if (char === ' ' && !inQuote) {
       if (current.trim()) parts.push(current.trim());

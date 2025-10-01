@@ -104,7 +104,7 @@ button:hover { background: #555; }
   cursor: pointer;
 }
 .main-content, .top-docked, .bottom-docked {
-  white-space: pre;
+  white-space: pre-wrap;
 }
 .param-select {
   background: transparent;

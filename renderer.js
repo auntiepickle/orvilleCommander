@@ -10,7 +10,7 @@ export function updateScreen(log = null) {
   sendValueDump(appState.currentKey, log);
 }
 
-function toggleDspKey(key) {
+export function toggleDspKey(key) {
   return key.startsWith('4') ? '8' + key.slice(1) : '4' + key.slice(1);
 }
 
@@ -190,6 +190,7 @@ export function renderScreen(subs, ascii, log) {
       softSubs = appState.menus;
     }
     const softTags = softSubs.map(s => s.tag.trim());
+    displayLines.push('');
     displayLines.push(softTags.map((t, idx) => (softSubs[idx].key === appState.currentKey ? `[${t}]` : t).padEnd(10)).join(''));
     displayLines.push('');
     displayLines.push('');
@@ -220,9 +221,8 @@ export function renderScreen(subs, ascii, log) {
       }
     });
   } else {
-    const dynamicSoftIndex = displayLines.length - startIndex - 3; // dynamic before '' '' static
     mainHtmlLines = displayLines.slice(startIndex, -1).map((l, index) => {
-      if (index === dynamicSoftIndex) {
+      if (index === displayLines.length - startIndex - 4) { // dynamic softkeys before '' '' static
         let softHtml = '';
         let softSubsUsed = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
         if (appState.menus.length > 0 && appState.currentKey !== appState.presetKey && (appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8'))) {
@@ -233,8 +233,8 @@ export function renderScreen(subs, ascii, log) {
           softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
         });
         return softHtml;
-      } else if (index > (isTabLineAdded ? 2 : 1) && index < dynamicSoftIndex) {
-        const paramIndex = index - (isTabLineAdded ? 3 : 2);
+      } else if (index > (isTabLineAdded ? 3 : 2) && index < displayLines.length - startIndex - 4) {
+        const paramIndex = index - (isTabLineAdded ? 4 : 3);
         const html = paramDisplayedHtml[paramIndex];
         return html || l;
       } else {

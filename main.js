@@ -3,7 +3,7 @@ import { WebMidi } from 'webmidi';
 import { loadConfig, saveConfig, clearConfig } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
 import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut, sendObjectInfoDump } from './midi.js';
-import { updateScreen } from './renderer.js';
+import { updateScreen, toggleDspKey } from './renderer.js';
 import { appState } from './state.js';
 import { denibble, renderBitmap, extractNibbles, exportBMP } from './parser.js'; // Updated imports
 

@@ -171,8 +171,8 @@ export function parseResponse(data, log) {
     }
     if (main.key.endsWith('000b')) {
       appState.presetKey = main.key;
-      appState.menus = subs.slice(1).filter(s => s.type === 'COL');
       const dsp = main.key[0] === '4' ? 'A' : 'B';
+      appState[`menus${dsp}`] = subs.slice(1).filter(s => s.type === 'COL');
       appState[`dsp${dsp}Name`] = main.statement;
     }
     renderScreen(subs, ascii, log);

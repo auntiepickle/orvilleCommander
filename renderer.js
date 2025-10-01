@@ -115,7 +115,7 @@ export function renderScreen(subs, ascii, log) {
   let topHtml = '';
   if (appState.dspAName && appState.dspBName) {
     const isDspScreen = appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8');
-    const isASelected = isDspScreen && appState.presetKey.startsWith('4');
+    const isASelected = isDspScreen && appState.currentKey.startsWith('4');
     const aText = isASelected ? `[A: ${appState.dspAName}]` : `A: ${appState.dspAName}`;
     const bText = !isASelected && isDspScreen ? `[B: ${appState.dspBName}]` : `B: ${appState.dspBName}`;
     displayLines.push(` ${aText} ${bText}`);
@@ -133,7 +133,6 @@ export function renderScreen(subs, ascii, log) {
     let title = main.statement || main.tag || 'Menu';
     displayLines.push(title);
     displayLines.push('--------------------------------');
-    displayLines.push('');
     let paramLines = [];
     let paramHtmlLines = [];
     subs.slice(1).forEach(s => {

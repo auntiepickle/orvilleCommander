@@ -1,35 +1,25 @@
 // config.js
 export function loadConfig(log, deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox) {
-  const configStr = localStorage.getItem('orvilleConfig');
-  const config = configStr ? JSON.parse(configStr) : null;
+  const config = localStorage.getItem('midiConfig');
   if (config) {
-    log('Loaded cached config: Output ID ' + config.outputId + ', Input ID ' + config.inputId + ', Device ID ' + config.deviceId + ', Log Level ' + config.logLevel + ', Log Categories ' + JSON.stringify(config.logCategories) + ', Fetch Bitmap ' + config.fetchBitmap + ', Update Bitmap on Change ' + config.updateBitmapOnChange, 'info');
-    deviceIdInput.value = config.deviceId || 0;
-    logLevelSelect.value = config.logLevel || 'info';
-    fetchBitmapCheckbox.checked = config.fetchBitmap !== false;
-    updateBitmapOnChangeCheckbox.checked = config.updateBitmapOnChange !== false; // Default true if missing
-  } else {
-    deviceIdInput.value = 0;
-    logLevelSelect.value = 'info';
-    fetchBitmapCheckbox.checked = true;
-    updateBitmapOnChangeCheckbox.checked = true;
+    const parsed = JSON.parse(config);
+    deviceIdInput.value = parsed.deviceId || 0;
+    logLevelSelect.value = parsed.logLevel || 'info';
+    fetchBitmapCheckbox.checked = parsed.fetchBitmap !== false;
+    updateBitmapOnChangeCheckbox.checked = parsed.updateBitmapOnChange !== false;
+    log(`Loaded cached config: Output ID ${parsed.outputId}, Input ID ${parsed.inputId}, Device ID ${parsed.deviceId}, Log Level ${parsed.logLevel}, Log Categories ${JSON.stringify(parsed.logCategories)}, Fetch Bitmap ${parsed.fetchBitmap}, Update Bitmap on Change ${parsed.updateBitmapOnChange}, Preset Key ${parsed.presetKey}`, 'info', 'general');
+    return parsed;
   }
-  return config;
+  return null;
 }
 
-export function saveConfig(outputId, inputId, deviceId, logLevel, logCategories, fetchBitmap, updateBitmapOnChange, log) {
-  const config = { outputId, inputId, deviceId, logLevel, logCategories, fetchBitmap, updateBitmapOnChange };
-  localStorage.setItem('orvilleConfig', JSON.stringify(config));
-  log('Saved config to localStorage.', 'info');
+export function saveConfig(outputId, inputId, deviceId, logLevel, logCategories, fetchBitmap, updateBitmapOnChange, presetKey, log) {
+  const config = { outputId, inputId, deviceId, logLevel, logCategories, fetchBitmap, updateBitmapOnChange, presetKey };
+  localStorage.setItem('midiConfig', JSON.stringify(config));
+  if (log) log('Config saved to localStorage.', 'info', 'general');
 }
 
-export function clearConfig(outputSelect, inputSelect, deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox, log) {
-  localStorage.removeItem('orvilleConfig');
-  outputSelect.value = '';
-  inputSelect.value = '';
-  deviceIdInput.value = 0;
-  logLevelSelect.value = 'info';
-  fetchBitmapCheckbox.checked = true;
-  updateBitmapOnChangeCheckbox.checked = true;
-  log('Cleared cached config and reset selections.', 'info');
+export function clearConfig(log) {
+  localStorage.removeItem('midiConfig');
+  if (log) log('Config cleared from localStorage.', 'info', 'general');
 }

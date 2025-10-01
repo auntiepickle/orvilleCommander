@@ -116,7 +116,7 @@ connectBtn.addEventListener('click', () => connectMidi());
 selectPortsBtn.addEventListener('click', selectPorts);
 
 saveConfigBtn.addEventListener('click', () => {
-  saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, log);
+  saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, appState.presetKey, log);
   appState.logLevel = logLevelSelect.value;
 });
 
@@ -272,4 +272,5 @@ appState.logLevel = logLevelSelect.value;
 appState.logCategories = cachedConfig?.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
 appState.fetchBitmap = fetchBitmapCheckbox.checked;
 appState.updateBitmapOnChange = updateBitmapOnChangeCheckbox.checked;
+appState.presetKey = cachedConfig?.presetKey || '401000b';
 connectMidi(cachedConfig);

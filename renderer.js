@@ -17,13 +17,14 @@ function toggleDspKey(key) {
 const handleLcdClick = (e) => {
   if (e.target.classList.contains('dsp-clickable')) {
     appState.presetKey = e.target.dataset.key;
-    if (appState.currentKey === '0') {
+    if (!appState.currentKey.startsWith('4') && !appState.currentKey.startsWith('8')) {
       appState.keyStack.push(appState.currentKey);
     }
     appState.currentKey = appState.presetKey;
     appState.autoLoad = true;
     updateScreen();
   } else if (e.target.classList.contains('softkey')) {
+    appState.keyStack.push(appState.currentKey);
     appState.currentKey = e.target.dataset.key;
     appState.paramOffset = 0; // Reset offset for new menu
     updateScreen();
@@ -111,11 +112,14 @@ export function renderScreen(subs, ascii, log) {
   let displayLines = [];
   let paramDisplayedHtml = [];
   let isTabLineAdded = false;
-  if (appState.dspAName && appState.dspBName && (appState.currentKey === '0' || appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8'))) {
-    const isASelected = appState.presetKey.startsWith('4');
+  let topHtml = '';
+  if (appState.dspAName && appState.dspBName) {
+    const isDspScreen = appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8');
+    const isASelected = isDspScreen && appState.presetKey.startsWith('4');
     const aText = isASelected ? `[A: ${appState.dspAName}]` : `A: ${appState.dspAName}`;
-    const bText = isASelected ? `B: ${appState.dspBName}` : `[B: ${appState.dspBName}]`;
+    const bText = !isASelected && isDspScreen ? `[B: ${appState.dspBName}]` : `B: ${appState.dspBName}`;
     displayLines.push(` ${aText} ${bText}`);
+    topHtml = ` <span class="dsp-clickable" data-key="${appState.dspAKey}">${aText}</span> <span class="dsp-clickable" data-key="${appState.dspBKey}">${bText}</span>`;
     isTabLineAdded = true;
   }
   if (appState.currentKey === '0') {
@@ -125,6 +129,7 @@ export function renderScreen(subs, ascii, log) {
     const softTags = softSubs.map(s => (s.tag || '').padEnd(10));
     displayLines.push(softTags.join(''));
   } else {
+    displayLines.push('');
     let title = main.statement || main.tag || 'Menu';
     displayLines.push(title);
     displayLines.push('--------------------------------');
@@ -181,22 +186,28 @@ export function renderScreen(subs, ascii, log) {
     displayLines = displayLines.concat(paramLines);
     paramDisplayedHtml = paramHtmlLines;
     let softSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
-    if (appState.menus.length > 0 && appState.currentKey !== appState.presetKey) {
+    if (appState.menus.length > 0 && appState.currentKey !== appState.presetKey && (appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8'))) {
       softSubs = appState.menus;
     }
     const softTags = softSubs.map(s => s.tag.trim());
     displayLines.push(softTags.map((t, idx) => (softSubs[idx].key === appState.currentKey ? `[${t}]` : t).padEnd(10)).join(''));
+    displayLines.push('');
+    displayLines.push('');
+    const staticRootSoftSubs = [
+      {key: '10020000', tag: 'program'},
+      {key: '10010000', tag: 'setup'},
+      {key: '10030000', tag: 'levels'},
+      {key: '10030500', tag: 'bypass'}
+    ];
+    displayLines.push(staticRootSoftSubs.map((s, idx) => (s.key === appState.currentKey ? `[${s.tag}]` : s.tag).padEnd(10)).join(''));
   }
   log(`Rendered screen text: ${displayLines.join('\n')}`, 'debug', 'renderScreen');
-  let htmlLines = displayLines.map((l, index) => {
-    if (isTabLineAdded && index === 0) {
-      const isASelected = appState.presetKey.startsWith('4');
-      const aText = isASelected ? `[A: ${appState.dspAName}]` : `A: ${appState.dspAName}`;
-      const bText = isASelected ? `B: ${appState.dspBName}` : `[B: ${appState.dspBName}]`;
-      return ` <span class="dsp-clickable" data-key="${appState.dspAKey}">${aText}</span> <span class="dsp-clickable" data-key="${appState.dspBKey}">${bText}</span>`;
-    }
-    if (appState.currentKey === '0') {
-      if (index === displayLines.length - 1) {
+  let mainHtmlLines = [];
+  let bottomHtml = '';
+  const startIndex = isTabLineAdded ? 1 : 0;
+  if (appState.currentKey === '0') {
+    mainHtmlLines = displayLines.slice(startIndex).map((l, index) => {
+      if (index === displayLines.length - startIndex - 1) {
         let softHtml = '';
         let softSubsUsed = subs.filter(s => s.type === 'COL' && s.tag.trim() && s.key !== '401000b' && s.key !== '801000b' && s.key !== '10040000' && s.key !== '0');
         softSubsUsed.forEach((s, idx) => {
@@ -207,11 +218,14 @@ export function renderScreen(subs, ascii, log) {
       } else {
         return l;
       }
-    } else {
-      if (index === displayLines.length - 1) {
+    });
+  } else {
+    const dynamicSoftIndex = displayLines.length - startIndex - 3; // dynamic before '' '' static
+    mainHtmlLines = displayLines.slice(startIndex, -1).map((l, index) => {
+      if (index === dynamicSoftIndex) {
         let softHtml = '';
         let softSubsUsed = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
-        if (appState.menus.length > 0 && appState.currentKey !== appState.presetKey) {
+        if (appState.menus.length > 0 && appState.currentKey !== appState.presetKey && (appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8'))) {
           softSubsUsed = appState.menus;
         }
         softSubsUsed.forEach((s, idx) => {
@@ -219,15 +233,29 @@ export function renderScreen(subs, ascii, log) {
           softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
         });
         return softHtml;
-      } else if (index > 2 && index < displayLines.length - 1) { // Adjusted for title and ----
-        const html = paramDisplayedHtml[index - 3];
+      } else if (index > (isTabLineAdded ? 2 : 1) && index < dynamicSoftIndex) {
+        const paramIndex = index - (isTabLineAdded ? 3 : 2);
+        const html = paramDisplayedHtml[paramIndex];
         return html || l;
       } else {
         return l;
       }
-    }
-  });
-  lcdEl.innerHTML = htmlLines.join('\n');
+    });
+    // Static as bottom
+    const staticRootSoftSubs = [
+      {key: '10020000', tag: 'program'},
+      {key: '10010000', tag: 'setup'},
+      {key: '10030000', tag: 'levels'},
+      {key: '10030500', tag: 'bypass'}
+    ];
+    let softHtml = '';
+    staticRootSoftSubs.forEach((s, idx) => {
+      const text = (s.key === appState.currentKey ? '[' + s.tag + ']' : s.tag).padEnd(10);
+      softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+    });
+    bottomHtml = softHtml;
+  }
+  lcdEl.innerHTML = `<div class="top-docked">${topHtml}</div><div class="main-content">${mainHtmlLines.join('\n')}</div><div class="bottom-docked">${bottomHtml}</div>`;
 
   // Add change listeners to selects
   lcdEl.querySelectorAll('select[data-key]').forEach(select => {

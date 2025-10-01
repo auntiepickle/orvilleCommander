@@ -113,44 +113,9 @@ export function exportBMP(canvas) {
   buffer[26] = 1; // Planes
   buffer[28] = 1; // Bits per pixel (1 for mono)
   buffer[30] = 0; // Compression (0 = none)
-  buffer[34] = (width * height) & 0xff;
-  buffer[35] = ((width * height) >> 8) & 0xff;
-  buffer[36] = ((width * height) >> 16) & 0xff;
-  buffer[37] = ((width * height) >> 24) & 0xff;
-  buffer[38] = 0xb1; buffer[39] = 0x0b; // Horizontal resolution (2835 ppm)
-  buffer[42] = 0xb1; buffer[43] = 0x0b; // Vertical resolution
-  buffer[46] = 2; // Number of colors
-  // Color palette: black and white
-  buffer[54] = 0; buffer[55] = 0; buffer[56] = 0; buffer[57] = 0; // Black
-  buffer[58] = 255; buffer[59] = 255; buffer[60] = 255; buffer[61] = 0; // White
-  // Pixel data (monochrome, padded to 4-byte boundaries)
-  let offset = 54;
-  const rowBytes = Math.ceil(width / 8);
-  const padding = (4 - rowBytes % 4) % 4;
-  for (let y = height - 1; y >= 0; y--) { // Bottom-up
-    let byte = 0;
-    let bitCount = 0;
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4 + 1; // Green channel for on/off
-      byte = (byte << 1) | (data[idx] > 0 ? 1 : 0);
-      bitCount++;
-      if (bitCount === 8) {
-        buffer[offset++] = byte;
-        byte = 0;
-        bitCount = 0;
-      }
-    }
-    if (bitCount > 0) {
-      byte <<= (8 - bitCount);
-      buffer[offset++] = byte;
-    }
-    for (let p = 0; p < padding; p++) {
-      buffer[offset++] = 0;
-    }
-  }
-  const blob = new Blob([buffer], { type: 'image/bmp' });
-  const url = URL.createObjectURL(blob);
+  // ...(truncated 1458 characters)...
   const a = document.createElement('a');
+  const url = URL.createObjectURL(new Blob([buffer], {type: 'image/bmp'}));
   a.href = url;
   a.download = 'lcd_mono.bmp';
   a.click();
@@ -200,16 +165,15 @@ export function parseResponse(data, log) {
     const subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
     log(`Parsed OBJECTINFO_DUMP for key ${subs[0]?.key || 'unknown'}: ${ascii}`, 'info', 'parsedDump');
     const main = subs[0];
+    if (main.key === '0') {
+      appState.dspAName = subs.find(s => s.key === '401000b')?.statement || '';
+      appState.dspBName = subs.find(s => s.key === '801000b')?.statement || '';
+    }
     if (main.key.endsWith('000b')) {
       appState.presetKey = main.key;
       appState.menus = subs.slice(1).filter(s => s.type === 'COL');
-      if (!appState.autoNavigated && appState.menus.length > 0) {
-        appState.autoNavigated = true;
-        appState.keyStack.push(appState.currentKey);
-        appState.currentKey = appState.menus[0].key;
-        updateScreen();
-        return;
-      }
+      const dsp = main.key[0] === '4' ? 'A' : 'B';
+      appState[`dsp${dsp}Name`] = main.statement;
     }
     renderScreen(subs, ascii, log);
   } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP

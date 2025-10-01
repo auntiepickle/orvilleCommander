@@ -92,7 +92,15 @@ export function setupKeypressControls(log) {
           log(`Sent keypress for ${key}: ${mask.map(b => b.toString(16).padStart(2, '0')).join(' ')}`, 'debug', 'sysexSent');
           setTimeout(() => {
             if (key === 'ab') {
-              appState.currentKey = toggleDspKey(appState.currentKey);
+              if (appState.currentKey === '0') {
+                appState.presetKey = toggleDspKey(appState.presetKey);
+              }
+            } else if (key === 'parameter') {
+              if (appState.currentKey === '0') {
+                appState.keyStack.push(appState.currentKey);
+                appState.currentKey = appState.presetKey;
+                appState.autoLoad = true;
+              }
             }
             updateScreen();
             // Fetch screen after button press if enabled

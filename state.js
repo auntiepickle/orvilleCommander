@@ -1,15 +1,16 @@
 // state.js
 export const appState = {
   currentKey: '0',
-  presetKey: null,
+  presetKey: '401000b',
   currentValues: {},
   paramOffset: 0,
   menus: [],
   autoLoad: false,
-  autoNavigated: false,
   keyStack: [],
   dspAKey: '401000b',
   dspBKey: '801000b',
+  dspAName: '',
+  dspBName: '',
   currentSubs: [],
   lastAscii: '',
   deviceId: 0,

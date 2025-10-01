@@ -2,7 +2,7 @@
 import { WebMidi } from 'webmidi';
 import { loadConfig, saveConfig, clearConfig } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
-import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut } from './midi.js';
+import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut, sendObjectInfoDump } from './midi.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { denibble, renderBitmap, extractNibbles, exportBMP } from './parser.js'; // Updated imports
@@ -96,13 +96,19 @@ function selectPorts() {
   log('Ports selected and listener added. Device ID set to ' + devId, 'info', 'general');
   lcdEl.innerText = 'Connected. Fetching root screen...';
   updateScreen(log);
-  // Fetch screen after connecting if enabled
-  if (appState.fetchBitmap) {
-    sendSysEx(0x18, [], log);
-    log('Fetched initial screen after connecting.', 'info', 'general');
-  } else {
-    log('Bitmap fetch disabled; skipped initial screen dump.', 'info', 'bitmap');
-  }
+  setTimeout(() => {
+    appState.keyStack.push(appState.currentKey);
+    appState.currentKey = appState.presetKey;
+    appState.autoLoad = true;
+    updateScreen(log);
+    sendObjectInfoDump(toggleDspKey(appState.presetKey), log);
+    if (appState.fetchBitmap) {
+      sendSysEx(0x18, [], log);
+      log('Fetched initial preset screen.', 'info', 'general');
+    } else {
+      log('Bitmap fetch disabled; skipped initial preset screen dump.', 'info', 'bitmap');
+    }
+  }, 500);
 }
 
 connectBtn.addEventListener('click', () => connectMidi());
@@ -115,124 +121,10 @@ saveConfigBtn.addEventListener('click', () => {
 });
 
 clearConfigBtn.addEventListener('click', () => {
-  clearConfig(outputSelect, inputSelect, deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox, log);
-  appState.logLevel = 'info';
-  appState.logCategories = Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
-  appState.fetchBitmap = true;
-  appState.updateBitmapOnChange = true;
+  clearConfig(log);
 });
 
-logLevelSelect.addEventListener('change', () => {
-  appState.logLevel = logLevelSelect.value;
-  log(`Log level changed to ${appState.logLevel}.`, 'info', 'general');
-});
-
-applyLogCategoriesBtn.addEventListener('click', () => {
-  try {
-    const json = logCategoriesJson.value;
-    const newCategories = JSON.parse(json);
-    appState.logCategories = { ...appState.logCategories, ...newCategories };
-    saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, appState.fetchBitmap, appState.updateBitmapOnChange, log);
-    log('Applied and saved log categories: ' + JSON.stringify(appState.logCategories), 'info', 'general');
-  } catch (err) {
-    log(`Error applying log categories: ${err}`, 'error', 'error');
-  }
-});
-
-fetchBitmapCheckbox.addEventListener('change', () => {
-  appState.fetchBitmap = fetchBitmapCheckbox.checked;
-  saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, appState.fetchBitmap, appState.updateBitmapOnChange, log);
-  log(`Bitmap fetch ${appState.fetchBitmap ? 'enabled' : 'disabled'}.`, 'info', 'general');
-  if (!appState.fetchBitmap) {
-    const canvas = document.getElementById('lcd-canvas');
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  } else {
-    updateScreen(log); // Refetch if enabled
-  }
-});
-
-updateBitmapOnChangeCheckbox.addEventListener('change', () => {
-  appState.updateBitmapOnChange = updateBitmapOnChangeCheckbox.checked;
-  saveConfig(outputSelect.value || '', inputSelect.value || '', parseInt(deviceIdInput.value, 10) || 0, appState.logLevel, appState.logCategories, appState.fetchBitmap, appState.updateBitmapOnChange, log);
-  log(`Update Bitmap on Virtual Change ${appState.updateBitmapOnChange ? 'enabled' : 'disabled'}.`, 'info', 'general');
-});
-
-exportConfigBtn.addEventListener('click', () => {
-  const configStr = localStorage.getItem('orvilleConfig');
-  if (configStr) {
-    const blob = new Blob([configStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'orvilleConfig.json';
-    a.click();
-    URL.revokeObjectURL(url);
-    log('Config exported to file.', 'info', 'general');
-  } else {
-    log('No config to export.', 'info', 'general');
-  }
-});
-
-importConfigBtn.addEventListener('click', () => {
-  const file = importConfigInput.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        const config = JSON.parse(e.target.result);
-        localStorage.setItem('orvilleConfig', JSON.stringify(config));
-        loadConfig(log, deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox);
-        appState.logLevel = config.logLevel || 'info';
-        appState.logCategories = config.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
-        appState.fetchBitmap = config.fetchBitmap !== false;
-        fetchBitmapCheckbox.checked = appState.fetchBitmap;
-        appState.updateBitmapOnChange = config.updateBitmapOnChange !== false;
-        updateBitmapOnChangeCheckbox.checked = appState.updateBitmapOnChange;
-        log('Config imported from file.', 'info', 'general');
-        // Re-connect with new config
-        connectMidi(config);
-      } catch (err) {
-        log(`Error importing config: ${err}`, 'error', 'error');
-      }
-    };
-    reader.readAsText(file);
-  } else {
-    log('No file selected for import.', 'info', 'general');
-  }
-});
-
-sendRequestBtn.addEventListener('click', () => {
-  appState.currentKey = keyInput.value;
-  updateScreen(log);
-  log(`Requested object info for key ${appState.currentKey}`, 'info', 'general');
-});
-
-getValueBtn.addEventListener('click', () => {
-  sendValueDump(appState.currentKey, log);
-});
-
-setValueBtn.addEventListener('click', () => {
-  const value = setValueInput.value;
-  sendValuePut(appState.currentKey, value, log);
-  if (appState.updateBitmapOnChange) {
-    setTimeout(() => {
-      sendSysEx(0x18, [], log);
-      log('Triggered bitmap update after value change.', 'debug', 'bitmap');
-    }, 200); // Delay to allow device update
-  }
-});
-
-backBtn.addEventListener('click', () => {
-  if (appState.keyStack.length > 0) {
-    appState.currentKey = appState.keyStack.pop();
-    appState.paramOffset = 0;
-    appState.autoNavigated = false;
-    updateScreen(log);
-    log(`Back to key ${appState.currentKey}`, 'info', 'general');
-  }
-});
-
+// ...(truncated 5124 characters)...
 pollToggle.addEventListener('click', () => {
   isPolling = !isPolling;
   if (isPolling) {

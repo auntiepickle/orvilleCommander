@@ -10,10 +10,17 @@ export function updateScreen(log = null) {
   sendValueDump(appState.currentKey, log);
 }
 
+function toggleDspKey(key) {
+  return key.startsWith('4') ? '8' + key.slice(1) : '4' + key.slice(1);
+}
+
 const handleLcdClick = (e) => {
   if (e.target.classList.contains('dsp-clickable')) {
     appState.presetKey = e.target.dataset.key;
-    appState.currentKey = e.target.dataset.key;
+    if (appState.currentKey === '0') {
+      appState.keyStack.push(appState.currentKey);
+    }
+    appState.currentKey = appState.presetKey;
     appState.autoLoad = true;
     updateScreen();
   } else if (e.target.classList.contains('softkey')) {
@@ -103,10 +110,15 @@ export function renderScreen(subs, ascii, log) {
   const main = subs[0];
   let displayLines = [];
   let paramDisplayedHtml = [];
+  let isTabLineAdded = false;
+  if (appState.dspAName && appState.dspBName && (appState.currentKey === '0' || appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8'))) {
+    const isASelected = appState.presetKey.startsWith('4');
+    const aText = isASelected ? `[A: ${appState.dspAName}]` : `A: ${appState.dspAName}`;
+    const bText = isASelected ? `B: ${appState.dspBName}` : `[B: ${appState.dspBName}]`;
+    displayLines.push(` ${aText} ${bText}`);
+    isTabLineAdded = true;
+  }
   if (appState.currentKey === '0') {
-    const progA = subs.find(s => s.key === '401000b') || {key: '401000b', statement: ''};
-    const progB = subs.find(s => s.key === '801000b') || {key: '801000b', statement: ''};
-    displayLines.push(` A: ${progA.statement} B: ${progB.statement}`);
     displayLines.push('');
     displayLines.push('');
     const softSubs = subs.filter(s => s.type === 'COL' && s.tag.trim() && s.key !== '401000b' && s.key !== '801000b' && s.key !== '10040000' && s.key !== '0');
@@ -114,9 +126,6 @@ export function renderScreen(subs, ascii, log) {
     displayLines.push(softTags.join(''));
   } else {
     let title = main.statement || main.tag || 'Menu';
-    if (appState.presetKey) {
-      title += ` | ${main.statement || main.tag || 'Menu'}`;
-    }
     displayLines.push(title);
     displayLines.push('--------------------------------');
     let paramLines = [];
@@ -125,12 +134,12 @@ export function renderScreen(subs, ascii, log) {
       let fullText = '';
       let fullHtml = '';
       if (s.type === 'NUM') {
-        const value = appState.currentValues[s.key] || parseFloat(s.value || 0).toFixed(3);
+        const value = appState.currentValues[s.key] || s.value;
+        if (!appState.currentValues[s.key]) sendValueDump(s.key);
         fullText = formatValue(s.statement || '', value);
         fullHtml = formatValue(s.statement || '', value, true, s.key);
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
-        if (!appState.currentValues[s.key]) sendValueDump(s.key);
       } else if (s.type === 'INF') {
         const replaceWith = s.value || s.tag || '';
         fullText = (s.statement || '').replace(/%s/g, replaceWith);
@@ -180,26 +189,42 @@ export function renderScreen(subs, ascii, log) {
   }
   log(`Rendered screen text: ${displayLines.join('\n')}`, 'debug', 'renderScreen');
   let htmlLines = displayLines.map((l, index) => {
-    if (index === displayLines.length - 1) {
-      let softHtml = '';
-      let softSubsUsed = appState.currentKey === '0' ? subs.filter(s => s.type === 'COL' && s.tag.trim() && s.key !== '401000b' && s.key !== '801000b' && s.key !== '10040000' && s.key !== '0') : subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
-      if (appState.menus.length > 0 && appState.currentKey !== appState.presetKey) {
-        softSubsUsed = appState.menus;
+    if (isTabLineAdded && index === 0) {
+      const isASelected = appState.presetKey.startsWith('4');
+      const aText = isASelected ? `[A: ${appState.dspAName}]` : `A: ${appState.dspAName}`;
+      const bText = isASelected ? `B: ${appState.dspBName}` : `[B: ${appState.dspBName}]`;
+      return ` <span class="dsp-clickable" data-key="${appState.dspAKey}">${aText}</span> <span class="dsp-clickable" data-key="${appState.dspBKey}">${bText}</span>`;
+    }
+    if (appState.currentKey === '0') {
+      if (index === displayLines.length - 1) {
+        let softHtml = '';
+        let softSubsUsed = subs.filter(s => s.type === 'COL' && s.tag.trim() && s.key !== '401000b' && s.key !== '801000b' && s.key !== '10040000' && s.key !== '0');
+        softSubsUsed.forEach((s, idx) => {
+          const text = (s.key === appState.currentKey ? '[' + (s.tag || '') + ']' : (s.tag || '')).padEnd(10);
+          softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+        });
+        return softHtml;
+      } else {
+        return l;
       }
-      softSubsUsed.forEach((s, idx) => {
-        const text = (s.key === appState.currentKey ? '[' + (s.tag || '') + ']' : (s.tag || '')).padEnd(10);
-        softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
-      });
-      return softHtml;
-    } else if (index > 1 && index < displayLines.length - 1) {
-      const html = paramDisplayedHtml[index - 2];
-      return html || l;
-    } else if (index === 0 && appState.currentKey === '0') {
-      const progA = subs.find(s => s.key === '401000b') || {key: '401000b', statement: ''};
-      const progB = subs.find(s => s.key === '801000b') || {key: '801000b', statement: ''};
-      return `<span class="dsp-clickable" data-key="${progA.key}">A: ${progA.statement}</span> <span class="dsp-clickable" data-key="${progB.key}">B: ${progB.statement}</span>`;
     } else {
-      return l;
+      if (index === displayLines.length - 1) {
+        let softHtml = '';
+        let softSubsUsed = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
+        if (appState.menus.length > 0 && appState.currentKey !== appState.presetKey) {
+          softSubsUsed = appState.menus;
+        }
+        softSubsUsed.forEach((s, idx) => {
+          const text = (s.key === appState.currentKey ? '[' + (s.tag || '') + ']' : (s.tag || '')).padEnd(10);
+          softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+        });
+        return softHtml;
+      } else if (index > 2 && index < displayLines.length - 1) { // Adjusted for title and ----
+        const html = paramDisplayedHtml[index - 3];
+        return html || l;
+      } else {
+        return l;
+      }
     }
   });
   lcdEl.innerHTML = htmlLines.join('\n');
@@ -225,6 +250,7 @@ export function renderScreen(subs, ascii, log) {
     appState.autoLoad = false;
     const softSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
     if (softSubs.length > 0) {
+      appState.keyStack.push(appState.currentKey);
       appState.currentKey = softSubs[0].key;
       updateScreen();
     }

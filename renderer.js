@@ -113,6 +113,15 @@ export function renderScreen(subs, ascii, log) {
   let paramDisplayedHtml = [];
   let isTabLineAdded = false;
   let topHtml = '';
+
+  // Dynamically select the correct menus array based on currentKey prefix
+  let menus = [];
+  if (appState.currentKey.startsWith('4')) {
+    menus = appState.menusA;
+  } else if (appState.currentKey.startsWith('8')) {
+    menus = appState.menusB;
+  }
+
   if (appState.dspAName && appState.dspBName) {
     const isDspScreen = appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8');
     const isASelected = isDspScreen && appState.currentKey.startsWith('4');
@@ -186,8 +195,8 @@ export function renderScreen(subs, ascii, log) {
     displayLines = displayLines.concat(paramLines);
     paramDisplayedHtml = paramHtmlLines;
     let softSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
-    if (appState.menus.length > 0 && appState.currentKey !== appState.presetKey && (appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8'))) {
-      softSubs = appState.menus;
+    if (menus.length > 0 && appState.currentKey !== appState.presetKey && (appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8'))) {
+      softSubs = menus;
     }
     const softTags = softSubs.map(s => s.tag.trim());
     displayLines.push('');
@@ -225,8 +234,8 @@ export function renderScreen(subs, ascii, log) {
       if (index === displayLines.length - startIndex - 4) { // dynamic softkeys before '' '' static
         let softHtml = '';
         let softSubsUsed = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
-        if (appState.menus.length > 0 && appState.currentKey !== appState.presetKey && (appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8'))) {
-          softSubsUsed = appState.menus;
+        if (menus.length > 0 && appState.currentKey !== appState.presetKey && (appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8'))) {
+          softSubsUsed = menus;
         }
         softSubsUsed.forEach((s, idx) => {
           const text = (s.key === appState.currentKey ? '[' + (s.tag || '') + ']' : (s.tag || '')).padEnd(10);

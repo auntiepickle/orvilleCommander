@@ -106,3 +106,10 @@ button:hover { background: #555; }
 .main-content, .top-docked, .bottom-docked {
   white-space: pre;
 }
+.param-select {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}

@@ -133,6 +133,7 @@ export function renderScreen(subs, ascii, log) {
     let title = main.statement || main.tag || 'Menu';
     displayLines.push(title);
     displayLines.push('--------------------------------');
+    displayLines.push('');
     let paramLines = [];
     let paramHtmlLines = [];
     subs.slice(1).forEach(s => {
@@ -168,7 +169,7 @@ export function renderScreen(subs, ascii, log) {
         }
         if (s.type === 'SET') {
           fullText = (s.statement || '').replace(/%s/g, displayValue);
-          let selectHtml = `<select data-key="${s.key}" style="background: transparent; border: none; color: inherit; font: inherit; cursor: pointer;">`;
+          let selectHtml = `<select data-key="${s.key}" class="param-select">`;
           s.options.forEach(option => {
             const isSelected = option.index === indexHex;
             selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;

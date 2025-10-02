@@ -2,6 +2,8 @@
 import { renderScreen, updateScreen } from './renderer.js';
 import { appState } from './state.js';
 
+let renderTimeout = null;
+
 // Bit reverse table
 const bit_reverse_table = new Array(256);
 for (let i = 0; i < 256; i++) {
@@ -199,8 +201,12 @@ export function parseResponse(data, log) {
       appState[`dsp${dsp}Name`] = main.statement;
     }
     if (main.key === appState.currentKey) {
+      if (renderTimeout) clearTimeout(renderTimeout);
       appState.lastAscii = ascii;
-      renderScreen(subs, ascii, log);
+      renderTimeout = setTimeout(() => {
+        renderScreen(subs, ascii, log);
+        renderTimeout = null;
+      }, 200);
     }
   } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
     const parts = splitLine(ascii);
@@ -216,7 +222,11 @@ export function parseResponse(data, log) {
     } else if (oldValue) {
       log(`Value did not change, still ${value}`, 'debug', 'noChange');
     }
-    renderScreen(null, appState.lastAscii, log);
+    if (renderTimeout) clearTimeout(renderTimeout);
+    renderTimeout = setTimeout(() => {
+      renderScreen(null, appState.lastAscii, log);
+      renderTimeout = null;
+    }, 200);
   } else if (data[3] === appState.deviceId && data[4] === 0x17) { // Screen dump response
     const nibbles = data.slice(5, data.length - 1);
     if (nibbles.length % 2 !== 0) {
@@ -246,14 +256,14 @@ export function parseSubObject(line) {
     max = parts[8] || '';
     step = parts[9] || '';
   } else if (type === 'SET' || type === 'CON') {
+    let i = 6; // skip tag
     if (type === 'CON') {
-      value = parts[6] || '0';
+      value = parts[i] || '0';
     } else { // SET
-      let i = 6; // skip tag
-      // Skip current_index and current_desc
-      i += 2;
-      const num = parseInt(parts[i], 16);
-      i++;
+      const current_index = parts[i++] || '0';
+      const current_desc = parts[i++] || '';
+      value = `${current_index} ${current_desc}`;
+      const num = parseInt(parts[i++], 16);
       for (let j = 0; j < num; j++) {
         const desc = parts[i + j].replace(/'/g, '');
         const index = j.toString(10);

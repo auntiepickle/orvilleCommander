@@ -38,7 +38,7 @@ const handleSelectChange = (e, log) => {
   console.log(`Selected option for key ${key}: index ${selectedIndex}, desc ${selectedDesc}`);
   sendValuePut(key, selectedIndex, log);
   appState.currentValues[key] = `${parseInt(selectedIndex, 10).toString(16)} ${selectedDesc}`;
-  renderScreen(null, appState.lastAscii, log); // Immediate local update
+  // Removed immediate renderScreen to avoid old subs with new value
   setTimeout(() => {
     updateScreen(log);
     if (appState.updateBitmapOnChange) {
@@ -182,14 +182,8 @@ export function renderScreen(subs, ascii, log) {
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
       } else if (s.type === 'CON' || s.type === 'SET') {
-        let value, isEditable = (s.type === 'SET');
-        if (s.type === 'CON') {
-          value = s.value || '0';
-          isEditable = false;
-        } else { // SET
-          value = appState.currentValues[s.key] || '';
-          if (!appState.currentValues[s.key]) sendValueDump(s.key, log);
-        }
+        let value = appState.currentValues[s.key] || s.value || '';
+        if (!appState.currentValues[s.key] && !s.value) sendValueDump(s.key, log);
         let displayValue = value;
         let indexHex = '0';
         if (value) {
@@ -208,7 +202,7 @@ export function renderScreen(subs, ascii, log) {
           fullHtml = (s.statement || '').replace(/%s/g, selectHtml);
         } else { // CON
           fullText = formatValue(s.statement || '', value);
-          fullHtml = isEditable ? formatValue(s.statement || '', value, true, s.key) : fullText;
+          fullHtml = fullText; // CON not editable
         }
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);

@@ -206,12 +206,18 @@ export function parseResponse(data, log) {
       appState.lastAscii = ascii;
       renderTimeout = setTimeout(() => {
         renderScreen(subs, ascii, log);
-        hideLoading();
+        if (!appState.isLoadingPreset) {
+          hideLoading();
+        }
         renderTimeout = null;
       }, 200);
     } else if (main.key === '0' && appState.currentKey !== '0') {
       // Background root dump received (e.g., after preset load); re-render current screen to update top bar
       renderScreen(appState.currentSubs, appState.lastAscii, log);
+      if (appState.isLoadingPreset) {
+        hideLoading();
+        appState.isLoadingPreset = false;
+      }
     }
   } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
     const parts = splitLine(ascii);
@@ -233,7 +239,9 @@ export function parseResponse(data, log) {
     if (renderTimeout) clearTimeout(renderTimeout);
     renderTimeout = setTimeout(() => {
       renderScreen(null, appState.lastAscii, log);
-      hideLoading();
+      if (!appState.isLoadingPreset) {
+        hideLoading();
+      }
       renderTimeout = null;
     }, 200);
   } else if (data[3] === appState.deviceId && data[4] === 0x17) { // Screen dump response

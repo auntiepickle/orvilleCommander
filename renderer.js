@@ -90,22 +90,25 @@ const handleParamClick = (e, log) => {
         }
       } else if (sub.type === 'TRG') {
         showLoading();
+        if (key === '1002001c' || key === '1002001d') {
+          appState.isLoadingPreset = true;
+          log('Started loading preset.', 'info', 'general');
+        }
         sendValuePut(key, '1', log);
         log(`Triggered TRG for key ${key}: ${sub.statement}`, 'info', 'general');
         renderScreen(null, appState.lastAscii, log); // Immediate local update
         setTimeout(() => {
           updateScreen(log);
+          if (key === '1002001c' || key === '1002001d') {
+            // Fetch root to update preset names after loading a new program
+            sendObjectInfoDump('0', log);
+            log('Fetched root after preset load.', 'debug', 'general');
+          }
           if (appState.updateBitmapOnChange) {
             sendSysEx(0x18, [], log);
             log('Triggered bitmap update after TRG.', 'debug', 'bitmap');
           }
-          // If this is a load TRG, fetch root in background to update DSP names/keys
-          if (key === '1002001c' || key === '1002001d') {
-            setTimeout(() => {
-              sendObjectInfoDump('0');
-            }, 300);
-          }
-        }, 200);
+        }, 500); // Increased delay for device to process load
       }
     }
   }

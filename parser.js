@@ -113,7 +113,27 @@ export function exportBMP(canvas) {
   buffer[26] = 1; // Planes
   buffer[28] = 1; // Bits per pixel (1 for mono)
   buffer[30] = 0; // Compression (0 = none)
-  // ...(truncated 1458 characters)...
+  // Pixel data (monochrome, padded to 4-byte rows)
+  let offset = 54;
+  const rowBytes = Math.ceil(width / 8);
+  const paddedRow = Math.ceil(rowBytes / 4) * 4;
+  for (let y = height - 1; y >= 0; y--) { // BMP is bottom-up
+    let row = 0;
+    for (let x = 0; x < width; x += 8) {
+      let byte = 0;
+      for (let bit = 0; bit < 8; bit++) {
+        if (x + bit < width) {
+          const idx = (y * width + x + bit) * 4 + 1; // Green channel for on/off
+          byte |= (data[idx] > 0 ? 0 : 1) << (7 - bit); // Black=0, White=1? Adjust if needed
+        }
+      }
+      buffer[offset++] = byte;
+    }
+    // Pad row
+    for (let p = rowBytes; p < paddedRow; p++) {
+      buffer[offset++] = 0;
+    }
+  }
   const a = document.createElement('a');
   const url = URL.createObjectURL(new Blob([buffer], {type: 'image/bmp'}));
   a.href = url;
@@ -161,13 +181,16 @@ export function parseResponse(data, log) {
   }
   const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).trim();
   if (data[3] === appState.deviceId && data[4] === 0x32) { // OBJECTINFO_DUMP
-    appState.lastAscii = ascii;
     const subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
     log(`Parsed OBJECTINFO_DUMP for key ${subs[0]?.key || 'unknown'}: ${ascii}`, 'info', 'parsedDump');
     const main = subs[0];
     if (main.key === '0') {
-      appState.dspAName = subs.find(s => s.key === '401000b')?.statement || '';
-      appState.dspBName = subs.find(s => s.key === '801000b')?.statement || '';
+      const dspASub = subs.find(s => s.key.startsWith('4'));
+      const dspBSub = subs.find(s => s.key.startsWith('8'));
+      appState.dspAKey = dspASub?.key || '401000b';
+      appState.dspBKey = dspBSub?.key || '801000b';
+      appState.dspAName = dspASub?.statement || '';
+      appState.dspBName = dspBSub?.statement || '';
     }
     if (main.key.endsWith('000b')) {
       appState.presetKey = main.key;
@@ -175,7 +198,10 @@ export function parseResponse(data, log) {
       appState[`menus${dsp}`] = subs.slice(1).filter(s => s.type === 'COL');
       appState[`dsp${dsp}Name`] = main.statement;
     }
-    renderScreen(subs, ascii, log);
+    if (main.key === appState.currentKey) {
+      appState.lastAscii = ascii;
+      renderScreen(subs, ascii, log);
+    }
   } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
     const parts = splitLine(ascii);
     const key = parts[0];

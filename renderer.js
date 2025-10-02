@@ -37,7 +37,7 @@ const handleSelectChange = (e, log) => {
   const selectedDesc = e.target.options[e.target.selectedIndex].text;
   console.log(`Selected option for key ${key}: index ${selectedIndex}, desc ${selectedDesc}`);
   sendValuePut(key, selectedIndex, log);
-  appState.currentValues[key] = `${selectedIndex} ${selectedDesc}`;
+  appState.currentValues[key] = `${parseInt(selectedIndex, 10).toString(16)} ${selectedDesc}`;
   renderScreen(null, appState.lastAscii, log); // Immediate local update
   setTimeout(() => {
     updateScreen(log);
@@ -61,28 +61,47 @@ const handleParamClick = (e, log) => {
     const key = e.target.dataset.key;
     // Find the sub for title and limits
     const sub = appState.currentSubs.find(s => s.key === key);
-    if (sub && sub.type === 'NUM') {
-      const title = sub.statement.replace(/%.*f/, '').trim(); // Clean format specifier
-      const currentValue = appState.currentValues[key] || sub.value;
-      const newValueStr = prompt(`Enter new value for ${title}:`, currentValue);
-      if (newValueStr !== null) {
-        const newValue = parseFloat(newValueStr);
-        const min = parseFloat(sub.min) || -Infinity;
-        const max = parseFloat(sub.max) || Infinity;
-        if (!isNaN(newValue) && newValue >= min && newValue <= max) {
-          sendValuePut(key, newValueStr, log);
-          appState.currentValues[key] = newValueStr;
-          renderScreen(null, appState.lastAscii, log); // Immediate local update
-          setTimeout(() => {
-            updateScreen(log);
-            if (appState.updateBitmapOnChange) {
-              sendSysEx(0x18, [], log);
-              log('Triggered bitmap update after value change.', 'debug', 'bitmap');
-            }
-          }, 200);
-        } else {
-          alert(`Invalid value. Must be a number between ${min} and ${max}.`);
+    if (sub) {
+      if (sub.type === 'NUM') {
+        const title = sub.statement.replace(/%.*f/, '').trim(); // Clean format specifier
+        const currentValue = appState.currentValues[key] || sub.value;
+        const newValueStr = prompt(`Enter new value for ${title}:`, currentValue);
+        if (newValueStr !== null) {
+          const newValue = parseFloat(newValueStr);
+          const min = parseFloat(sub.min) || -Infinity;
+          const max = parseFloat(sub.max) || Infinity;
+          if (!isNaN(newValue) && newValue >= min && newValue <= max) {
+            sendValuePut(key, newValueStr, log);
+            appState.currentValues[key] = newValueStr;
+            renderScreen(null, appState.lastAscii, log); // Immediate local update
+            setTimeout(() => {
+              updateScreen(log);
+              if (appState.updateBitmapOnChange) {
+                sendSysEx(0x18, [], log);
+                log('Triggered bitmap update after value change.', 'debug', 'bitmap');
+              }
+            }, 200);
+          } else {
+            alert(`Invalid value. Must be a number between ${min} and ${max}.`);
+          }
         }
+      } else if (sub.type === 'TRG') {
+        sendValuePut(key, '1', log);
+        log(`Triggered TRG for key ${key}: ${sub.statement}`, 'info', 'general');
+        renderScreen(null, appState.lastAscii, log); // Immediate local update
+        setTimeout(() => {
+          updateScreen(log);
+          if (appState.updateBitmapOnChange) {
+            sendSysEx(0x18, [], log);
+            log('Triggered bitmap update after TRG.', 'debug', 'bitmap');
+          }
+          // If this is a load TRG, fetch root in background to update DSP names/keys
+          if (key === '1002001c' || key === '1002001d') {
+            setTimeout(() => {
+              sendObjectInfoDump('0');
+            }, 300);
+          }
+        }, 200);
       }
     }
   }
@@ -113,16 +132,11 @@ export function renderScreen(subs, ascii, log) {
   let paramDisplayedHtml = [];
   let isTabLineAdded = false;
   let topHtml = '';
-
-  // Dynamically select the correct menus array based on currentKey prefix
   let menus = [];
-  if (appState.currentKey.startsWith('4')) {
-    menus = appState.menusA;
-  } else if (appState.currentKey.startsWith('8')) {
-    menus = appState.menusB;
-  }
 
-  if (appState.dspAName && appState.dspBName) {
+  const showTopNav = appState.currentKey === '0' || appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8');
+
+  if (showTopNav && appState.dspAName && appState.dspBName) {
     const isDspScreen = appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8');
     const isASelected = isDspScreen && appState.currentKey.startsWith('4');
     const aText = isASelected ? `[A: ${appState.dspAName}]` : `A: ${appState.dspAName}`;
@@ -131,6 +145,13 @@ export function renderScreen(subs, ascii, log) {
     topHtml = ` <span class="dsp-clickable" data-key="${appState.dspAKey}">${aText}</span> <span class="dsp-clickable" data-key="${appState.dspBKey}">${bText}</span>`;
     isTabLineAdded = true;
   }
+
+  if (appState.currentKey.startsWith('4')) {
+    menus = appState.menusA;
+  } else if (appState.currentKey.startsWith('8')) {
+    menus = appState.menusB;
+  }
+
   if (appState.currentKey === '0') {
     displayLines.push('');
     displayLines.push('');
@@ -175,11 +196,12 @@ export function renderScreen(subs, ascii, log) {
           indexHex = value.split(' ')[0];
           displayValue = value.substring(indexHex.length + 1);
         }
+        const indexDec = parseInt(indexHex, 16).toString(10);
         if (s.type === 'SET') {
           fullText = (s.statement || '').replace(/%s/g, displayValue);
           let selectHtml = `<select data-key="${s.key}" class="param-select">`;
           s.options.forEach(option => {
-            const isSelected = option.index === indexHex;
+            const isSelected = option.index === indexDec;
             selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
           });
           selectHtml += `</select>`;
@@ -188,6 +210,11 @@ export function renderScreen(subs, ascii, log) {
           fullText = formatValue(s.statement || '', value);
           fullHtml = isEditable ? formatValue(s.statement || '', value, true, s.key) : fullText;
         }
+        paramLines.push(fullText);
+        paramHtmlLines.push(fullHtml);
+      } else if (s.type === 'TRG') {
+        fullHtml = `<span class="param-value" data-key="${s.key}">${s.statement}</span>`;
+        fullText = s.statement;
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
       }
@@ -272,7 +299,7 @@ export function renderScreen(subs, ascii, log) {
     select.addEventListener('change', (e) => handleSelectChange(e, log));
   });
   
-  // Add click listeners to param-value for NUM editing
+  // Add click listeners to param-value for NUM and TRG editing
   lcdEl.querySelectorAll('.param-value').forEach(span => {
     span.removeEventListener('click', handleParamClick);
     span.addEventListener('click', (e) => handleParamClick(e, log));

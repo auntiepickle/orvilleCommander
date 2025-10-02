@@ -209,6 +209,9 @@ export function parseResponse(data, log) {
         hideLoading();
         renderTimeout = null;
       }, 200);
+    } else if (main.key === '0' && appState.currentKey !== '0') {
+      // Background root dump received (e.g., after preset load); re-render current screen to update top bar
+      renderScreen(appState.currentSubs, appState.lastAscii, log);
     }
   } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
     const parts = splitLine(ascii);

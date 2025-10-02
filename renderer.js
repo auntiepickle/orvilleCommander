@@ -3,6 +3,7 @@ import { appState } from './state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { keypressMasks } from './controls.js';
 import { parseSubObject } from './parser.js';
+import { showLoading } from './main.js';
 
 export function updateScreen(log = null) {
   appState.currentValues = {};
@@ -36,6 +37,7 @@ const handleSelectChange = (e, log) => {
   const selectedIndex = e.target.value;
   const selectedDesc = e.target.options[e.target.selectedIndex].text;
   console.log(`Selected option for key ${key}: index ${selectedIndex}, desc ${selectedDesc}`);
+  showLoading();
   sendValuePut(key, selectedIndex, log);
   appState.currentValues[key] = `${parseInt(selectedIndex, 10).toString(16)} ${selectedDesc}`;
   // Removed immediate renderScreen to avoid old subs with new value
@@ -71,6 +73,7 @@ const handleParamClick = (e, log) => {
           const min = parseFloat(sub.min) || -Infinity;
           const max = parseFloat(sub.max) || Infinity;
           if (!isNaN(newValue) && newValue >= min && newValue <= max) {
+            showLoading();
             sendValuePut(key, newValueStr, log);
             appState.currentValues[key] = newValueStr;
             renderScreen(null, appState.lastAscii, log); // Immediate local update
@@ -86,6 +89,7 @@ const handleParamClick = (e, log) => {
           }
         }
       } else if (sub.type === 'TRG') {
+        showLoading();
         sendValuePut(key, '1', log);
         log(`Triggered TRG for key ${key}: ${sub.statement}`, 'info', 'general');
         renderScreen(null, appState.lastAscii, log); // Immediate local update

@@ -1,6 +1,7 @@
 // parser.js
 import { renderScreen, updateScreen } from './renderer.js';
 import { appState } from './state.js';
+import { hideLoading } from './main.js';
 
 let renderTimeout = null;
 
@@ -205,6 +206,7 @@ export function parseResponse(data, log) {
       appState.lastAscii = ascii;
       renderTimeout = setTimeout(() => {
         renderScreen(subs, ascii, log);
+        hideLoading();
         renderTimeout = null;
       }, 200);
     }
@@ -222,9 +224,13 @@ export function parseResponse(data, log) {
     } else if (oldValue) {
       log(`Value did not change, still ${value}`, 'debug', 'noChange');
     }
+    if (key === '10020011' || key === '10020012') {
+      return; // Skip render for program/bank VALUE_DUMP to avoid brief wrong state
+    }
     if (renderTimeout) clearTimeout(renderTimeout);
     renderTimeout = setTimeout(() => {
       renderScreen(null, appState.lastAscii, log);
+      hideLoading();
       renderTimeout = null;
     }, 200);
   } else if (data[3] === appState.deviceId && data[4] === 0x17) { // Screen dump response

@@ -195,19 +195,17 @@ processDebugFileBtn.addEventListener('click', () => {
 });
 
 // Function to show loading indicator
-function showLoading() {
-  const canvas = document.getElementById('lcd-canvas');
-  if (canvas) {
-    canvas.classList.add('loading');
+export function showLoading() {
+  if (lcdEl) {
+    lcdEl.classList.add('loading');
   }
   log('Loading new screen...', 'debug', 'general');
 }
 
 // Function to hide loading indicator
-function hideLoading() {
-  const canvas = document.getElementById('lcd-canvas');
-  if (canvas) {
-    canvas.classList.remove('loading');
+export function hideLoading() {
+  if (lcdEl) {
+    lcdEl.classList.remove('loading');
   }
   log('Screen loaded.', 'debug', 'general');
 }

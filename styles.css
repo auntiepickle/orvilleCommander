@@ -1,3 +1,4 @@
+/* styles.css */
 .front-panel {
   display: grid;
   grid-template-columns: 1fr 4fr 2fr; /* Left, Center, Right */
@@ -112,4 +113,8 @@ button:hover { background: #555; }
   color: inherit;
   font: inherit;
   cursor: pointer;
+}
+#lcd.loading {
+  opacity: 0.5;
+  pointer-events: none;
 }

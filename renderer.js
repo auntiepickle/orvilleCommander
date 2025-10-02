@@ -138,16 +138,16 @@ export function renderScreen(subs, ascii, log) {
   let topHtml = '';
   let menus = [];
 
-  const showTopNav = appState.currentKey === '0' || appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8');
+  if (appState.dspAName && appState.dspBName) {
+    const isAActive = appState.presetKey.startsWith('4');
+    const aPart = isAActive ? `[A: ${appState.dspAName}]` : `A: ${appState.dspAName}`;
+    const bPart = !isAActive ? `[B: ${appState.dspBName}]` : `B: ${appState.dspBName}`;
+    topHtml = ` <span class="${isAActive ? 'dsp-clickable current' : 'dsp-clickable'}" data-key="${appState.dspAKey}">${aPart}</span> <span class="${!isAActive ? 'dsp-clickable current' : 'dsp-clickable'}" data-key="${appState.dspBKey}">${bPart}</span>`;
 
-  if (showTopNav && appState.dspAName && appState.dspBName) {
-    const isDspScreen = appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8');
-    const isASelected = isDspScreen && appState.currentKey.startsWith('4');
-    const aText = isASelected ? `[A: ${appState.dspAName}]` : `A: ${appState.dspAName}`;
-    const bText = !isASelected && isDspScreen ? `[B: ${appState.dspBName}]` : `B: ${appState.dspBName}`;
-    displayLines.push(` ${aText} ${bText}`);
-    topHtml = ` <span class="dsp-clickable" data-key="${appState.dspAKey}">${aText}</span> <span class="dsp-clickable" data-key="${appState.dspBKey}">${bText}</span>`;
-    isTabLineAdded = true;
+    if (appState.currentKey === '0' || appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8')) {
+      displayLines.push(` ${aPart} ${bPart}`);
+      isTabLineAdded = true;
+    }
   }
 
   if (appState.currentKey.startsWith('4')) {

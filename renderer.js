@@ -183,14 +183,21 @@ export function renderScreen(subs, ascii, log) {
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
       } else if (s.type === 'INF') {
-        const replaceWith = s.value || s.tag || '';
-        fullText = (s.statement || '').replace(/%s/g, replaceWith);
+        let value = appState.currentValues[s.key] || s.value || '';
+        if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, log);
+        // Parse format for %[-width]s
+        fullText = s.statement.replace(/%(-)?(\d*)s/g, (match, leftFlag, widthStr) => {
+          const leftAlign = !!leftFlag;
+          const width = parseInt(widthStr) || 0;
+          if (width === 0) return value;
+          return leftAlign ? value.padEnd(width) : value.padStart(width);
+        });
         fullHtml = fullText;
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
       } else if (s.type === 'CON' || s.type === 'SET') {
         let value = appState.currentValues[s.key] || s.value || '';
-        if (!appState.currentValues[s.key] && !s.value) sendValueDump(s.key, log);
+        if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, log);
         let displayValue = value;
         let indexHex = '0';
         if (value) {

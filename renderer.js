@@ -55,6 +55,25 @@ const handleSelectChange = (e, log) => {
         console.log(`Value update failed for key ${key}. Expected desc: ${selectedDesc}, got: ${newValue}`);
       }
     }, 500); // Wait for VALUE_DUMP to arrive
+
+    // Auto-load preset if changing the program select in load menu
+    if (key === '10020011') {
+      setTimeout(() => {
+        const loadKey = appState.presetKey.startsWith('4') ? '1002001c' : '1002001d';
+        appState.isLoadingPreset = true;
+        sendValuePut(loadKey, '1', log);
+        log(`Auto-triggered load for ${loadKey} after program change`, 'info', 'general');
+        setTimeout(() => {
+          updateScreen(log);
+          sendObjectInfoDump('0', log);
+          log('Fetched root after preset load.', 'debug', 'general');
+          if (appState.updateBitmapOnChange) {
+            sendSysEx(0x18, [], log);
+            log('Triggered bitmap update after TRG.', 'debug', 'bitmap');
+          }
+        }, 500); // Delay for device to process load and fetch root
+      }, 300); // Additional delay to ensure program value is set
+    }
   }, 200); // Delay to allow MIDI update
 };
 

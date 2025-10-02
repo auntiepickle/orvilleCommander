@@ -2,6 +2,7 @@
 import { renderScreen, updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { hideLoading } from './main.js';
+import { sendValuePut, sendValueDump } from './midi.js';
 
 let renderTimeout = null;
 
@@ -221,6 +222,29 @@ export function parseResponse(data, log) {
         appState.isLoadingPreset = false;
       }
     }
+    // Fix for Favorites re-ordering after preset load
+    if (main.key === '10020010' && appState.isLoadingPreset && appState.loadingPresetName) {
+      const bankSub = subs.find(s => s.key === '10020012');
+      if (bankSub) {
+        const bankValue = appState.currentValues[bankSub.key] || bankSub.value;
+        if (bankValue.startsWith('0 ')) { // Favorites bank
+          const programSub = subs.find(s => s.key === '10020011');
+          if (programSub && programSub.options) {
+            const targetName = appState.loadingPresetName;
+            const newIndex = programSub.options.findIndex(opt => opt.desc.trim().split(' ').slice(1).join(' ') === targetName);
+            const currentProgramValue = appState.currentValues[programSub.key] || programSub.value;
+            const currentIndex = parseInt(currentProgramValue.split(' ')[0], 10);
+            if (newIndex !== -1 && newIndex !== currentIndex) {
+              log(`Correcting selection after Favorites re-order: setting to index ${newIndex} for "${targetName}"`, 'info', 'general');
+              sendValuePut(programSub.key, newIndex.toString(), log);
+              const newDesc = programSub.options[newIndex].desc;
+              appState.currentValues[programSub.key] = `${newIndex} ${newDesc}`;
+              setTimeout(() => sendValueDump(programSub.key, log), 200);
+            }
+          }
+        }
+      }
+    }
   } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
     const parts = splitLine(ascii);
     const key = parts[0];
@@ -284,7 +308,7 @@ export function parseSubObject(line) {
       value = `${current_index} ${current_desc}`;
       const num = parseInt(parts[i++], 16);
       for (let j = 0; j < num; j++) {
-        const desc = parts[i + j].replace(/'/g, '');
+        const desc = parts[i + j]; // Removed replace(/'/g, '') to preserve apostrophes in names
         const index = j.toString(10);
         options.push({ index, desc });
       }

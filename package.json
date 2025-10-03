@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "vite",
-    "zip": "node zip.js"
+    "zip": "node zip.js",
+    "push": "git push && npm run zip"
   },
   "repository": {
     "type": "git",

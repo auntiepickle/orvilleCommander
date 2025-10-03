@@ -26,3 +26,4 @@ project-files.txt
 
 # Git internals (should never be committed)
 .git/
+orvilleCommander_combined.txt

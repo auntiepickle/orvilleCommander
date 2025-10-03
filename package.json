@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "zip": "node zip.js",
-    "push": "git push && npm run zip"
+    "push": "git push && npm run zip",
+    "combine": "node combine.js"
   },
   "repository": {
     "type": "git",

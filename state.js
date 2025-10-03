@@ -4,8 +4,6 @@ export const appState = {
   presetKey: '401000b',
   currentValues: {},
   paramOffset: 0,
-  menusA: [],
-  menusB: [],
   autoLoad: false,
   keyStack: [],
   dspAKey: '401000b',
@@ -30,5 +28,6 @@ export const appState = {
   },
   fetchBitmap: true,
   updateBitmapOnChange: true,
-  isLoadingPreset: false
+  isLoadingPreset: false,
+  currentSoftkeys: []
 };

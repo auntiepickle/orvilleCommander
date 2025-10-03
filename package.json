@@ -5,8 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "vite",
-    "zip": "node zip.js",
-    "prepare": "husky"
+    "zip": "node zip.js"
   },
   "repository": {
     "type": "git",
@@ -22,7 +21,6 @@
   "homepage": "https://github.com/auntiepickle/orvilleCommander#readme",
   "devDependencies": {
     "archiver": "^7.0.1",
-    "husky": "^9.1.7",
     "vite": "^7.1.6"
   },
   "dependencies": {

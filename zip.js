@@ -29,5 +29,4 @@ archive.glob('**/*', {
   cwd: __dirname,
   ignore: ['.git/**', 'node_modules/**', '**/*.zip']
 });
-
 archive.finalize();

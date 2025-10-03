@@ -1,2 +1,0 @@
-# No pre-commit actions needed; skip tests for now
-echo "Skipping pre-commit checks"

@@ -3,33 +3,27 @@ const path = require('path');
 
 const outputFile = path.resolve(__dirname, 'orvilleCommander_combined.txt');
 const output = fs.createWriteStream(outputFile, { encoding: 'utf8' });
-const extensionsToInclude = ['.js', '.html', '.css', '.json', '.txt', '.md']; // Add more if needed
-const ignoreDirs = ['node_modules', '.git', '.husky', '.vscode']; // Directories to skip
+const filesToInclude = ['config.js', 'controls.js', 'index.html', 'main.js', 'midi.js', 'parser.js', 'renderer.js', 'state.js'];
 
-function combineFiles(dir) {
-  const files = fs.readdirSync(dir, { withFileTypes: true });
-
-  for (const file of files) {
-    const fullPath = path.join(dir, file.name);
-
-    if (file.isDirectory()) {
-      if (!ignoreDirs.includes(file.name)) {
-        combineFiles(fullPath); // Recurse into subdirs
-      }
+function combineFiles() {
+  for (const fileName of filesToInclude) {
+    const fullPath = path.join(__dirname, fileName);
+    if (fs.existsSync(fullPath)) {
+      output.write(`----- ${fileName} -----\n`);
+      const content = fs.readFileSync(fullPath, 'utf8');
+      output.write(content + '\n');
+      output.write('-----\n\n');
     } else {
-      const ext = path.extname(file.name).toLowerCase();
-      if (extensionsToInclude.includes(ext)) {
-        output.write(`----- ${path.relative(__dirname, fullPath)} -----\n`);
-        const content = fs.readFileSync(fullPath, 'utf8');
-        output.write(content + '\n');
-        output.write('-----\n\n');
-      }
+      console.warn(`File not found: ${fileName}`);
     }
   }
 }
 
-combineFiles(__dirname);
+combineFiles();
 
 output.end(() => {
   console.log(`Combined file created at: ${outputFile}`);
+  const combinedContent = fs.readFileSync(outputFile, 'utf8');
+  const lineCount = combinedContent.split('\n').length;
+  console.log(`Total lines in combined file: ${lineCount}`);
 });

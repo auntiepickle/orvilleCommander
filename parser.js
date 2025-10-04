@@ -285,7 +285,7 @@ export function parseResponse(data, log) {
 export function parseSubObject(line) {
   const parts = splitLine(line);
   const type = parts[0] || '';
-  const position = parseInt(parts[1] || '0', 10);
+  const position = parts[1] || '0'; // Keep as string to handle 'a' etc.
   const key = parts[2] || '';
   const parent = parts[3] || '';
   const statement = parts[4] || '';

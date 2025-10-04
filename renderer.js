@@ -189,14 +189,44 @@ export function renderScreen(subs, ascii, log) {
     displayLines.push(title);
     let paramLines = [];
     let paramHtmlLines = [];
+
+    // Group graphic EQ NUMs with position 'a'
+    const graphicEqSubs = subs.slice(1).filter(s => s.type === 'NUM' && s.position === 'a');
+    let graphicEqLine = '';
+    let graphicEqHtml = '';
+    if (graphicEqSubs.length > 0) {
+      const formattedParts = graphicEqSubs.map(s => {
+        const value = appState.currentValues[s.key] || s.value;
+        if (!appState.currentValues[s.key]) sendValueDump(s.key);
+        // Parse tag like 'v1:%3.0f' for label and format
+        const [label, format] = s.tag.split(':');
+        const formattedValue = formatValue(format || '%3.0f', value);
+        return `${label}: ${formattedValue}`;
+      });
+      graphicEqLine = formattedParts.join(' ');
+      // For HTML, wrap each value in span for potential editing
+      const formattedHtmlParts = graphicEqSubs.map(s => {
+        const value = appState.currentValues[s.key] || s.value;
+        const [label, format] = s.tag.split(':');
+        const formattedValue = formatValue(format || '%3.0f', value, true, s.key);
+        return `${label}: ${formattedValue}`;
+      });
+      graphicEqHtml = formattedHtmlParts.join(' ');
+      paramLines.push(graphicEqLine);
+      paramHtmlLines.push(graphicEqHtml);
+    }
+
     subs.slice(1).forEach(s => {
+      if (s.position === 'a') return; // Skip individual 'a' after grouping
       let fullText = '';
       let fullHtml = '';
       if (s.type === 'NUM') {
         const value = appState.currentValues[s.key] || s.value;
         if (!appState.currentValues[s.key]) sendValueDump(s.key);
-        fullText = formatValue(s.statement || '', value);
-        fullHtml = formatValue(s.statement || '', value, true, s.key);
+        // Use statement if present, fallback to tag for formatting if statement empty
+        const formatStr = s.statement || s.tag || '';
+        fullText = formatValue(formatStr, value);
+        fullHtml = formatValue(formatStr, value, true, s.key);
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
       } else if (s.type === 'INF') {

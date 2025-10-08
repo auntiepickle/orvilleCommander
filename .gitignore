@@ -30,3 +30,7 @@ orvilleCommander_combined.txt
 
 #combined build files
 combine/
+
+*.diff
+*.rej
+*.orig

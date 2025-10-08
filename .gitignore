@@ -34,3 +34,4 @@ combine/
 *.diff
 *.rej
 *.orig
+*.bak

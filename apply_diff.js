@@ -3,13 +3,35 @@ const path = require('path');
 const child_process = require('child_process');
 
 const args = process.argv.slice(2);
-if (args.length < 2) {
-  console.log('Usage: node apply_diff.js <file_to_patch> <diff_file>');
+if (args.length !== 1) {
+  console.log('Usage: node apply_diff.js <base_name>');
+  console.log('Example: node apply_diff.js main (applies main.diff to main.js/html/css)');
   process.exit(1);
 }
 
-const targetFile = path.resolve(args[0]);
-const diffFile = path.resolve(args[1]);
+const baseName = args[0];
+const possibleExtensions = ['.js', '.html', '.css'];
+let targetFile = null;
+
+for (const ext of possibleExtensions) {
+  const candidate = path.resolve(baseName + ext);
+  if (fs.existsSync(candidate)) {
+    targetFile = candidate;
+    break;
+  }
+}
+
+if (!targetFile) {
+  console.log(`No file found for ${baseName} with extensions: ${possibleExtensions.join(', ')}`);
+  process.exit(1);
+}
+
+const diffFile = path.resolve(baseName + '.diff');
+if (!fs.existsSync(diffFile)) {
+  console.log(`Diff file not found: ${diffFile}`);
+  process.exit(1);
+}
+
 const backupFile = targetFile + '.bak';
 
 // Backup original

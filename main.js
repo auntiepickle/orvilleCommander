@@ -43,6 +43,8 @@ const testTRateBtn = document.getElementById('test-t-rate');
 
 let pollInterval = null;
 let isPolling = false;
+const toggleMeterPollingBtn = document.getElementById('toggle-meter-polling');
+const pollingIndicator = document.getElementById('polling-indicator');
 const levels = { error: 0, info: 1, debug: 2 };
 
 function log(message, level = 'info', category = 'general') {
@@ -55,6 +57,33 @@ function log(message, level = 'info', category = 'general') {
 }
 
 copyLogBtn.addEventListener('click', () => {
+let pollingInterval = null;
+
+function startPolling(log) {
+  if (pollingInterval) clearInterval(pollingInterval);
+  pollingInterval = setInterval(() => {
+    const conSubs = appState.currentSubs.filter(s => s.type === 'CON');
+    conSubs.forEach(sub => {
+      const key = sub.key;
+      sendValueDump(key, log);
+    });
+  }, 100);
+}
+
+function stopPolling() {
+  if (pollingInterval) clearInterval(pollingInterval);
+  pollingInterval = null;
+}
+
+if (toggleMeterPollingBtn) {
+  toggleMeterPollingBtn.addEventListener('click', () => {
+    appState.pollingEnabled = !appState.pollingEnabled;
+    pollingIndicator.style.display = appState.pollingEnabled ? 'inline' : 'none';
+    if (appState.pollingEnabled) startPolling(log); else stopPolling();
+    log(`Meter polling ${appState.pollingEnabled ? 'enabled' : 'disabled'}`, 'info', 'general');
+  });
+}
+
   navigator.clipboard.writeText(logArea.value).then(() => log('Log copied to clipboard.', 'info', 'general'));
 });
 

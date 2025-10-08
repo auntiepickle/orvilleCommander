@@ -28,6 +28,8 @@ export const appState = {
   },
   fetchBitmap: true,
   updateBitmapOnChange: true,
+  currentSoftkeys: [],
+  pollingEnabled: false,
   isLoadingPreset: false,
   currentSoftkeys: []
 };

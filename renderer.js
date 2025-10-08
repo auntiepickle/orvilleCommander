@@ -242,9 +242,9 @@ export function renderScreen(subs, ascii, log) {
         fullHtml = fullText;
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
-      } else if (s.type === 'CON' || s.type === 'SET') {
+      } else if (s.type === 'SET') {
         let value = appState.currentValues[s.key] || s.value || '';
-        if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, log);
+        if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, log); 
         let displayValue = value;
         let indexHex = '0';
         if (value) {
@@ -252,19 +252,25 @@ export function renderScreen(subs, ascii, log) {
           displayValue = value.substring(indexHex.length + 1);
         }
         const indexDec = parseInt(indexHex, 16).toString(10);
-        if (s.type === 'SET') {
-          fullText = (s.statement || '').replace(/%s/g, displayValue);
-          let selectHtml = `<select data-key="${s.key}" class="param-select">`;
-          s.options.forEach(option => {
-            const isSelected = option.index === indexDec;
-            selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
-          });
-          selectHtml += `</select>`;
-          fullHtml = (s.statement || '').replace(/%s/g, selectHtml);
-        } else { // CON
-          fullText = formatValue(s.statement || '', value);
-          fullHtml = fullText; // CON not editable
-        }
+        fullText = (s.statement || '').replace(/%s/g, displayValue);
+        let selectHtml = `<select data-key="${s.key}" class="param-select">`;
+        s.options.forEach(option => {
+          const isSelected = option.index === indexDec;
+          selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
+        });
+        selectHtml += `</select>`;
+        fullHtml = (s.statement || '').replace(/%s/g, selectHtml);
+        paramLines.push(fullText);
+        paramHtmlLines.push(fullHtml);
+      } else if (s.type === 'CON') {
+        const meterValue = parseFloat(appState.currentValues[s.key] || s.value) || 0;
+        const tagLength = s.tag.length;
+        const barSpace = 40 - tagLength - 1;
+        const barLength = Math.round(meterValue * barSpace);
+        const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength); // Use ░ for empty to visualize full meter
+        fullText = `${s.tag} ${bar}`.padEnd(40);
+        fullHtml = `<span class="param-label">${s.tag}</span> <span class="meter-bar">${bar}</span>`;
+        if (log) log(`Rendering CON for key ${s.key}: tag=${s.tag}, value=${meterValue}, barLength=${barLength}, line="${fullText.trim()}"`, 'debug', 'renderScreen');
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
       } else if (s.type === 'TRG') {

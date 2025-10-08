@@ -248,9 +248,7 @@ export function parseResponse(data, log) {
   } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
     const parts = splitLine(ascii);
     const key = parts[0];
-    const index = parts[1];
-    const desc = parts.slice(2).join(' ');
-    const value = desc ? `${index} ${desc}` : index;
+    const value = parts.slice(1).join(' ');
     const oldValue = appState.currentValues[key];
     appState.currentValues[key] = value;
     log(`Parsed VALUE_DUMP for key ${key}: ${value}`, 'info', 'parsedDump');
@@ -262,14 +260,26 @@ export function parseResponse(data, log) {
     if (key === '10020011' || key === '10020012') {
       return; // Skip render for program/bank VALUE_DUMP to avoid brief wrong state
     }
-    if (renderTimeout) clearTimeout(renderTimeout);
-    renderTimeout = setTimeout(() => {
-      renderScreen(null, appState.lastAscii, log);
-      if (!appState.isLoadingPreset) {
-        hideLoading();
-      }
-      renderTimeout = null;
-    }, 200);
+    log(`Checking for CON on key ${key}, currentSubs length: ${appState.currentSubs.length}`, 'debug', 'general');
+    const sub = appState.currentSubs.find(s => s.key === key);
+    log(`Sub found for key ${key}: ${!!sub}, type: ${sub ? sub.type : 'undefined'}`, 'debug', 'general');
+    if (sub && sub.type === 'CON') {
+      renderScreen(appState.currentSubs, null, log); // Immediate re-render for live meter update
+      log(`Immediate re-rendered screen for CON value change on key ${key}`, 'debug', 'renderScreen');
+    } else if (key.endsWith('0002')) { // Fallback for meter keys, ignore sub check
+      log(`Fallback triggered for meter key ${key}`, 'debug', 'general');
+      renderScreen(appState.currentSubs, null, log);
+      log(`Immediate re-rendered screen for meter VALUE_DUMP on key ${key}`, 'debug', 'renderScreen');
+    } else {
+      if (renderTimeout) clearTimeout(renderTimeout);
+      renderTimeout = setTimeout(() => {
+        renderScreen(null, appState.lastAscii, log);
+        if (!appState.isLoadingPreset) {
+          hideLoading();
+        }
+        renderTimeout = null;
+      }, 200);
+    }
   } else if (data[3] === appState.deviceId && data[4] === 0x17) { // Screen dump response
     const nibbles = data.slice(5, data.length - 1);
     if (nibbles.length % 2 !== 0) {

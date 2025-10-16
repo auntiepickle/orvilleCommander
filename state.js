@@ -31,5 +31,6 @@ export const appState = {
   currentSoftkeys: [],
   pollingEnabled: false,
   isLoadingPreset: false,
-  currentSoftkeys: []
+  currentSoftkeys: [],
+  childSubs: {} // Added for child sub-menu storage
 };

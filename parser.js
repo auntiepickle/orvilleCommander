@@ -2,7 +2,7 @@
 import { renderScreen, updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { hideLoading } from './main.js';
-import { sendValuePut, sendValueDump } from './midi.js';
+import { sendValuePut, sendValueDump, sendObjectInfoDump } from './midi.js';
 
 let renderTimeout = null;
 
@@ -205,6 +205,12 @@ export function parseResponse(data, log) {
       }
     }
     if (main.key === appState.currentKey) {
+      // Fetch child sub-menus for local COLs if not already fetched
+      const localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim() && !appState.childSubs[s.key]);
+      localSoftSubs.forEach(s => {
+        sendObjectInfoDump(s.key, log);
+        sendValueDump(s.key, log);
+      });
       if (renderTimeout) clearTimeout(renderTimeout);
       appState.lastAscii = ascii;
       renderTimeout = setTimeout(() => {
@@ -220,6 +226,13 @@ export function parseResponse(data, log) {
       if (appState.isLoadingPreset) {
         hideLoading();
         appState.isLoadingPreset = false;
+      }
+    } else {
+      // Store child sub-menu data if parent matches currentKey
+      if (main.parent === appState.currentKey) {
+        appState.childSubs[main.key] = subs;
+        log(`Stored child subs for key ${main.key} under parent ${main.parent}`, 'debug', 'parsedDump');
+        renderScreen(appState.currentSubs, appState.lastAscii, log); // Re-render to include child data
       }
     }
     // Fix for Favorites re-ordering after preset load
@@ -263,13 +276,17 @@ export function parseResponse(data, log) {
     log(`Checking for CON on key ${key}, currentSubs length: ${appState.currentSubs.length}`, 'debug', 'general');
     const sub = appState.currentSubs.find(s => s.key === key);
     log(`Sub found for key ${key}: ${!!sub}, type: ${sub ? sub.type : 'undefined'}`, 'debug', 'general');
+    const isChildParam = Object.keys(appState.childSubs || {}).some(childKey => {
+      const childSubs = appState.childSubs[childKey] || [];
+      return childSubs.some(cs => cs.key === key);
+    });
     if (sub && sub.type === 'CON') {
       renderScreen(appState.currentSubs, null, log); // Immediate re-render for live meter update
       log(`Immediate re-rendered screen for CON value change on key ${key}`, 'debug', 'renderScreen');
-    } else if (key.endsWith('0002')) { // Fallback for meter keys, ignore sub check
-      log(`Fallback triggered for meter key ${key}`, 'debug', 'general');
+    } else if (key.endsWith('0002') || isChildParam) { // Fallback for meter keys or child params
+      log(`Fallback triggered for meter or child key ${key}`, 'debug', 'general');
       renderScreen(appState.currentSubs, null, log);
-      log(`Immediate re-rendered screen for meter VALUE_DUMP on key ${key}`, 'debug', 'renderScreen');
+      log(`Immediate re-rendered screen for VALUE_DUMP on key ${key}`, 'debug', 'renderScreen');
     } else {
       if (renderTimeout) clearTimeout(renderTimeout);
       renderTimeout = setTimeout(() => {

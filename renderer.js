@@ -6,6 +6,7 @@ import { parseSubObject } from './parser.js';
 import { showLoading } from './main.js';
 
 export function updateScreen(log = null) {
+  appState.childSubs = {}; // Clear childSubs on update to prevent stale data
   appState.currentValues = {};
   sendObjectInfoDump(appState.currentKey, log);
   sendValueDump(appState.currentKey, log);
@@ -23,12 +24,15 @@ const handleLcdClick = (e) => {
     }
     appState.currentKey = appState.presetKey;
     appState.autoLoad = true;
+    appState.currentSoftkeys = []; // Clear softkeys on DSP switch
+    appState.childSubs = {}; // Clear child subs on DSP switch
     updateScreen();
   } else if (e.target.classList.contains('softkey')) {
     appState.keyStack.push(appState.currentKey);
     appState.currentKey = e.target.dataset.key;
     appState.paramOffset = 0; // Reset offset for new menu
     appState.autoLoad = true;
+    appState.childSubs = {}; // Clear child subs on navigation
     updateScreen();
   }
 };
@@ -82,7 +86,8 @@ const handleParamClick = (e, log) => {
   if (e.target.classList.contains('param-value')) {
     const key = e.target.dataset.key;
     // Find the sub for title and limits
-    const sub = appState.currentSubs.find(s => s.key === key);
+    const sub = appState.currentSubs.find(s => s.key === key) || 
+                Object.values(appState.childSubs || {}).flat().find(s => s.key === key);
     if (sub) {
       if (sub.type === 'NUM') {
         const title = sub.statement.replace(/%.*f/, '').trim(); // Clean format specifier
@@ -280,14 +285,95 @@ export function renderScreen(subs, ascii, log) {
         paramHtmlLines.push(fullHtml);
       }
     });
+
+    // Append child sub-menus if available
+    let localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
+    let embeddedKeys = new Set();
+    for (let local of localSoftSubs) {
+      const childSubs = (appState.childSubs || {})[local.key] || [];
+      if (childSubs.length > 0) {
+        embeddedKeys.add(local.key); // Track embedded to exclude from softkeys if desired
+        paramLines.push(''); // Blank line separator
+        paramHtmlLines.push('<br>'); // HTML separator
+        const childMain = childSubs[0];
+        const childTitle = childMain.statement || childMain.tag || '';
+        paramLines.push(childTitle);
+        paramHtmlLines.push(childTitle);
+
+        // Process child params similarly
+        childSubs.slice(1).forEach(cs => {
+          let childFullText = '';
+          let childFullHtml = '';
+          if (cs.type === 'NUM') {
+            const value = appState.currentValues[cs.key] || cs.value;
+            if (!appState.currentValues[cs.key]) sendValueDump(cs.key);
+            const formatStr = cs.statement || cs.tag || '';
+            childFullText = formatValue(formatStr, value);
+            childFullHtml = formatValue(formatStr, value, true, cs.key);
+          } else if (cs.type === 'INF') {
+            let value = appState.currentValues[cs.key] || cs.value || '';
+            if (appState.currentValues[cs.key] === undefined && !cs.value) sendValueDump(cs.key, log);
+            childFullText = cs.statement.replace(/%(-)?(\d*)s/g, (match, leftFlag, widthStr) => {
+              const leftAlign = !!leftFlag;
+              const width = parseInt(widthStr) || 0;
+              if (width === 0) return value;
+              return leftAlign ? value.padEnd(width) : value.padStart(width);
+            });
+            childFullHtml = childFullText;
+          } else if (cs.type === 'SET') {
+            let value = appState.currentValues[cs.key] || cs.value || '';
+            if (appState.currentValues[cs.key] === undefined && !cs.value) sendValueDump(cs.key, log); 
+            let displayValue = value;
+            let indexHex = '0';
+            if (value) {
+              indexHex = value.split(' ')[0];
+              displayValue = value.substring(indexHex.length + 1);
+            }
+            const indexDec = parseInt(indexHex, 16).toString(10);
+            childFullText = (cs.statement || '').replace(/%s/g, displayValue);
+            let selectHtml = `<select data-key="${cs.key}" class="param-select">`;
+            cs.options.forEach(option => {
+              const isSelected = option.index === indexDec;
+              selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
+            });
+            selectHtml += `</select>`;
+            childFullHtml = (cs.statement || '').replace(/%s/g, selectHtml);
+          } else if (cs.type === 'CON') {
+            const meterValue = parseFloat(appState.currentValues[cs.key] || cs.value) || 0;
+            const tagLength = cs.tag.length;
+            const barSpace = 40 - tagLength - 1;
+            const barLength = Math.round(meterValue * barSpace);
+            const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
+            childFullText = `${cs.tag} ${bar}`.padEnd(40);
+            childFullHtml = `<span class="param-label">${cs.tag}</span> <span class="meter-bar">${bar}</span>`;
+            if (log) log(`Rendering CON for key ${cs.key}: tag=${cs.tag}, value=${meterValue}, barLength=${barLength}, line="${childFullText.trim()}"`, 'debug', 'renderScreen');
+          } else if (cs.type === 'TRG') {
+            childFullHtml = `<span class="param-value" data-key="${cs.key}">${cs.statement}</span>`;
+            childFullText = cs.statement;
+          }
+          if (childFullText) {
+            paramLines.push(childFullText);
+            paramHtmlLines.push(childFullHtml);
+          }
+        });
+      }
+    }
+
     displayLines = displayLines.concat(paramLines);
     paramDisplayedHtml = paramHtmlLines;
-    let localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
-    softSubs = localSoftSubs;
-    if (localSoftSubs.length > 0) {
-      appState.currentSoftkeys = localSoftSubs;
-    } else {
-      softSubs = appState.currentSoftkeys || [];
+    // Exclude embedded from softkeys if not wanted, but include per user example
+    localSoftSubs = localSoftSubs.filter(s => !embeddedKeys.has(s.key) || true); // Keep as per example
+    let uniqueSoftSubs = [];
+    const seen = new Set();
+    for (let s of [...(appState.currentSoftkeys || []), ...localSoftSubs]) {
+      if (!seen.has(s.key)) {
+        seen.add(s.key);
+        uniqueSoftSubs.push(s);
+      }
+    }
+    softSubs = uniqueSoftSubs;
+    if (softSubs.length > 0) {
+      appState.currentSoftkeys = softSubs;
     }
     const columnWidth = softSubs.length > 0 ? Math.floor(40 / softSubs.length) : 10;
     const softTags = softSubs.map(s => {
@@ -386,7 +472,8 @@ export function renderScreen(subs, ascii, log) {
   lcdEl.addEventListener('click', handleLcdClick);
   
   // Auto load first menu if applicable
-  if (appState.autoLoad) {
+  const hasParams = subs.slice(1).some(s => ['NUM', 'SET', 'CON', 'TRG', 'INF'].includes(s.type));
+  if (appState.autoLoad && !hasParams) {
     appState.autoLoad = false;
     const softSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
     if (softSubs.length > 0) {
@@ -394,5 +481,7 @@ export function renderScreen(subs, ascii, log) {
       appState.currentKey = softSubs[0].key;
       updateScreen();
     }
+  } else if (appState.autoLoad) {
+    appState.autoLoad = false;
   }
 }

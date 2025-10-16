@@ -289,11 +289,16 @@ export function renderScreen(subs, ascii, log) {
     });
 
     // Append only the first child sub-menu inline if available
+    const hasNonColParams = subs.slice(1).some(s => ['NUM', 'SET', 'CON', 'TRG', 'INF'].includes(s.type));
     let localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
+    if (hasNonColParams) {
+      localSoftSubs = localSoftSubs.filter(s => s.position !== '0');
+    }
+    let potentialEmbedSubs = subs.slice(1).filter(s => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey);
     let embeddedKey = null;
-    for (let local of localSoftSubs) {
+    for (let local of potentialEmbedSubs) {
       const childSubs = (appState.childSubs || {})[local.key] || [];
-      if (childSubs.length > 0 && !embeddedKey && local.parent === appState.currentKey) {
+      if (childSubs.length > 0 && !embeddedKey) {
         embeddedKey = local.key; // Only embed the first local COL
         paramLines.push(''); // Blank line separator
         paramHtmlLines.push('<br>'); // HTML separator

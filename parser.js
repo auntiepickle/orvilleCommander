@@ -228,10 +228,11 @@ export function parseResponse(data, log) {
         appState.isLoadingPreset = false;
       }
     } else {
-      // Store child sub-menu data if parent matches currentKey
-      if (main.parent === appState.currentKey) {
+      // Store child sub-menu data if it's a child of the current menu
+      const isChild = appState.currentSubs.some(s => s.key === main.key && s.parent === appState.currentKey);
+      if (isChild) {
         appState.childSubs[main.key] = subs;
-        log(`Stored child subs for key ${main.key} under parent ${main.parent}`, 'debug', 'parsedDump');
+        log(`Stored child subs for key ${main.key} under parent ${appState.currentKey}`, 'debug', 'parsedDump');
         renderScreen(appState.currentSubs, appState.lastAscii, log); // Re-render to include child data
       }
     }
@@ -335,7 +336,7 @@ export function parseSubObject(line) {
       value = `${current_index} ${current_desc}`;
       const num = parseInt(parts[i++], 16);
       for (let j = 0; j < num; j++) {
-        const desc = parts[i + j]; // Removed replace(/'/g, '') to preserve apostrophes in names
+        const desc = parts[i + j]; // Preserve apostrophes in desc
         const index = j.toString(10);
         options.push({ index, desc });
       }

@@ -140,16 +140,24 @@ const handleParamClick = (e, log) => {
 };
 
 function formatValue(statement, value, isHtml = false, key = '') {
-  return statement.replace(/%(\d*)(\.\d*)?f|%/g, (match, widthStr, precStr) => {
+  return statement.replace(/%(\d*)(\.\d*)?f|%(-)?(\d*)s|%/g, (match, widthStr, precStr, leftFlag, sWidthStr) => {
     if (match === '%') return '%';
-    const width = widthStr ? parseInt(widthStr) : 0;
-    const prec = precStr ? parseInt(precStr.slice(1)) : 0;
-    let valStr = parseFloat(value).toFixed(prec);
-    if (width) valStr = valStr.padStart(width);
-    if (isHtml) {
-      return `<span class="param-value" data-key="${key}">${valStr}</span>`;
+    if (widthStr !== undefined && precStr !== undefined) { // %width.precf
+      const width = widthStr ? parseInt(widthStr) : 0;
+      const prec = precStr ? parseInt(precStr.slice(1)) : 0;
+      let valStr = parseFloat(value).toFixed(prec);
+      if (width) valStr = valStr.padStart(width);
+      if (isHtml) {
+        return `<span class="param-value" data-key="${key}">${valStr}</span>`;
+      }
+      return valStr;
+    } else if (leftFlag !== undefined || sWidthStr !== undefined) { // %-widths or %widths
+      const leftAlign = !!leftFlag;
+      const width = sWidthStr ? parseInt(sWidthStr) : 0;
+      if (width === 0) return value;
+      return leftAlign ? value.padEnd(width) : value.padStart(width);
     }
-    return valStr;
+    return match;
   });
 }
 
@@ -194,7 +202,6 @@ export function renderScreen(subs, ascii, log) {
     displayLines.push(title);
     let paramLines = [];
     let paramHtmlLines = [];
-
     // Group graphic EQ NUMs with position 'a'
     const graphicEqSubs = subs.slice(1).filter(s => s.type === 'NUM' && s.position === 'a');
     let graphicEqLine = '';
@@ -228,25 +235,14 @@ export function renderScreen(subs, ascii, log) {
       if (s.type === 'NUM') {
         const value = appState.currentValues[s.key] || s.value;
         if (!appState.currentValues[s.key]) sendValueDump(s.key);
-        // Use statement if present, fallback to tag for formatting if statement empty
         const formatStr = s.statement || s.tag || '';
         fullText = formatValue(formatStr, value);
         fullHtml = formatValue(formatStr, value, true, s.key);
-        paramLines.push(fullText);
-        paramHtmlLines.push(fullHtml);
       } else if (s.type === 'INF') {
         let value = appState.currentValues[s.key] || s.value || '';
-        if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, log);
-        // Parse format for %[-width]s
-        fullText = s.statement.replace(/%(-)?(\d*)s/g, (match, leftFlag, widthStr) => {
-          const leftAlign = !!leftFlag;
-          const width = parseInt(widthStr) || 0;
-          if (width === 0) return value;
-          return leftAlign ? value.padEnd(width) : value.padStart(width);
-        });
+        if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, log); 
+        fullText = formatValue(s.statement, value); // Use updated formatValue with s support
         fullHtml = fullText;
-        paramLines.push(fullText);
-        paramHtmlLines.push(fullHtml);
       } else if (s.type === 'SET') {
         let value = appState.currentValues[s.key] || s.value || '';
         if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, log); 
@@ -257,50 +253,55 @@ export function renderScreen(subs, ascii, log) {
           displayValue = value.substring(indexHex.length + 1);
         }
         const indexDec = parseInt(indexHex, 16).toString(10);
-        fullText = (s.statement || '').replace(/%s/g, displayValue);
+        fullText = formatValue(s.statement || '', displayValue); // Use formatValue for %-width s
         let selectHtml = `<select data-key="${s.key}" class="param-select">`;
         s.options.forEach(option => {
           const isSelected = option.index === indexDec;
           selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
         });
         selectHtml += `</select>`;
-        fullHtml = (s.statement || '').replace(/%s/g, selectHtml);
-        paramLines.push(fullText);
-        paramHtmlLines.push(fullHtml);
+        fullHtml = (s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
       } else if (s.type === 'CON') {
         const meterValue = parseFloat(appState.currentValues[s.key] || s.value) || 0;
-        const tagLength = s.tag.length;
-        const barSpace = 40 - tagLength - 1;
-        const barLength = Math.round(meterValue * barSpace);
-        const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength); // Use ░ for empty to visualize full meter
-        fullText = `${s.tag} ${bar}`.padEnd(40);
-        fullHtml = `<span class="param-label">${s.tag}</span> <span class="meter-bar">${bar}</span>`;
-        if (log) log(`Rendering CON for key ${s.key}: tag=${s.tag}, value=${meterValue}, barLength=${barLength}, line="${fullText.trim()}"`, 'debug', 'renderScreen');
-        paramLines.push(fullText);
-        paramHtmlLines.push(fullHtml);
+        if (/%[fs]/.test(s.statement)) {
+          let displayValue = meterValue;
+          if (s.statement.includes('%%')) displayValue *= 100;
+          fullText = formatValue(s.statement, displayValue);
+          if (fullText.includes('%%')) fullText = fullText.replace('%%', '%');
+          fullHtml = fullText;
+        } else {
+          const tagLength = s.tag.length;
+          const barSpace = 40 - tagLength - 1;
+          const barLength = Math.round(meterValue * barSpace);
+          const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
+          fullText = `${s.tag} ${bar}`.padEnd(40);
+          fullHtml = `<span class="param-label">${s.tag}</span> <span class="meter-bar">${bar}</span>`;
+          if (log) log(`Rendering CON for key ${s.key}: tag=${s.tag}, value=${meterValue}, barLength=${barLength}, line="${fullText.trim()}"`, 'debug', 'renderScreen');
+        }
       } else if (s.type === 'TRG') {
         fullHtml = `<span class="param-value" data-key="${s.key}">${s.statement}</span>`;
         fullText = s.statement;
+      }
+      if (fullText) {
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
       }
     });
 
-    // Append child sub-menus if available
+    // Append only the first child sub-menu inline if available
     let localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
-    let embeddedKeys = new Set();
+    let embeddedKey = null;
     for (let local of localSoftSubs) {
       const childSubs = (appState.childSubs || {})[local.key] || [];
-      if (childSubs.length > 0) {
-        embeddedKeys.add(local.key); // Track embedded to exclude from softkeys if desired
+      if (childSubs.length > 0 && !embeddedKey && local.parent === appState.currentKey) {
+        embeddedKey = local.key; // Only embed the first local COL
         paramLines.push(''); // Blank line separator
         paramHtmlLines.push('<br>'); // HTML separator
         const childMain = childSubs[0];
-        const childTitle = childMain.statement || childMain.tag || '';
+        const childTitle = childMain.tag || childMain.statement || '';
         paramLines.push(childTitle);
         paramHtmlLines.push(childTitle);
-
-        // Process child params similarly
+        // Process child params
         childSubs.slice(1).forEach(cs => {
           let childFullText = '';
           let childFullHtml = '';
@@ -312,13 +313,8 @@ export function renderScreen(subs, ascii, log) {
             childFullHtml = formatValue(formatStr, value, true, cs.key);
           } else if (cs.type === 'INF') {
             let value = appState.currentValues[cs.key] || cs.value || '';
-            if (appState.currentValues[cs.key] === undefined && !cs.value) sendValueDump(cs.key, log);
-            childFullText = cs.statement.replace(/%(-)?(\d*)s/g, (match, leftFlag, widthStr) => {
-              const leftAlign = !!leftFlag;
-              const width = parseInt(widthStr) || 0;
-              if (width === 0) return value;
-              return leftAlign ? value.padEnd(width) : value.padStart(width);
-            });
+            if (appState.currentValues[cs.key] === undefined && !cs.value) sendValueDump(cs.key, log); 
+            childFullText = formatValue(cs.statement, value);
             childFullHtml = childFullText;
           } else if (cs.type === 'SET') {
             let value = appState.currentValues[cs.key] || cs.value || '';
@@ -330,23 +326,31 @@ export function renderScreen(subs, ascii, log) {
               displayValue = value.substring(indexHex.length + 1);
             }
             const indexDec = parseInt(indexHex, 16).toString(10);
-            childFullText = (cs.statement || '').replace(/%s/g, displayValue);
+            childFullText = formatValue(cs.statement || '', displayValue);
             let selectHtml = `<select data-key="${cs.key}" class="param-select">`;
             cs.options.forEach(option => {
               const isSelected = option.index === indexDec;
               selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
             });
             selectHtml += `</select>`;
-            childFullHtml = (cs.statement || '').replace(/%s/g, selectHtml);
+            childFullHtml = (cs.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
           } else if (cs.type === 'CON') {
             const meterValue = parseFloat(appState.currentValues[cs.key] || cs.value) || 0;
-            const tagLength = cs.tag.length;
-            const barSpace = 40 - tagLength - 1;
-            const barLength = Math.round(meterValue * barSpace);
-            const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
-            childFullText = `${cs.tag} ${bar}`.padEnd(40);
-            childFullHtml = `<span class="param-label">${cs.tag}</span> <span class="meter-bar">${bar}</span>`;
-            if (log) log(`Rendering CON for key ${cs.key}: tag=${cs.tag}, value=${meterValue}, barLength=${barLength}, line="${childFullText.trim()}"`, 'debug', 'renderScreen');
+            if (/%[fs]/.test(cs.statement)) {
+              let displayValue = meterValue;
+              if (cs.statement.includes('%%')) displayValue *= 100;
+              childFullText = formatValue(cs.statement, displayValue);
+              if (childFullText.includes('%%')) childFullText = childFullText.replace('%%', '%');
+              childFullHtml = childFullText;
+            } else {
+              const tagLength = cs.tag.length;
+              const barSpace = 40 - tagLength - 1;
+              const barLength = Math.round(meterValue * barSpace);
+              const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
+              childFullText = `${cs.tag} ${bar}`.padEnd(40);
+              childFullHtml = `<span class="param-label">${cs.tag}</span> <span class="meter-bar">${bar}</span>`;
+              if (log) log(`Rendering CON for key ${cs.key}: tag=${cs.tag}, value=${meterValue}, barLength=${barLength}, line="${childFullText.trim()}"`, 'debug', 'renderScreen');
+            }
           } else if (cs.type === 'TRG') {
             childFullHtml = `<span class="param-value" data-key="${cs.key}">${cs.statement}</span>`;
             childFullText = cs.statement;
@@ -356,13 +360,14 @@ export function renderScreen(subs, ascii, log) {
             paramHtmlLines.push(childFullHtml);
           }
         });
+        break; // Only embed the first local COL
       }
     }
 
     displayLines = displayLines.concat(paramLines);
     paramDisplayedHtml = paramHtmlLines;
-    // Exclude embedded from softkeys if not wanted, but include per user example
-    localSoftSubs = localSoftSubs.filter(s => !embeddedKeys.has(s.key) || true); // Keep as per example
+    // Filter out the embedded local COL from softkeys
+    localSoftSubs = localSoftSubs.filter(s => s.key !== embeddedKey);
     let uniqueSoftSubs = [];
     const seen = new Set();
     for (let s of [...(appState.currentSoftkeys || []), ...localSoftSubs]) {

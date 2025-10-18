@@ -47,7 +47,7 @@ const toggleMeterPollingBtn = document.getElementById('toggle-meter-polling');
 const pollingIndicator = document.getElementById('polling-indicator');
 const levels = { error: 0, info: 1, debug: 2 };
 
-function log(message, level = 'info', category = 'general') {
+export function log(message, level = 'info', category = 'general') {
   if (levels[appState.logLevel] < levels[level] || !appState.logCategories[category]) return;
   const timestamp = new Date().toISOString();
   const entry = `[${timestamp}] ${message}\n`;

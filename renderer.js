@@ -497,10 +497,10 @@ export function renderScreen(subs, ascii, logParam) {
  
   // Auto load first menu if applicable
   const hasParams = subs.slice(1).some(s => ['NUM', 'SET', 'CON', 'TRG', 'INF'].includes(s.type));
-  if (appState.autoLoad && !hasParams) {
+  if (appState.autoLoad && !hasParams && appState.currentKey !== '10010000') {
     appState.autoLoad = false;
     const softSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
-    if (softSubs.length > 0) {
+    if (softSubs.length > 1) {
       log(`Auto-loading first menu: ${softSubs[0].key} - ${softSubs[0].tag}`, 'info', 'general');
       appState.keyStack.push(appState.currentKey);
       appState.currentKey = softSubs[0].key;

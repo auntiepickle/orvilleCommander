@@ -8,6 +8,9 @@ import { showLoading } from './main.js';
 export function updateScreen(log = null) {
   appState.childSubs = {}; // Clear childSubs on update to prevent stale data
   appState.currentValues = {};
+  if (!appState.currentKey.startsWith('4') && !appState.currentKey.startsWith('8')) {
+    appState.currentSoftkeys = []; // Clear softkeys only for non-preset menus to prevent leakage while preserving in effects
+  }
   sendObjectInfoDump(appState.currentKey, log);
   sendValueDump(appState.currentKey, log);
 }
@@ -173,6 +176,7 @@ export function renderScreen(subs, ascii, log) {
   let isTabLineAdded = false;
   let topHtml = '';
   let softSubs = [];
+  const isPreset = appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8');
 
   if (appState.dspAName && appState.dspBName) {
     const isAActive = appState.presetKey.startsWith('4');
@@ -381,7 +385,12 @@ export function renderScreen(subs, ascii, log) {
         uniqueSoftSubs.push(s);
       }
     }
-    softSubs = uniqueSoftSubs;
+    // Only render dynamic softkeys if in a preset/effect menu; otherwise, use subs directly for static menus
+    if (isPreset) {
+      softSubs = uniqueSoftSubs;
+    } else {
+      softSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim());
+    }
     if (softSubs.length > 0) {
       appState.currentSoftkeys = softSubs;
     }

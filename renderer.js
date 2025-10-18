@@ -270,7 +270,7 @@ export function renderScreen(subs, ascii, logParam) {
         if (isNaN(meterValue)) {
           meterValue = 0; // Default to 0 if invalid value
         }
-        if (/%[fs]/.test(s.statement)) {
+        if (/%.*[fs]/.test(s.statement)) {
           let displayValue = meterValue;
           if (s.statement.includes('%%')) displayValue *= 100;
           fullText = formatValue(s.statement, displayValue);
@@ -351,7 +351,7 @@ export function renderScreen(subs, ascii, logParam) {
             if (isNaN(meterValue)) {
               meterValue = 0; // Default to 0 if invalid value
             }
-            if (/%[fs]/.test(cs.statement)) {
+            if (/%.*[fs]/.test(cs.statement)) {
               let displayValue = meterValue;
               if (cs.statement.includes('%%')) displayValue *= 100;
               childFullText = formatValue(cs.statement, displayValue);

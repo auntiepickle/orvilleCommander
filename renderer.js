@@ -266,7 +266,10 @@ export function renderScreen(subs, ascii, logParam) {
         selectHtml += `</select>`;
         fullHtml = (s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
       } else if (s.type === 'CON') {
-        const meterValue = parseFloat(appState.currentValues[s.key] || s.value) || 0;
+        let meterValue = parseFloat(appState.currentValues[s.key] || s.value) || 0;
+        if (isNaN(meterValue)) {
+          meterValue = 0; // Default to 0 if invalid value
+        }
         if (/%[fs]/.test(s.statement)) {
           let displayValue = meterValue;
           if (s.statement.includes('%%')) displayValue *= 100;
@@ -276,7 +279,8 @@ export function renderScreen(subs, ascii, logParam) {
         } else {
           const tagLength = s.tag.length;
           const barSpace = 40 - tagLength - 1;
-          const barLength = Math.round(meterValue * barSpace);
+          let barLength = Math.round(meterValue * barSpace);
+          barLength = Math.max(0, Math.min(barSpace, barLength)); // Clamp to prevent invalid repeat counts
           const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
           fullText = `${s.tag} ${bar}`.padEnd(40);
           fullHtml = `<span class="param-label">${s.tag}</span> <span class="meter-bar">${bar}</span>`;
@@ -343,7 +347,10 @@ export function renderScreen(subs, ascii, logParam) {
             selectHtml += `</select>`;
             childFullHtml = (cs.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
           } else if (cs.type === 'CON') {
-            const meterValue = parseFloat(appState.currentValues[cs.key] || cs.value) || 0;
+            let meterValue = parseFloat(appState.currentValues[cs.key] || cs.value) || 0;
+            if (isNaN(meterValue)) {
+              meterValue = 0; // Default to 0 if invalid value
+            }
             if (/%[fs]/.test(cs.statement)) {
               let displayValue = meterValue;
               if (cs.statement.includes('%%')) displayValue *= 100;
@@ -353,7 +360,8 @@ export function renderScreen(subs, ascii, logParam) {
             } else {
               const tagLength = cs.tag.length;
               const barSpace = 40 - tagLength - 1;
-              const barLength = Math.round(meterValue * barSpace);
+              let barLength = Math.round(meterValue * barSpace);
+              barLength = Math.max(0, Math.min(barSpace, barLength)); // Clamp to prevent invalid repeat counts
               const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
               childFullText = `${cs.tag} ${bar}`.padEnd(40);
               childFullHtml = `<span class="param-label">${cs.tag}</span> <span class="meter-bar">${bar}</span>`;

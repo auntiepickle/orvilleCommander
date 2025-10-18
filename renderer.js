@@ -9,8 +9,8 @@ import { log } from './main.js'; // Added import for log
 export function updateScreen(logParam = null) {
   appState.childSubs = {}; // Clear childSubs on update to prevent stale data
   appState.currentValues = {};
-  if (!appState.currentKey.startsWith('4') && !appState.currentKey.startsWith('8')) {
-    appState.currentSoftkeys = []; // Clear softkeys only for non-preset menus to prevent leakage while preserving in effects
+  if (appState.currentKey === '0' || ['10010000', '10020000', '10030000', '10030500'].includes(appState.currentKey)) {
+    appState.currentSoftkeys = []; // Clear at root or top-level non-preset menu roots to prevent leakage
   }
   sendObjectInfoDump(appState.currentKey, logParam);
   sendValueDump(appState.currentKey, logParam);
@@ -303,6 +303,13 @@ export function renderScreen(subs, ascii, logParam) {
     }
     let potentialEmbedSubs = subs.slice(1).filter(s => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey);
     let embeddedKey = null;
+    // Proactively fetch single position-0 child for embedding (wrappers)
+    if (potentialEmbedSubs.length === 1) {
+      const embedKey = potentialEmbedSubs[0].key;
+      if (!appState.childSubs[embedKey]) {
+        sendObjectInfoDump(embedKey, logParam);
+      }
+    }
     for (let local of potentialEmbedSubs) {
       const childSubs = (appState.childSubs || {})[local.key] || [];
       if (childSubs.length > 0 && !embeddedKey) {
@@ -310,9 +317,12 @@ export function renderScreen(subs, ascii, logParam) {
         paramLines.push(''); // Blank line separator
         paramHtmlLines.push('<br>'); // HTML separator
         const childMain = childSubs[0];
-        const childTitle = childMain.tag || childMain.statement || '';
-        paramLines.push(childTitle);
-        paramHtmlLines.push(childTitle);
+        const childTitle = childMain.statement || childMain.tag || '';
+        // Skip childTitle if empty or duplicates parent title
+        if (childTitle && childTitle !== main.statement && childTitle !== main.tag) {
+          paramLines.push(childTitle);
+          paramHtmlLines.push(childTitle);
+        }
         // Process child params
         childSubs.slice(1).forEach(cs => {
           let childFullText = '';
@@ -391,12 +401,8 @@ export function renderScreen(subs, ascii, logParam) {
         uniqueSoftSubs.push(s);
       }
     }
-    // Only render dynamic softkeys if in a preset/effect menu; otherwise, use subs directly for static menus
-    if (isPreset) {
-      softSubs = uniqueSoftSubs;
-    } else {
-      softSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim());
-    }
+    // Use unique for both preset and non-preset to persist parent softkeys
+    softSubs = uniqueSoftSubs;
     if (softSubs.length > 0) {
       appState.currentSoftkeys = softSubs;
     }

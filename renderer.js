@@ -8,6 +8,7 @@ import { showLoading } from './main.js';
 export function updateScreen(log = null) {
   appState.childSubs = {}; // Clear childSubs on update to prevent stale data
   appState.currentValues = {};
+  appState.currentSoftkeys = []; // Clear softkeys on every update to prevent persistence from previous menus
   sendObjectInfoDump(appState.currentKey, log);
   sendValueDump(appState.currentKey, log);
 }
@@ -290,11 +291,12 @@ export function renderScreen(subs, ascii, log) {
 
     // Append only the first child sub-menu inline if available
     const hasNonColParams = subs.slice(1).some(s => ['NUM', 'SET', 'CON', 'TRG', 'INF'].includes(s.type));
+    const isDspMenu = appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8');
     let localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
-    if (hasNonColParams) {
+    if (hasNonColParams && isDspMenu) {
       localSoftSubs = localSoftSubs.filter(s => s.position !== '0');
     }
-    let potentialEmbedSubs = subs.slice(1).filter(s => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey);
+    let potentialEmbedSubs = subs.slice(1).filter(s => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey && isDspMenu);
     let embeddedKey = null;
     for (let local of potentialEmbedSubs) {
       const childSubs = (appState.childSubs || {})[local.key] || [];

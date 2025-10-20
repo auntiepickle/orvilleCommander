@@ -24,7 +24,9 @@ const handleLcdClick = (e) => {
   if (e.target.classList.contains('dsp-clickable')) {
     appState.presetKey = e.target.dataset.key;
     if (!appState.currentKey.startsWith('4') && !appState.currentKey.startsWith('8')) {
-      appState.keyStack.push(appState.currentKey);
+      const parentMain = appState.currentSubs[0];
+      const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
+      appState.keyStack.push({key: appState.currentKey, tag: parentTag, subs: (appState.currentSubs || []).slice()});
     }
     appState.currentKey = appState.presetKey;
     appState.autoLoad = true;
@@ -32,12 +34,34 @@ const handleLcdClick = (e) => {
     appState.childSubs = {}; // Clear child subs on DSP switch
     updateScreen();
   } else if (e.target.classList.contains('softkey')) {
-    log(`User clicked virtual softkey: ${e.target.dataset.key} - ${e.target.textContent.trim()}`, 'info', 'general');
-    appState.keyStack.push(appState.currentKey);
-    appState.currentKey = e.target.dataset.key;
+    const newKey = e.target.dataset.key;
+    if (appState.keyStack.length > 0) {
+      const parentEntry = appState.keyStack[appState.keyStack.length - 1];
+      if (parentEntry.subs.some(s => s.key === newKey && s.type === 'COL') && newKey !== appState.currentKey) {
+        log(`User clicked sibling softkey: ${newKey} - ${e.target.textContent.trim()}`, 'info', 'general');
+        appState.currentKey = newKey;
+        appState.paramOffset = 0;
+        appState.autoLoad = true;
+        appState.childSubs = {};
+        updateScreen();
+        return;
+      }
+    }
+    log(`User clicked virtual softkey: ${newKey} - ${e.target.textContent.trim()}`, 'info', 'general');
+    const parentMain = appState.currentSubs[0];
+    const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
+    appState.keyStack.push({key: appState.currentKey, tag: parentTag, subs: (appState.currentSubs || []).slice()});
+    appState.currentKey = newKey;
     appState.paramOffset = 0; // Reset offset for new menu
     appState.autoLoad = true;
     appState.childSubs = {}; // Clear child subs on navigation
+    updateScreen();
+  } else if (e.target.classList.contains('back-link')) {
+    const clickedKey = e.target.dataset.key;
+    appState.keyStack.pop();
+    appState.currentKey = clickedKey;
+    appState.autoLoad = true;
+    appState.currentSoftkeys = [];
     updateScreen();
   }
 };
@@ -176,10 +200,12 @@ export function renderScreen(subs, ascii, logParam) {
   appState.currentSubs = subs;
   const main = subs[0];
   let displayLines = [];
-  let paramDisplayedHtml = [];
+  let paramLines = [];
+  let paramHtmlLines = [];
   let isTabLineAdded = false;
   let topHtml = '';
   let softSubs = [];
+  let localSoftSubs = [];
   const isPreset = appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8');
   if (appState.dspAName && appState.dspBName) {
     const isAActive = appState.presetKey.startsWith('4');
@@ -191,22 +217,34 @@ export function renderScreen(subs, ascii, logParam) {
       isTabLineAdded = true;
     }
   }
+  let titleText;
+  let titleHtml;
   if (appState.currentKey === '0') {
     displayLines.push('');
     displayLines.push('');
     const softSubsUsed = subs.filter(s => s.type === 'COL' && s.tag.trim() && s.key !== '401000b' && s.key !== '801000b' && s.key !== '10040000' && s.key !== '0');
-    const columnWidth = Math.floor(40 / softSubsUsed.length);
-    const softTags = softSubsUsed.map(s => {
-      const t = s.tag.trim();
-      const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
-      return text;
-    });
-    displayLines.push(softTags.join(''));
+    const itemsPerLine = 4;
+    let softTextLines = [];
+    for (let i = 0; i < softSubsUsed.length; i += itemsPerLine) {
+      const slice = softSubsUsed.slice(i, i + itemsPerLine);
+      const columnWidth = Math.floor(40 / slice.length);
+      const softTags = slice.map(s => {
+        const t = s.tag.trim();
+        const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
+        return text;
+      });
+      softTextLines.push(softTags.join(''));
+    }
+    displayLines.push(...softTextLines);
   } else {
-    let title = main.statement || main.tag || 'Menu';
-    displayLines.push(title);
-    let paramLines = [];
-    let paramHtmlLines = [];
+    titleText = main.statement || main.tag || 'Menu';
+    titleHtml = titleText;
+    if (appState.keyStack.length > 0) {
+      const parent = appState.keyStack[appState.keyStack.length - 1];
+      titleText = `[${parent.tag}] ${titleText}`;
+      titleHtml = `<span class="back-link" data-key="${parent.key}">[${parent.tag}]</span> ${titleText.replace(`[${parent.tag}] `, '')}`;
+    }
+    displayLines.push(titleText);
     // Group graphic EQ NUMs with position 'a'
     const graphicEqSubs = subs.slice(1).filter(s => s.type === 'NUM' && s.position === 'a');
     let graphicEqLine = '';
@@ -297,7 +335,7 @@ export function renderScreen(subs, ascii, logParam) {
     });
     // Append only the first child sub-menu inline if available
     const hasNonColParams = subs.slice(1).some(s => ['NUM', 'SET', 'CON', 'TRG', 'INF'].includes(s.type));
-    let localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
+    localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
     if (hasNonColParams) {
       localSoftSubs = localSoftSubs.filter(s => s.position !== '0');
     }
@@ -390,33 +428,91 @@ export function renderScreen(subs, ascii, logParam) {
       }
     }
     displayLines = displayLines.concat(paramLines);
-    paramDisplayedHtml = paramHtmlLines;
     // Filter out the embedded local COL from softkeys
     localSoftSubs = localSoftSubs.filter(s => s.key !== embeddedKey);
-    let uniqueSoftSubs = [];
-    const seen = new Set();
-    for (let s of [...(appState.currentSoftkeys || []), ...localSoftSubs]) {
-      if (!seen.has(s.key)) {
-        seen.add(s.key);
-        uniqueSoftSubs.push(s);
-      }
+    // Set softSubs: local if present, else immediate parent's COLs for leaf menus
+    if (appState.keyStack.length > 0) {
+      const parentEntry = appState.keyStack[appState.keyStack.length - 1];
+      const parentColSubs = (parentEntry.subs || []).slice(1).filter(s => s.type === 'COL' && s.tag.trim());
+      softSubs = localSoftSubs.length > 0 ? localSoftSubs : parentColSubs;
+    } else {
+      softSubs = localSoftSubs;
     }
-    // Use unique for both preset and non-preset to persist parent softkeys
-    softSubs = uniqueSoftSubs;
     if (softSubs.length > 0) {
       appState.currentSoftkeys = softSubs;
     }
-    const columnWidth = softSubs.length > 0 ? Math.floor(40 / softSubs.length) : 10;
-    const softTags = softSubs.map(s => {
-      const t = s.tag.trim();
-      const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
-      return text;
-    });
+    // Build current/sibling soft text lines (lower level first)
+    const itemsPerLine = 4;
+    let softTextLines = [];
+    for (let i = 0; i < softSubs.length; i += itemsPerLine) {
+      const slice = softSubs.slice(i, i + itemsPerLine);
+      const columnWidth = Math.floor(40 / slice.length) || 10;
+      const softTags = slice.map(s => {
+        const t = s.tag.trim();
+        const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
+        return text;
+      });
+      softTextLines.push(softTags.join(''));
+    }
+    // Ancestor softkeys (higher levels after sibling level)
+    let ancestorSeparatorAdded = false;
     if (paramLines.length > 0) {
       displayLines.push('');
+      ancestorSeparatorAdded = true;
     }
-    displayLines.push(softTags.join(''));
-    displayLines.push('');
+    displayLines.push(...softTextLines);
+    // Render immediate parent softkeys only if local >0 (non-leaf)
+    if (appState.keyStack.length > 1 && (localSoftSubs || []).length > 0) {
+      const parentEntry = appState.keyStack[appState.keyStack.length - 1];
+      if (!parentEntry.key.startsWith('4') && !parentEntry.key.startsWith('8')) { // Skip if parent is preset
+        if (softTextLines.length > 0 && !ancestorSeparatorAdded) {
+          displayLines.push('');
+          ancestorSeparatorAdded = true;
+        }
+        const parentSoftSubs = (parentEntry.subs || []).slice(1).filter(s => s.type === 'COL' && s.tag.trim());
+        const parentHighlightKey = appState.currentKey;
+        let parentSoftTextLines = [];
+        for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
+          const slice = parentSoftSubs.slice(i, i + itemsPerLine);
+          const columnWidth = Math.floor(40 / slice.length) || 10;
+          const softTags = slice.map(s => {
+            const t = s.tag.trim();
+            const text = (s.key === parentHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
+            return text;
+          });
+          parentSoftTextLines.push(softTags.join(''));
+        }
+        displayLines.push(...parentSoftTextLines);
+      }
+    }
+    // Render grandparent softkeys if depth >2
+    if (appState.keyStack.length > 2) {
+      if ((softTextLines.length > 0 || (appState.keyStack.length > 1 && (localSoftSubs || []).length > 0)) && !ancestorSeparatorAdded) {
+        displayLines.push('');
+        ancestorSeparatorAdded = true;
+      }
+      const upperEntryIndex = appState.keyStack.length - 2;
+      const upperEntry = appState.keyStack[upperEntryIndex];
+      if (!upperEntry.key.startsWith('4') && !upperEntry.key.startsWith('8')) { // Skip if grandparent is preset
+        const upperSoftSubs = (upperEntry.subs || []).slice(1).filter(s => s.type === 'COL' && s.tag.trim());
+        const upperHighlightKey = appState.keyStack[appState.keyStack.length - 1].key;
+        let upperSoftTextLines = [];
+        for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {
+          const slice = upperSoftSubs.slice(i, i + itemsPerLine);
+          const columnWidth = Math.floor(40 / slice.length) || 10;
+          const softTags = slice.map(s => {
+            const t = s.tag.trim();
+            const text = (s.key === upperHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
+            return text;
+          });
+          upperSoftTextLines.push(softTags.join(''));
+        }
+        displayLines.push(...upperSoftTextLines);
+      }
+    }
+    if (displayLines.length > 0 && displayLines[displayLines.length - 1] !== '') {
+      displayLines.push('');
+    }
     const staticRootSoftSubs = [
       {key: '10020000', tag: 'program'},
       {key: '10010000', tag: 'setup'},
@@ -436,39 +532,95 @@ export function renderScreen(subs, ascii, logParam) {
   const startIndex = isTabLineAdded ? 1 : 0;
   if (appState.currentKey === '0') {
     mainHtmlLines = displayLines.slice(startIndex).map((l, index) => {
-      if (index === displayLines.length - startIndex - 1) {
-        let softHtml = '';
-        let softSubsUsed = subs.filter(s => s.type === 'COL' && s.tag.trim() && s.key !== '401000b' && s.key !== '801000b' && s.key !== '10040000' && s.key !== '0');
-        const columnWidth = Math.floor(40 / softSubsUsed.length);
-        softSubsUsed.forEach((s, idx) => {
-          const t = (s.tag || '').trim();
-          const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
-          softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
-        });
-        return softHtml;
+      if (index >= displayLines.length - startIndex - softTextLines.length) { // For multi-line softkeys in root if needed
+        return l; // Text lines already prepared
       } else {
         return l;
       }
     });
   } else {
-    mainHtmlLines = displayLines.slice(startIndex, -1).map((l, index) => {
-      if (index === displayLines.length - startIndex - 3) { // dynamic softkeys before '' static
-        let softHtml = '';
-        const columnWidth = softSubs.length > 0 ? Math.floor(40 / softSubs.length) : 10;
-        softSubs.forEach((s, idx) => {
-          const t = (s.tag || '').trim();
-          const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
-          softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
-        });
-        return softHtml;
-      } else if (index > 0 && index < displayLines.length - startIndex - 3) {
-        const paramIndex = index - 1; // Adjust for title at 0
-        const html = paramDisplayedHtml[paramIndex];
-        return html || l;
-      } else {
-        return l;
+    // Explicitly build mainHtmlLines for clarity and multi-line softkeys
+    mainHtmlLines.push(titleHtml); // Use titleHtml with breadcrumb
+    paramHtmlLines.forEach(html => mainHtmlLines.push(html)); // Param HTML
+    let ancestorSeparatorAdded = false;
+    if (paramLines.length > 0) {
+      mainHtmlLines.push(''); // Separator after params
+      ancestorSeparatorAdded = true;
+    }
+    // Build current/sibling soft HTML lines (lower level first)
+    let softHtmlLines = [];
+    const itemsPerLine = 4;
+    for (let i = 0; i < softSubs.length; i += itemsPerLine) {
+      let softHtml = '';
+      const slice = softSubs.slice(i, i + itemsPerLine);
+      const columnWidth = Math.floor(40 / slice.length) || 10;
+      slice.forEach((s, idx) => {
+        const t = (s.tag || '').trim();
+        const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
+        softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+      });
+      softHtmlLines.push(softHtml);
+    }
+    mainHtmlLines = mainHtmlLines.concat(softHtmlLines);
+    // Render immediate parent softkeys only if local >0 (non-leaf)
+    if (appState.keyStack.length > 1 && (localSoftSubs || []).length > 0) {
+      const parentEntry = appState.keyStack[appState.keyStack.length - 1];
+      if (!parentEntry.key.startsWith('4') && !parentEntry.key.startsWith('8')) { // Skip if parent is preset
+        if (softHtmlLines.length > 0 && !ancestorSeparatorAdded) {
+          mainHtmlLines.push('');
+          ancestorSeparatorAdded = true;
+        }
+        const parentSoftSubs = (parentEntry.subs || []).slice(1).filter(s => s.type === 'COL' && s.tag.trim());
+        const parentHighlightKey = appState.currentKey;
+        let parentSoftHtmlLines = [];
+        for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
+          let softHtml = '';
+          const slice = parentSoftSubs.slice(i, i + itemsPerLine);
+          const columnWidth = Math.floor(40 / slice.length) || 10;
+          slice.forEach((s, idx) => {
+            const t = s.tag.trim();
+            const text = (s.key === parentHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
+            softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+          });
+          parentSoftHtmlLines.push(softHtml);
+        }
+        mainHtmlLines = mainHtmlLines.concat(parentSoftHtmlLines);
+        if (parentSoftHtmlLines.length > 0) {
+          mainHtmlLines.push(''); // Separator after parent softkeys
+        }
+        log('Rendered immediate parent softkeys after current softkeys', 'debug', 'renderScreen');
       }
-    });
+    }
+    // Render grandparent softkeys if depth >2
+    if (appState.keyStack.length > 2) {
+      if ((softHtmlLines.length > 0 || (appState.keyStack.length > 1 && (localSoftSubs || []).length > 0)) && !ancestorSeparatorAdded) {
+        mainHtmlLines.push('');
+        ancestorSeparatorAdded = true;
+      }
+      const upperEntryIndex = appState.keyStack.length - 2;
+      const upperEntry = appState.keyStack[upperEntryIndex];
+      if (!upperEntry.key.startsWith('4') && !upperEntry.key.startsWith('8')) { // Skip if grandparent is preset
+        const upperSoftSubs = (upperEntry.subs || []).slice(1).filter(s => s.type === 'COL' && s.tag.trim());
+        const upperHighlightKey = appState.keyStack[appState.keyStack.length - 1].key;
+        let upperSoftHtmlLines = [];
+        for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {
+          let softHtml = '';
+          const slice = upperSoftSubs.slice(i, i + itemsPerLine);
+          const columnWidth = Math.floor(40 / slice.length) || 10;
+          slice.forEach((s, idx) => {
+            const t = s.tag.trim();
+            const text = (s.key === upperHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
+            softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+          });
+          upperSoftHtmlLines.push(softHtml);
+        }
+        mainHtmlLines = mainHtmlLines.concat(upperSoftHtmlLines);
+        log('Rendered grandparent softkeys after ancestor softkeys', 'debug', 'renderScreen');
+      }
+    }
+    if (mainHtmlLines.length > 0 && mainHtmlLines[mainHtmlLines.length - 1] !== '') {
+      mainHtmlLines.push(''); // Separator after softkeys
+    }
     // Static as bottom
     const staticRootSoftSubs = [
       {key: '10020000', tag: 'program'},
@@ -490,26 +642,25 @@ export function renderScreen(subs, ascii, logParam) {
     select.removeEventListener('change', handleSelectChange);
     select.addEventListener('change', handleSelectChange);
   });
- 
   // Add click listeners to param-value for NUM and TRG editing
   lcdEl.querySelectorAll('.param-value').forEach(span => {
     span.removeEventListener('click', handleParamClick);
     span.addEventListener('click', handleParamClick);
   });
- 
   // Remove and re-add the event listener to ensure only one is active
   lcdEl.removeEventListener('click', handleLcdClick);
   lcdEl.addEventListener('click', handleLcdClick);
- 
   // Auto load first menu if applicable
   const hasParams = subs.slice(1).some(s => ['NUM', 'SET', 'CON', 'TRG', 'INF'].includes(s.type));
   if (appState.autoLoad && !hasParams && appState.currentKey !== '10010000') {
     appState.autoLoad = false;
-    const softSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
-    if (softSubs.length > 1) {
-      log(`Auto-loading first menu: ${softSubs[0].key} - ${softSubs[0].tag}`, 'info', 'general');
-      appState.keyStack.push(appState.currentKey);
-      appState.currentKey = softSubs[0].key;
+    const softSubsLocal = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
+    if (softSubsLocal.length > 1) {
+      log(`Auto-loading first menu: ${softSubsLocal[0].key} - ${softSubsLocal[0].tag}`, 'info', 'general');
+      const parentMain = appState.currentSubs[0];
+      const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
+      appState.keyStack.push({key: appState.currentKey, tag: parentTag, subs: (appState.currentSubs || []).slice()});
+      appState.currentKey = softSubsLocal[0].key;
       updateScreen();
     }
   } else if (appState.autoLoad) {

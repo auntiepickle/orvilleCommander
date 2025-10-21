@@ -670,7 +670,7 @@ export function renderScreen(subs, ascii, logParam) {
   lcdEl.addEventListener('click', handleLcdClick);
   // Auto load first menu if applicable
   const hasParams = subs.slice(1).some(s => ['NUM', 'SET', 'CON', 'TRG', 'INF'].includes(s.type));
-  if (appState.autoLoad && !hasParams && appState.currentKey !== '10010000') {
+  if (appState.autoLoad && !hasParams) {
     appState.autoLoad = false;
     const softSubsLocal = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
     if (softSubsLocal.length > 1) {

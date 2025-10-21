@@ -84,33 +84,6 @@ if (toggleMeterPollingBtn) {
 
 
 copyLogBtn.addEventListener('click', () => {
-let pollingInterval = null;
-
-function startPolling(log) {
-  if (pollingInterval) clearInterval(pollingInterval);
-  pollingInterval = setInterval(() => {
-    const conSubs = appState.currentSubs.filter(s => s.type === 'CON');
-    conSubs.forEach(sub => {
-      const key = sub.key;
-      sendValueDump(key, log);
-    });
-  }, 100);
-}
-
-function stopPolling() {
-  if (pollingInterval) clearInterval(pollingInterval);
-  pollingInterval = null;
-}
-
-if (toggleMeterPollingBtn) {
-  toggleMeterPollingBtn.addEventListener('click', () => {
-    appState.pollingEnabled = !appState.pollingEnabled;
-    pollingIndicator.style.display = appState.pollingEnabled ? 'inline' : 'none';
-    if (appState.pollingEnabled) startPolling(log); else stopPolling();
-    log(`Meter polling ${appState.pollingEnabled ? 'enabled' : 'disabled'}`, 'info', 'general');
-  });
-}
-
   navigator.clipboard.writeText(logArea.value).then(() => log('Log copied to clipboard.', 'info', 'general'));
 });
 
@@ -180,7 +153,61 @@ clearConfigBtn.addEventListener('click', () => {
   clearConfig(log);
 });
 
-// ...(truncated 5124 characters)...
+applyLogCategoriesBtn.addEventListener('click', () => {
+  try {
+    const newCategories = JSON.parse(logCategoriesJson.value);
+    appState.logCategories = { ...appState.logCategories, ...newCategories };
+    log('Updated log categories.', 'info', 'general');
+  } catch (e) {
+    log('Invalid JSON for log categories.', 'error', 'error');
+  }
+});
+
+fetchBitmapCheckbox.addEventListener('change', () => {
+  appState.fetchBitmap = fetchBitmapCheckbox.checked;
+  log(`Bitmap fetch ${appState.fetchBitmap ? 'enabled' : 'disabled'}`, 'info', 'general');
+});
+
+updateBitmapOnChangeCheckbox.addEventListener('change', () => {
+  appState.updateBitmapOnChange = updateBitmapOnChangeCheckbox.checked;
+  log(`Bitmap update on change ${appState.updateBitmapOnChange ? 'enabled' : 'disabled'}`, 'info', 'general');
+});
+
+sendRequestBtn.addEventListener('click', () => {
+  const key = keyInput.value;
+  if (key) {
+    sendObjectInfoDump(key, log);
+    log(`Sent OBJECTINFO_WANT for key ${key}`, 'info', 'general');
+  }
+});
+
+getValueBtn.addEventListener('click', () => {
+  const key = keyInput.value;
+  if (key) {
+    sendValueDump(key, log);
+    log(`Sent VALUE_DUMP for key ${key}`, 'info', 'general');
+  }
+});
+
+setValueBtn.addEventListener('click', () => {
+  const key = keyInput.value;
+  const value = setValueInput.value;
+  if (key && value) {
+    sendValuePut(key, value, log);
+    setTimeout(() => sendValueDump(key, log), 200);
+  }
+});
+
+backBtn.addEventListener('click', () => {
+  if (appState.keyStack.length > 0) {
+    appState.currentKey = appState.keyStack.pop().key;
+    appState.autoLoad = true;
+    updateScreen();
+  } else {
+    log('No parent to go back to.', 'info', 'general');
+  }
+});
+
 pollToggle.addEventListener('click', () => {
   isPolling = !isPolling;
   if (isPolling) {

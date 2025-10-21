@@ -90,6 +90,11 @@ export function setupKeypressControls(log) {
         if (mask) {
           sendKeypress(mask);
           log(`Sent keypress for ${key}: ${mask.map(b => b.toString(16).padStart(2, '0')).join(' ')}`, 'debug', 'sysexSent');
+          // Update cursor for navigation keys
+          if (key === 'up') appState.cursorLine = Math.max(0, appState.cursorLine - 1);
+          if (key === 'down') appState.cursorLine = Math.min(appState.cursorLine + 1, appState.currentSubs.length - 1); // Approximate max
+          if (key === 'left') appState.cursorCol = Math.max(0, appState.cursorCol - 1);
+          if (key === 'right') appState.cursorCol = Math.min(appState.cursorCol + 1, 1); // Assume max 1 for dual-column
           setTimeout(() => {
             if (key === 'ab') {
               if (appState.currentKey === '0') {

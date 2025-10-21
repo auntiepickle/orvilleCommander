@@ -5,6 +5,7 @@ import { keypressMasks } from './controls.js';
 import { parseSubObject } from './parser.js';
 import { showLoading } from './main.js';
 import { log } from './main.js'; // Added import for log
+import { sendKeypress } from './midi.js'; // Added for sendKeypressSequence
 
 export function updateScreen(logParam = null) {
   appState.childSubs = {}; // Clear childSubs on update to prevent stale data
@@ -117,6 +118,54 @@ const handleParamClick = (e) => {
     const sub = appState.currentSubs.find(s => s.key === key) ||
                 Object.values(appState.childSubs || {}).flat().find(s => s.key === key);
     if (sub) {
+      let pressTimer = null;
+      const startLongPress = () => {
+        pressTimer = setTimeout(() => {
+          // Long-click: Automate remote mapping setup
+          log(`Starting remote mapping for param key ${key}`, 'info', 'general');
+          const targetLine = parseInt(e.target.dataset.line, 10);
+          const targetCol = parseInt(e.target.dataset.col, 10);
+          const sequence = calculateMoves(appState.cursorLine, appState.cursorCol, targetLine, targetCol);
+          sendKeypressSequence(sequence, () => {
+            sendKeypress(keypressMasks['select-hold']); // Enter remote menu
+            setTimeout(() => {
+              updateScreen(); // Load remote subs
+              setTimeout(() => {
+                // Prompt for mapping details (adjust based on Orville options, e.g., 'ext1' for external assign)
+                const typeValue = prompt('Enter remote type (e.g., ext1 for external 1, or midi-cc if supported)');
+                const channel = prompt('Enter MIDI channel (1-16)');
+                const minVal = prompt('Enter min value');
+                const maxVal = prompt('Enter max value');
+                // Find remote subs heuristically
+                const typeSub = appState.currentSubs.find(s => s.type === 'SET' && (s.tag.toLowerCase().includes('type') || s.statement.toLowerCase().includes('type')));
+                const channelSub = appState.currentSubs.find(s => s.type === 'NUM' && (s.tag.toLowerCase().includes('channel') || s.statement.toLowerCase().includes('channel')));
+                const minSub = appState.currentSubs.find(s => s.type === 'NUM' && (s.tag.toLowerCase().includes('min') || s.statement.toLowerCase().includes('min')));
+                const maxSub = appState.currentSubs.find(s => s.type === 'NUM' && (s.tag.toLowerCase().includes('max') || s.statement.toLowerCase().includes('max')));
+                if (typeSub) sendValuePut(typeSub.key, typeValue); // For SET, use desc or index
+                if (channelSub) sendValuePut(channelSub.key, channel);
+                if (minSub) sendValuePut(minSub.key, minVal);
+                if (maxSub) sendValuePut(maxSub.key, maxVal);
+                setTimeout(() => {
+                  sendKeypress(keypressMasks['enter']); // Exit remote menu (or 'cxl' if needed)
+                  // Restore state: Reverse sequence to move cursor back
+                  const reverseSeq = reverseSequence(sequence);
+                  sendKeypressSequence(reverseSeq, () => {
+                    updateScreen(); // Refresh to original state
+                    log(`Remote mapping set and state restored for key ${key}`, 'info', 'general');
+                  });
+                }, 300);
+              }, 300); // Wait for subs to load
+            }, 300);
+          });
+        }, 500);
+      };
+      const cancelLongPress = () => {
+        if (pressTimer) clearTimeout(pressTimer);
+      };
+      e.target.addEventListener('mousedown', startLongPress, {once: true});
+      e.target.addEventListener('mouseup', cancelLongPress, {once: true});
+      e.target.addEventListener('mouseleave', cancelLongPress, {once: true});
+      // Existing short-click for NUM/TRG
       if (sub.type === 'NUM') {
         const title = sub.statement.replace(/%.*f/, '').trim(); // Clean format specifier
         const currentValue = appState.currentValues[key] || sub.value;
@@ -166,6 +215,32 @@ const handleParamClick = (e) => {
     }
   }
 };
+
+function calculateMoves(currentLine, currentCol, targetLine, targetCol) {
+  const downs = Math.max(0, targetLine - currentLine);
+  const ups = Math.max(0, currentLine - targetLine);
+  const rights = Math.max(0, targetCol - currentCol);
+  const lefts = Math.max(0, currentCol - targetCol);
+  return Array(downs).fill('down').concat(Array(ups).fill('up'), Array(rights).fill('right'), Array(lefts).fill('left'));
+}
+
+function reverseSequence(sequence) {
+  const reverseMap = { 'down': 'up', 'up': 'down', 'right': 'left', 'left': 'right' };
+  return sequence.reverse().map(cmd => reverseMap[cmd]);
+}
+
+function sendKeypressSequence(sequence, callback) {
+  let index = 0;
+  const sendNext = () => {
+    if (index < sequence.length) {
+      const mask = keypressMasks[sequence[index]];
+      if (mask) sendKeypress(mask);
+      index++;
+      setTimeout(sendNext, 50);
+    } else if (callback) callback();
+  };
+  sendNext();
+}
 
 function formatValue(statement, value, isHtml = false, key = '') {
   return statement.replace(/%(-)?(\d*)(\.\d*)?f|%(-)?(\d*)s|%/g, (match, fLeftFlag, fWidthStr, precStr, sLeftFlag, sWidthStr) => {
@@ -228,6 +303,7 @@ export function renderScreen(subs, ascii, logParam) {
   let titleText;
   let titleHtml;
   let mainHtmlLines = [];
+  let currentLine = 0; // Track line for param-value data-line
   if (appState.currentKey === '0') {
     displayLines.push('');
     displayLines.push('');
@@ -294,11 +370,13 @@ export function renderScreen(subs, ascii, logParam) {
       graphicEqHtml = formattedHtmlParts.join(' ');
       paramLines.push(graphicEqLine);
       paramHtmlLines.push(graphicEqHtml);
+      currentLine++;
     }
-    subs.slice(1).forEach(s => {
+    subs.slice(1).forEach((s, index) => {
       if (s.position === 'a') return; // Skip individual 'a' after grouping
       let fullText = '';
       let fullHtml = '';
+      let colIndex = index % 2; // Assume dual-column for col
       if (s.type === 'NUM') {
         const value = appState.currentValues[s.key] || s.value;
         if (!appState.currentValues[s.key]) sendValueDump(s.key);
@@ -350,12 +428,13 @@ export function renderScreen(subs, ascii, logParam) {
           log(`Rendering CON for key ${s.key}: tag=${s.tag}, value=${meterValue}, barLength=${barLength}, line="${fullText.trim()}"`, 'debug', 'renderScreen');
         }
       } else if (s.type === 'TRG') {
-        fullHtml = `<span class="param-value" data-key="${s.key}">${s.statement}</span>`;
+        fullHtml = `<span class="param-value" data-key="${s.key}" data-line="${currentLine}" data-col="${colIndex}">${s.statement}</span>`;
         fullText = s.statement;
       }
       if (fullText) {
         paramLines.push(fullText);
         paramHtmlLines.push(fullHtml);
+        currentLine++;
       }
     });
     // Append only the first child sub-menu inline if available
@@ -387,9 +466,10 @@ export function renderScreen(subs, ascii, logParam) {
           paramHtmlLines.push(childTitle);
         }
         // Process child params
-        childSubs.slice(1).forEach(cs => {
+        childSubs.slice(1).forEach((cs, childIndex) => {
           let childFullText = '';
           let childFullHtml = '';
+          let childColIndex = childIndex % 2; // Assume dual-column
           if (cs.type === 'NUM') {
             const value = appState.currentValues[cs.key] || cs.value;
             if (!appState.currentValues[cs.key]) sendValueDump(cs.key);
@@ -441,12 +521,13 @@ export function renderScreen(subs, ascii, logParam) {
               log(`Rendering CON for key ${cs.key}: tag=${cs.tag}, value=${meterValue}, barLength=${barLength}, line="${childFullText.trim()}"`, 'debug', 'renderScreen');
             }
           } else if (cs.type === 'TRG') {
-            childFullHtml = `<span class="param-value" data-key="${cs.key}">${cs.statement}</span>`;
+            childFullHtml = `<span class="param-value" data-key="${cs.key}" data-line="${currentLine}" data-col="${childColIndex}">${cs.statement}</span>`;
             childFullText = cs.statement;
           }
           if (childFullText) {
             paramLines.push(childFullText);
             paramHtmlLines.push(childFullHtml);
+            currentLine++;
           }
         });
         break; // Only embed the first local COL

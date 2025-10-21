@@ -32,5 +32,7 @@ export const appState = {
   pollingEnabled: false,
   isLoadingPreset: false,
   currentSoftkeys: [],
-  childSubs: {} // Added for child sub-menu storage
+  childSubs: {}, // Added for child sub-menu storage
+  cursorLine: 0, // Assumed current cursor line (updated on keypress)
+  cursorCol: 0 // Assumed current cursor column (updated on keypress)
 };

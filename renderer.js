@@ -197,8 +197,16 @@ export function renderScreen(subs, ascii, logParam) {
   if (!subs) {
     subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
   }
+  if (!subs || subs.length === 0) {
+    log('Skipping render: no subs available', 'debug', 'renderScreen');
+    return;
+  }
   appState.currentSubs = subs;
   const main = subs[0];
+  if (!main) {
+    log('Skipping render: main sub undefined', 'debug', 'renderScreen');
+    return;
+  }
   let displayLines = [];
   let paramLines = [];
   let paramHtmlLines = [];
@@ -219,6 +227,7 @@ export function renderScreen(subs, ascii, logParam) {
   }
   let titleText;
   let titleHtml;
+  let mainHtmlLines = [];
   if (appState.currentKey === '0') {
     displayLines.push('');
     displayLines.push('');
@@ -236,6 +245,22 @@ export function renderScreen(subs, ascii, logParam) {
       softTextLines.push(softTags.join(''));
     }
     displayLines.push(...softTextLines);
+    // Build clickable HTML for root softkeys
+    let softHtmlLines = [];
+    for (let i = 0; i < softSubsUsed.length; i += itemsPerLine) {
+      let softHtml = '';
+      const slice = softSubsUsed.slice(i, i + itemsPerLine);
+      const columnWidth = Math.floor(40 / slice.length);
+      slice.forEach((s, idx) => {
+        const t = s.tag.trim();
+        const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
+        softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+      });
+      softHtmlLines.push(softHtml);
+    }
+    mainHtmlLines.push(''); // blank
+    mainHtmlLines.push(''); // blank
+    mainHtmlLines = mainHtmlLines.concat(softHtmlLines);
   } else {
     titleText = main.statement || main.tag || 'Menu';
     titleHtml = titleText;
@@ -527,17 +552,10 @@ export function renderScreen(subs, ascii, logParam) {
     displayLines.push(staticTags.join(''));
   }
   log(`Rendered screen text: ${displayLines.join('\n')}`, 'debug', 'renderScreen');
-  let mainHtmlLines = [];
   let bottomHtml = '';
   const startIndex = isTabLineAdded ? 1 : 0;
   if (appState.currentKey === '0') {
-    mainHtmlLines = displayLines.slice(startIndex).map((l, index) => {
-      if (index >= displayLines.length - startIndex - softTextLines.length) { // For multi-line softkeys in root if needed
-        return l; // Text lines already prepared
-      } else {
-        return l;
-      }
-    });
+    mainHtmlLines = displayLines.slice(startIndex);
   } else {
     // Explicitly build mainHtmlLines for clarity and multi-line softkeys
     mainHtmlLines.push(titleHtml); // Use titleHtml with breadcrumb

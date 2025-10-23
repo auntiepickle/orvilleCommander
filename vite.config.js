@@ -2,6 +2,7 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  root:'./src',
   server: {
     host: true, // Expose on 0.0.0.0 to fix localhost HMR issues on Windows
     hmr: {

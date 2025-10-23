@@ -3,6 +3,16 @@ import { sendKeypress, sendSysEx } from './midi.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 
+/**
+ * Mapping of key names to their corresponding MIDI keypress mask arrays.
+ * These masks are used to simulate button presses on the Orville device via SysEx.
+ * Each mask is a 4-byte array representing the bitmasks for key states.
+ * 
+ * @type {Object.<string, number[]>}
+ * @example
+ * // Usage in sendKeypress
+ * const mask = keypressMasks['up']; // [0xFE, 0xFF, 0xFD, 0xFF]
+ */
 export const keypressMasks = {
   'up': [0xFE, 0xFF, 0xFD, 0xFF],
   'down': [0xFF, 0xFE, 0xFD, 0xFF],
@@ -40,10 +50,32 @@ export const keypressMasks = {
   'cxl': [0xFF, 0xFF, 0xFF, 0xDF],
 };
 
+/**
+ * Toggles a DSP key between A (starting with '4') and B (starting with '8').
+ * Used for switching between DSP presets.
+ * 
+ * @param {string} key - The DSP key to toggle (e.g., '401000b').
+ * @returns {string} The toggled key (e.g., '801000b' if input starts with '4').
+ * 
+ * @example
+ * toggleDspKey('401000b'); // '801000b'
+ */
 function toggleDspKey(key) {
   return key.startsWith('4') ? '8' + key.slice(1) : '4' + key.slice(1);
 }
 
+/**
+ * Sets up event listeners for virtual button controls in the UI.
+ * Maps HTML button IDs to keypress names, sends MIDI keypresses on clicks,
+ * handles special logic for certain keys (e.g., 'ab' for DSP toggle, 'parameter' for navigation),
+ * and updates the screen with optional bitmap fetch.
+ * 
+ * @param {Function} log - The logging function for debug/info messages.
+ * 
+ * @example
+ * // Called in main.js after DOM load
+ * setupKeypressControls(log);
+ */
 export function setupKeypressControls(log) {
   const buttons = {
     'up-btn': 'up',
@@ -117,6 +149,17 @@ export function setupKeypressControls(log) {
   });
 }
 
+/**
+ * Tests for duplicate keypress commands by simulating a button press flow.
+ * Logs the simulation steps without sending actual MIDI. Useful for debugging
+ * potential issues with repeated SysEx sends.
+ * 
+ * @param {Function} log - The logging function for test messages.
+ * 
+ * @example
+ * // Called via debug button in UI
+ * testKeypress(log);
+ */
 export function testKeypress(log) {
   log('Starting duplicate command test...', 'info', 'general');
   // Simulate button press flow without actual MIDI send

@@ -12,7 +12,16 @@ for (let i = 0; i < 256; i++) {
     bit_reverse_table[i] = parseInt(i.toString(2).padStart(8, '0').split('').reverse().join(''), 2);
 }
 
-// Function to extract nibbles from SysEx hex string
+/**
+ * Extracts nibbles (4-bit values) from a SysEx hex string, focusing on screen dump data after '17' up to 'f7'.
+ * Returns an empty array if no valid data is found.
+ * 
+ * @param {string} sysExHex - The SysEx message as a hex string (e.g., 'f0 1c 70 ... f7').
+ * @returns {number[]} Array of extracted nibbles as integers.
+ * 
+ * @example
+ * const nibbles = extractNibbles('f0 1c 70 00 17 01 02 ... f7'); // [1, 2, ...]
+ */
 export function extractNibbles(sysExHex) {
     const hexMatches = sysExHex.toLowerCase().match(/[0-9a-f]{1,2}/g);
     if (!hexMatches) return [];
@@ -23,7 +32,16 @@ export function extractNibbles(sysExHex) {
     return nibbles;
 }
 
-// Function to denibble nibbles to bytes
+/**
+ * Converts an array of nibbles back to bytes by combining high/low pairs.
+ * Ignores the last nibble if the length is odd.
+ * 
+ * @param {number[]} nibbles - Array of 4-bit nibbles.
+ * @returns {number[]} Array of reconstructed 8-bit bytes.
+ * 
+ * @example
+ * denibble([1, 2, 3, 4]); // [0x12, 0x34]
+ */
 export function denibble(nibbles) {
   const rawBytes = [];
   for (let i = 0; i < nibbles.length; i += 2) {
@@ -34,7 +52,18 @@ export function denibble(nibbles) {
   return rawBytes;
 }
 
-// Function to render the bitmap on canvas and return pixel data
+/**
+ * Renders a bitmap from raw bytes onto a canvas, applying optional transformations (flip, rotate, shift).
+ * Skips 13-byte header, draws pixels as green-on-black, and optionally exports BMP.
+ * Uses hardcoded flags (NO_FLIP, ROTATE_COLUMNS, SHIFT_FIRST_COLUMN, SAVE_MONO_BMP)—consider making configurable in refactor.
+ * 
+ * @param {string} canvasId - ID of the canvas element.
+ * @param {number[]} rawBytes - Raw bitmap bytes from denibbled SysEx.
+ * @param {Function} log - Logging function for debug messages.
+ * 
+ * @example
+ * renderBitmap('lcd-canvas', rawBytes, log);
+ */
 export function renderBitmap(canvasId, rawBytes, log) {
     const canvas = document.getElementById(canvasId);
     const ctx = canvas.getContext('2d');
@@ -94,6 +123,15 @@ export function renderBitmap(canvasId, rawBytes, log) {
     if (SAVE_MONO_BMP) exportBMP(canvas);
 }
 
+/**
+ * Exports the canvas content as a monochrome BMP file and triggers a download.
+ * Converts pixel data to 1-bit monochrome, pads rows, and builds BMP header.
+ * 
+ * @param {HTMLCanvasElement} canvas - The canvas element to export.
+ * 
+ * @example
+ * exportBMP(document.getElementById('lcd-canvas'));
+ */
 export function exportBMP(canvas) {
   const ctx = canvas.getContext('2d');
   const width = canvas.width;
@@ -152,6 +190,16 @@ const ROTATE_COLUMNS = true;
 const SHIFT_FIRST_COLUMN = true;
 const SAVE_MONO_BMP = false;
 
+/**
+ * Splits a line into parts, handling quoted strings and trimming spaces.
+ * Used for parsing ASCII dumps into tokens.
+ * 
+ * @param {string} line - The line to split (e.g., 'SET 0 10020011 ...').
+ * @returns {string[]} Array of parsed parts.
+ * 
+ * @example
+ * splitLine('SET 0 key parent "statement with spaces" tag'); // ['SET', '0', 'key', 'parent', 'statement with spaces', 'tag']
+ */
 function splitLine(line) {
   const parts = [];
   let current = '';
@@ -178,6 +226,17 @@ function splitLine(line) {
   return parts;
 }
 
+/**
+ * Parses a SysEx response from the device, handling OBJECTINFO_DUMP, VALUE_DUMP, and screen dumps.
+ * Updates appState, triggers renders (debounced), fetches child data, and applies fixes (e.g., for Favorites).
+ * Detects device ID if not set.
+ * 
+ * @param {number[]} data - Raw SysEx byte array.
+ * @param {Function} log - Logging function.
+ * 
+ * @example
+ * parseResponse([0xf0, 0x1c, 0x70, ...], log);
+ */
 export function parseResponse(data, log) {
   if (appState.deviceId === 0 && data.length > 3) {
     appState.deviceId = data[3];
@@ -310,6 +369,16 @@ export function parseResponse(data, log) {
   }
 }
 
+/**
+ * Parses a single line from an OBJECTINFO_DUMP into a sub-object structure.
+ * Handles types like NUM, SET, CON, extracting values, mins/maxes, options.
+ * 
+ * @param {string} line - A single line from the ASCII dump.
+ * @returns {Object} Parsed sub-object with type, key, statement, etc.
+ * 
+ * @example
+ * parseSubObject('SET 0 10020011 parent statement tag 0 desc 10 option1 option2 ...');
+ */
 export function parseSubObject(line) {
   const parts = splitLine(line);
   const type = parts[0] || '';

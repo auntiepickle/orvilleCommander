@@ -47,6 +47,17 @@ const toggleMeterPollingBtn = document.getElementById('toggle-meter-polling');
 const pollingIndicator = document.getElementById('polling-indicator');
 const levels = { error: 0, info: 1, debug: 2 };
 
+/**
+ * Logs a message to the UI log area and console if the level and category are enabled.
+ * Filters based on appState.logLevel and appState.logCategories.
+ * 
+ * @param {string} message - The message to log.
+ * @param {string} [level='info'] - The log level ('error', 'info', 'debug').
+ * @param {string} [category='general'] - The log category (e.g., 'sysexSent', 'bitmap').
+ * 
+ * @example
+ * log('App initialized', 'info', 'general');
+ */
 export function log(message, level = 'info', category = 'general') {
   if (levels[appState.logLevel] < levels[level] || !appState.logCategories[category]) return;
   const timestamp = new Date().toISOString();
@@ -57,6 +68,12 @@ export function log(message, level = 'info', category = 'general') {
 }
 let pollingInterval = null;
 
+/**
+ * Starts polling for CON-type subs (e.g., meters) by requesting VALUE_DUMP at intervals.
+ * Clears any existing interval before starting.
+ * 
+ * @param {Function} log - The logging function.
+ */
 function startPolling(log) {
   if (pollingInterval) clearInterval(pollingInterval);
   pollingInterval = setInterval(() => {
@@ -68,6 +85,9 @@ function startPolling(log) {
   }, 100);
 }
 
+/**
+ * Stops the active polling interval if running.
+ */
 function stopPolling() {
   if (pollingInterval) clearInterval(pollingInterval);
   pollingInterval = null;
@@ -114,6 +134,15 @@ if (toggleMeterPollingBtn) {
   navigator.clipboard.writeText(logArea.value).then(() => log('Log copied to clipboard.', 'info', 'general'));
 });
 
+/**
+ * Enables WebMIDI, populates input/output select options, and auto-selects ports if cached.
+ * If cached ports are available, calls selectPorts automatically.
+ * 
+ * @param {Object} [cachedConfig=null] - Cached config from localStorage.
+ * 
+ * @example
+ * connectMidi(cachedConfig);
+ */
 async function connectMidi(cachedConfig = null) {
   try {
     await WebMidi.enable({ sysex: true });
@@ -143,6 +172,10 @@ async function connectMidi(cachedConfig = null) {
   }
 }
 
+/**
+ * Sets MIDI ports based on selected values, adds SysEx listener, and initializes the screen.
+ * Fetches root and initial preset data with optional bitmap.
+ */
 function selectPorts() {
   const outputId = outputSelect.value;
   const inputId = inputSelect.value;
@@ -250,7 +283,9 @@ processDebugFileBtn.addEventListener('click', () => {
   }
 });
 
-// Function to show loading indicator
+/**
+ * Shows a loading indicator on the LCD element during async operations.
+ */
 export function showLoading() {
   if (lcdEl) {
     lcdEl.classList.add('loading');
@@ -258,7 +293,9 @@ export function showLoading() {
   log('Loading new screen...', 'debug', 'general');
 }
 
-// Function to hide loading indicator
+/**
+ * Hides the loading indicator on the LCD element after operations complete.
+ */
 export function hideLoading() {
   if (lcdEl) {
     lcdEl.classList.remove('loading');

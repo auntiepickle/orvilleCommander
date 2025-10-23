@@ -58,6 +58,7 @@ graph TD
     G --> H["renderer.js: Render LCD"]
     H --> I["index.html: Display"]
     J["main.js: Init & Config"] --> G
+```
 
 ## Key Modules
 

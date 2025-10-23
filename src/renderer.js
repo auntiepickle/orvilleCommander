@@ -6,6 +6,15 @@ import { parseSubObject } from './parser.js';
 import { showLoading } from './main.js';
 import { log } from './main.js'; // Added import for log
 
+/**
+ * Updates the current screen by requesting OBJECTINFO_DUMP and VALUE_DUMP for the current key.
+ * Clears childSubs and currentValues to refresh data. Optionally clears softkeys at root/top levels.
+ * 
+ * @param {Function} [logParam=null] - Optional logging function (defaults to global log).
+ * 
+ * @example
+ * updateScreen(log); // Refresh current menu
+ */
 export function updateScreen(logParam = null) {
   appState.childSubs = {}; // Clear childSubs on update to prevent stale data
   appState.currentValues = {};
@@ -16,10 +25,25 @@ export function updateScreen(logParam = null) {
   sendValueDump(appState.currentKey, logParam);
 }
 
+/**
+ * Toggles a DSP key between '4' (A) and '8' (B) prefixes.
+ * 
+ * @param {string} key - The DSP key to toggle (e.g., '401000b').
+ * @returns {string} The toggled key (e.g., '801000b').
+ * 
+ * @example
+ * toggleDspKey('401000b'); // '801000b'
+ */
 export function toggleDspKey(key) {
   return key.startsWith('4') ? '8' + key.slice(1) : '4' + key.slice(1);
 }
 
+/**
+ * Handles clicks on the LCD element for DSP switches, softkeys, and back links.
+ * Updates state and triggers screen updates accordingly.
+ * 
+ * @param {Event} e - The click event.
+ */
 const handleLcdClick = (e) => {
   if (e.target.classList.contains('dsp-clickable')) {
     appState.presetKey = e.target.dataset.key;
@@ -66,6 +90,12 @@ const handleLcdClick = (e) => {
   }
 };
 
+/**
+ * Handles changes to select elements for SET parameters.
+ * Sends VALUE_PUT, updates state, refreshes screen, and handles auto-load for presets.
+ * 
+ * @param {Event} e - The change event.
+ */
 const handleSelectChange = (e) => {
   const key = e.target.dataset.key;
   const selectedIndex = e.target.value;
@@ -110,6 +140,12 @@ const handleSelectChange = (e) => {
   }, 200); // Delay to allow MIDI update
 };
 
+/**
+ * Handles clicks on parameter values for editing NUM or triggering TRG types.
+ * Prompts for NUM changes, validates, sends VALUE_PUT, and updates screen.
+ * 
+ * @param {Event} e - The click event.
+ */
 const handleParamClick = (e) => {
   if (e.target.classList.contains('param-value')) {
     const key = e.target.dataset.key;
@@ -167,6 +203,20 @@ const handleParamClick = (e) => {
   }
 };
 
+/**
+ * Formats a value according to a statement string (e.g., '%3.0f' for floats, '%-10s' for strings).
+ * Supports HTML wrapping for clickable/editable values.
+ * 
+ * @param {string} statement - Format string (e.g., '%-10.2f').
+ * @param {string|number} value - Value to format.
+ * @param {boolean} [isHtml=false] - If true, wraps in HTML span for params.
+ * @param {string} [key=''] - Key for data-key attribute in HTML.
+ * @returns {string} Formatted string (text or HTML).
+ * 
+ * @example
+ * formatValue('%3.0f dB', 5.5); // '  6 dB'
+ * formatValue('%-10s', 'test', true, 'key123'); // '<span class="param-value" data-key="key123">test      </span>'
+ */
 function formatValue(statement, value, isHtml = false, key = '') {
   return statement.replace(/%(-)?(\d*)(\.\d*)?f|%(-)?(\d*)s|%/g, (match, fLeftFlag, fWidthStr, precStr, sLeftFlag, sWidthStr) => {
     if (match === '%') return '%';
@@ -192,6 +242,18 @@ function formatValue(statement, value, isHtml = false, key = '') {
   });
 }
 
+/**
+ * Renders the screen to the LCD element using subs or ASCII dump.
+ * Builds text/HTML lines for titles, params (NUM/SET/CON/TRG/INF), softkeys (current, parent, grandparent, static).
+ * Handles embedding child subs, auto-fetching, event listeners, and auto-load.
+ * 
+ * @param {Object[]} [subs] - Parsed sub-objects (if not provided, parses from ascii).
+ * @param {string} [ascii] - Raw ASCII dump string.
+ * @param {Function} [logParam] - Logging function.
+ * 
+ * @example
+ * renderScreen(parsedSubs, asciiDump, log);
+ */
 export function renderScreen(subs, ascii, logParam) {
   const lcdEl = document.getElementById('lcd');
   if (!subs) {

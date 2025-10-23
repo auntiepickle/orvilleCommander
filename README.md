@@ -49,12 +49,12 @@ The app follows a modular structure with separation of concerns:
 High-level diagram (Mermaid syntax—render in tools like GitHub or Mermaid Live):
 ```mermaid
 graph TD
-    A[User Input (Buttons/Keypad)] --> B[controls.js]
-    B --> C[midi.js: Send SysEx/Keypress]
-    C --> D[Orville Device]
-    D --> E[midi.js: Receive SysEx]
-    E --> F[parser.js: Parse Response]
-    F --> G[state.js: Update appState]
-    G --> H[renderer.js: Render LCD]
-    H --> I[index.html: Display]
-    J[main.js: Init & Config] --> G
+    A["User Input (Buttons/Keypad)"] --> B["controls.js"]
+    B --> C["midi.js: Send SysEx/Keypress"]
+    C --> D["Orville Device"]
+    D --> E["midi.js: Receive SysEx"]
+    E --> F["parser.js: Parse Response"]
+    F --> G["state.js: Update appState"]
+    G --> H["renderer.js: Render LCD"]
+    H --> I["index.html: Display"]
+    J["main.js: Init & Config"] --> G

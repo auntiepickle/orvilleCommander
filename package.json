@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon --watch . -- --ext js,html,css --exec \"vite\"",
+    "dev": "nodemon --watch . --ext js,html,css --exec \"vite\"",
     "zip": "node zip.js",
     "push": "git push && npm run zip",
     "combine": "node build_tools/combine.cjs",

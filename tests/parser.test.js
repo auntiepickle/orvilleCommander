@@ -1,4 +1,6 @@
 // tests/parser.test.js
+jest.mock('lodash.debounce', () => (fn) => fn); // Make debounce synchronous in tests
+
 jest.mock('../src/midi.js', () => ({
   sendObjectInfoDump: jest.fn(),
   sendValueDump: jest.fn(),
@@ -32,7 +34,8 @@ describe('parseResponse', () => {
     appState.childSubs = {};
     appState.isLoadingPreset = false;
     appState.loadingPresetName = null;
-    appState.currentKey = '0'; // Default to root for tests
+    appState.currentKey = '10010000'; // Use non-root for main test
+    appState.deviceId = 0; // Explicit for test data match
     mockLog.mockClear();
     sendObjectInfoDump.mockClear();
     sendValueDump.mockClear();
@@ -47,9 +50,11 @@ describe('parseResponse', () => {
 
   test('handles valid OBJECTINFO_DUMP for main menu and updates state', () => {
     // Mock SysEx: device 0, cmd 0x32 (OBJECTINFO_DUMP), ASCII 'COL 0 10010000 0 "Setup" "Setup"'
-    const asciiData = [67, 79, 76, 32, 48, 32, 49, 48, 48, 49, 48, 48, 48, 48, 32, 48, 32, 34, 83, 101, 116, 117, 112, 34, 32, 34, 83, 101, 116, 117, 112, 34]; // Simplified
+    const asciiString = 'COL 0 10010000 0 "Setup" "Setup"';
+    const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
     parseResponse(data, mockLog);
+    jest.advanceTimersByTime(300); // Flush any potential timers (safe even if not needed)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Parsed OBJECTINFO_DUMP for key 10010000'), 'info', 'parsedDump');
     expect(appState.currentSubs).toHaveLength(1); // At least the main sub
     expect(appState.currentSubs[0].key).toBe('10010000');
@@ -63,23 +68,26 @@ describe('parseResponse', () => {
       { key: '10010010', type: 'COL', parent: '10010000' } // Child reference in parent menu
     ];
     // Mock SysEx: child sub under current
-    const asciiData = [67, 79, 76, 32, 49, 32, 49, 48, 48, 49, 48, 48, 49, 48, 32, 49, 48, 48, 49, 48, 48, 48, 48, 32, 34, 67, 104, 105, 108, 100, 34, 32, 34, 67, 104, 105, 108, 100, 34];
+    const asciiString = 'COL 1 10010010 10010000 "Child" "Child"';
+    const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
     parseResponse(data, mockLog);
+    jest.advanceTimersByTime(300); // Flush any potential timers (safe even if not needed)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Stored child subs for key 10010010'), 'debug', 'parsedDump');
     expect(appState.childSubs['10010010']).toBeDefined();
     expect(renderScreen).toHaveBeenCalled();
   });
 
   test('handles valid VALUE_DUMP and updates currentValues', () => {
-    appState.currentSubs = [{ key: '10020011', type: 'SET' }];
-    // Mock SysEx: device 0, cmd 0x2e (VALUE_DUMP), ASCII '10020011 5 Program Name'
-    const asciiData = [49, 48, 48, 50, 48, 48, 49, 49, 32, 53, 32, 80, 114, 111, 103, 114, 97, 109, 32, 78, 97, 109, 101];
+    appState.currentSubs = [{ key: '10030000', type: 'SET' }];
+    // Mock SysEx: device 0, cmd 0x2e (VALUE_DUMP), ASCII '10030000 "42 Some Value"'
+    const asciiString = '10030000 "42 Some Value"';
+    const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x2e, ...asciiData, 0xf7];
     parseResponse(data, mockLog);
-    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Parsed VALUE_DUMP for key 10020011'), 'info', 'parsedDump');
-    expect(appState.currentValues['10020011']).toBe('5 Program Name');
-    jest.advanceTimersByTime(200); // Advance for setTimeout
+    jest.advanceTimersByTime(200); // Advance for setTimeout (debounce is synchronous)
+    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Parsed VALUE_DUMP for key 10030000'), 'info', 'parsedDump');
+    expect(appState.currentValues['10030000']).toBe('42 Some Value');
     expect(renderScreen).toHaveBeenCalled();
   });
 

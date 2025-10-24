@@ -7,7 +7,8 @@
     "dev": "nodemon --watch . --ext js,html,css --exec \"vite\"",
     "zip": "node zip.js",
     "push": "git push && npm run zip",
-    "combine": "node combine.js"
+    "combine": "node combine.js",
+    "test":"jest"
   },
   "repository": {
     "type": "git",
@@ -24,7 +25,8 @@
   "devDependencies": {
     "archiver": "^7.0.1",
     "nodemon": "^3.1.7",
-    "vite": "^7.1.6"
+    "vite": "^7.1.6",
+    "jest": "^29.7.0"
   },
   "dependencies": {
     "lodash.debounce": "^4.0.8",

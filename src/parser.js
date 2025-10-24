@@ -227,6 +227,7 @@ export function parseResponse(data, log) {
           }
           renderTimeout = null;
         }, 200);
+        appState.currentSubs = subs;
       } else if (main.key === '0' && appState.currentKey !== '0') {
         // Background root dump received (e.g., after preset load); re-render current screen to update top bar
         debouncedRenderScreen(appState.currentSubs, appState.lastAscii, log);
@@ -351,7 +352,6 @@ export function parseSubObject(line) {
         const index = j.toString(10);
         options.push({ index, desc });
       }
-      console.log('Parsed SET options for key ' + key + ':', options);
     }
   } else {
     value = parts[6] || '';

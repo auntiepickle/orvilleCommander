@@ -58,3 +58,58 @@ graph TD
     G --> H["renderer.js: Render LCD"]
     H --> I["index.html: Display"]
     J["main.js: Init & Config"] --> G
+```
+
+## Key Modules
+
+* state.js: Holds global appState (e.g., currentKey, values, stack). Why? Single source of truth for reactivity.
+
+* midi.js: Manages ports, listeners, and SysEx commands (e.g., sendObjectInfoDump). Key functions: setMidiPorts, sendSysEx.
+
+* parser.js: Parses ASCII dumps into subs/objects; handles bitmap denibbling/rendering. Exports: parseResponse, renderBitmap.
+
+* renderer.js: Builds HTML for LCD (params, softkeys, breadcrumbs). Handles clicks/changes. Exports: updateScreen, renderScreen.
+
+* controls.js: Maps buttons to keypress masks; setups event listeners. Exports: setupKeypressControls.
+
+* main.js: Bootstraps app, connects MIDI, adds listeners. Exports: log, showLoading.
+
+* config.js: Loads/saves config (ports, logs). Exports: loadConfig, saveConfig.
+
+* index.html: UI layout (LCD, buttons, debug tools).
+
+## Data Flow
+
+1. User clicks button → controls.js sends keypress via midi.js.
+
+2. Device responds with SysEx → midi.js listener → parser.js processes.
+
+3. parser.js updates appState (state.js).
+
+4. renderer.js re-renders LCD (index.html).
+
+5. For values: Similar flow with VALUE_DUMP/PUT.
+
+Polling (e.g., meters) runs intervals in main.js.
+
+## Known Issues and Refactoring Opportunities
+
+* Tight coupling: Many modules import each other; refactor to more events/pub-sub.
+
+* Performance: Frequent renders on VALUE_DUMP; debounce more aggressively.
+
+* Error Handling: Add try/catch in parsers; validate MIDI responses.
+
+* Testing: No unit tests yet; add for MIDI/parsing logic.
+
+* Bitmap: Optional feature; make toggling more seamless.
+
+* Refactor Goals: Modularize further (e.g., separate UI components), add types (TypeScript?), optimize state updates.
+
+## Contributing
+
+* Fork and PR changes.
+
+* Focus on one feature/fix per PR (e.g., "Add JSDoc to midi.js").
+
+* Use git commit messages like: "docs: add initial README structure for overview and architecture".

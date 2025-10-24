@@ -3,6 +3,7 @@ import { renderScreen, updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { hideLoading } from './main.js';
 import { sendValuePut, sendValueDump, sendObjectInfoDump } from './midi.js';
+import debounce from 'lodash.debounce'; // Add import; install via npm if needed
 
 let renderTimeout = null;
 
@@ -12,16 +13,7 @@ for (let i = 0; i < 256; i++) {
     bit_reverse_table[i] = parseInt(i.toString(2).padStart(8, '0').split('').reverse().join(''), 2);
 }
 
-/**
- * Extracts nibbles (4-bit values) from a SysEx hex string, focusing on screen dump data after '17' up to 'f7'.
- * Returns an empty array if no valid data is found.
- * 
- * @param {string} sysExHex - The SysEx message as a hex string (e.g., 'f0 1c 70 ... f7').
- * @returns {number[]} Array of extracted nibbles as integers.
- * 
- * @example
- * const nibbles = extractNibbles('f0 1c 70 00 17 01 02 ... f7'); // [1, 2, ...]
- */
+// Function to extract nibbles from SysEx hex string
 export function extractNibbles(sysExHex) {
     const hexMatches = sysExHex.toLowerCase().match(/[0-9a-f]{1,2}/g);
     if (!hexMatches) return [];
@@ -32,16 +24,7 @@ export function extractNibbles(sysExHex) {
     return nibbles;
 }
 
-/**
- * Converts an array of nibbles back to bytes by combining high/low pairs.
- * Ignores the last nibble if the length is odd.
- * 
- * @param {number[]} nibbles - Array of 4-bit nibbles.
- * @returns {number[]} Array of reconstructed 8-bit bytes.
- * 
- * @example
- * denibble([1, 2, 3, 4]); // [0x12, 0x34]
- */
+// Function to denibble nibbles to bytes
 export function denibble(nibbles) {
   const rawBytes = [];
   for (let i = 0; i < nibbles.length; i += 2) {
@@ -52,18 +35,7 @@ export function denibble(nibbles) {
   return rawBytes;
 }
 
-/**
- * Renders a bitmap from raw bytes onto a canvas, applying optional transformations (flip, rotate, shift).
- * Skips 13-byte header, draws pixels as green-on-black, and optionally exports BMP.
- * Uses hardcoded flags (NO_FLIP, ROTATE_COLUMNS, SHIFT_FIRST_COLUMN, SAVE_MONO_BMP)—consider making configurable in refactor.
- * 
- * @param {string} canvasId - ID of the canvas element.
- * @param {number[]} rawBytes - Raw bitmap bytes from denibbled SysEx.
- * @param {Function} log - Logging function for debug messages.
- * 
- * @example
- * renderBitmap('lcd-canvas', rawBytes, log);
- */
+// Function to render the bitmap on canvas and return pixel data
 export function renderBitmap(canvasId, rawBytes, log) {
     const canvas = document.getElementById(canvasId);
     const ctx = canvas.getContext('2d');
@@ -123,15 +95,6 @@ export function renderBitmap(canvasId, rawBytes, log) {
     if (SAVE_MONO_BMP) exportBMP(canvas);
 }
 
-/**
- * Exports the canvas content as a monochrome BMP file and triggers a download.
- * Converts pixel data to 1-bit monochrome, pads rows, and builds BMP header.
- * 
- * @param {HTMLCanvasElement} canvas - The canvas element to export.
- * 
- * @example
- * exportBMP(document.getElementById('lcd-canvas'));
- */
 export function exportBMP(canvas) {
   const ctx = canvas.getContext('2d');
   const width = canvas.width;
@@ -190,16 +153,6 @@ const ROTATE_COLUMNS = true;
 const SHIFT_FIRST_COLUMN = true;
 const SAVE_MONO_BMP = false;
 
-/**
- * Splits a line into parts, handling quoted strings and trimming spaces.
- * Used for parsing ASCII dumps into tokens.
- * 
- * @param {string} line - The line to split (e.g., 'SET 0 10020011 ...').
- * @returns {string[]} Array of parsed parts.
- * 
- * @example
- * splitLine('SET 0 key parent "statement with spaces" tag'); // ['SET', '0', 'key', 'parent', 'statement with spaces', 'tag']
- */
 function splitLine(line) {
   const parts = [];
   let current = '';
@@ -226,159 +179,148 @@ function splitLine(line) {
   return parts;
 }
 
-/**
- * Parses a SysEx response from the device, handling OBJECTINFO_DUMP, VALUE_DUMP, and screen dumps.
- * Updates appState, triggers renders (debounced), fetches child data, and applies fixes (e.g., for Favorites).
- * Detects device ID if not set.
- * 
- * @param {number[]} data - Raw SysEx byte array.
- * @param {Function} log - Logging function.
- * 
- * @example
- * parseResponse([0xf0, 0x1c, 0x70, ...], log);
- */
+// Debounced version of renderScreen to limit calls during rapid VALUE_DUMP
+const debouncedRenderScreen = debounce((subs, ascii, log) => {
+  renderScreen(subs, ascii, log);
+}, 200);
+
 export function parseResponse(data, log) {
-  if (appState.deviceId === 0 && data.length > 3) {
-    appState.deviceId = data[3];
-    log(`Detected device ID: ${appState.deviceId}`, 'info', 'general');
-  }
-  const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).trim();
-  if (data[3] === appState.deviceId && data[4] === 0x32) { // OBJECTINFO_DUMP
-    const subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
-    log(`Parsed OBJECTINFO_DUMP for key ${subs[0]?.key || 'unknown'}: ${ascii}`, 'info', 'parsedDump');
-    const main = subs[0];
-    if (main.key === '0') {
-      const dspASub = subs.find(s => s.key.startsWith('4'));
-      const dspBSub = subs.find(s => s.key.startsWith('8'));
-      appState.dspAKey = dspASub?.key || '401000b';
-      appState.dspBKey = dspBSub?.key || '801000b';
-      appState.dspAName = dspASub?.statement || '';
-      appState.dspBName = dspBSub?.statement || '';
+  try {
+    if (appState.deviceId === 0 && data.length > 3) {
+      appState.deviceId = data[3];
+      log(`Detected device ID: ${appState.deviceId}`, 'info', 'general');
     }
-    if (main.key.endsWith('000b')) {
-      const dsp = main.key[0] === '4' ? 'A' : 'B';
-      appState[`menus${dsp}`] = subs.slice(1).filter(s => s.type === 'COL');
-      appState[`dsp${dsp}Name`] = main.statement;
-      if (main.key === appState.currentKey) {
-        appState.presetKey = main.key;
+    const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).trim();
+    if (data[3] === appState.deviceId && data[4] === 0x32) { // OBJECTINFO_DUMP
+      const subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
+      log(`Parsed OBJECTINFO_DUMP for key ${subs[0]?.key || 'unknown'}: ${ascii}`, 'info', 'parsedDump');
+      const main = subs[0];
+      if (main.key === '0') {
+        const dspASub = subs.find(s => s.key.startsWith('4'));
+        const dspBSub = subs.find(s => s.key.startsWith('8'));
+        appState.dspAKey = dspASub?.key || '401000b';
+        appState.dspBKey = dspBSub?.key || '801000b';
+        appState.dspAName = dspASub?.statement || '';
+        appState.dspBName = dspBSub?.statement || '';
       }
-    }
-    if (main.key === appState.currentKey) {
-      // Fetch child sub-menus for local COLs if not already fetched
-      const localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim() && !appState.childSubs[s.key]);
-      localSoftSubs.forEach(s => {
-        sendObjectInfoDump(s.key, log);
-        sendValueDump(s.key, log);
-      });
-      if (renderTimeout) clearTimeout(renderTimeout);
-      appState.lastAscii = ascii;
-      renderTimeout = setTimeout(() => {
-        renderScreen(subs, ascii, log);
-        if (!appState.isLoadingPreset) {
-          hideLoading();
+      if (main.key.endsWith('000b')) {
+        const dsp = main.key[0] === '4' ? 'A' : 'B';
+        appState[`menus${dsp}`] = subs.slice(1).filter(s => s.type === 'COL');
+        appState[`dsp${dsp}Name`] = main.statement;
+        if (main.key === appState.currentKey) {
+          appState.presetKey = main.key;
         }
-        renderTimeout = null;
-      }, 200);
-    } else if (main.key === '0' && appState.currentKey !== '0') {
-      // Background root dump received (e.g., after preset load); re-render current screen to update top bar
-      renderScreen(appState.currentSubs, appState.lastAscii, log);
-      if (appState.isLoadingPreset) {
-        hideLoading();
-        appState.isLoadingPreset = false;
       }
-    } else {
-      // Store child sub-menu data if it's a child of the current menu
-      const isChild = appState.currentSubs.some(s => s.key === main.key && s.parent === appState.currentKey);
-      if (isChild) {
-        appState.childSubs[main.key] = subs;
-        log(`Stored child subs for key ${main.key} under parent ${appState.currentKey}`, 'debug', 'parsedDump');
-        renderScreen(appState.currentSubs, appState.lastAscii, log); // Re-render to include child data
+      if (main.key === appState.currentKey) {
+        // Fetch child sub-menus for local COLs if not already fetched
+        const localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim() && !appState.childSubs[s.key]);
+        localSoftSubs.forEach(s => {
+          sendObjectInfoDump(s.key, log);
+          sendValueDump(s.key, log);
+        });
+        if (renderTimeout) clearTimeout(renderTimeout);
+        appState.lastAscii = ascii;
+        renderTimeout = setTimeout(() => {
+          debouncedRenderScreen(subs, ascii, log);
+          if (!appState.isLoadingPreset) {
+            hideLoading();
+          }
+          renderTimeout = null;
+        }, 200);
+      } else if (main.key === '0' && appState.currentKey !== '0') {
+        // Background root dump received (e.g., after preset load); re-render current screen to update top bar
+        debouncedRenderScreen(appState.currentSubs, appState.lastAscii, log);
+        if (appState.isLoadingPreset) {
+          hideLoading();
+          appState.isLoadingPreset = false;
+        }
+      } else {
+        // Store child sub-menu data if it's a child of the current menu
+        const isChild = appState.currentSubs.some(s => s.key === main.key && s.parent === appState.currentKey);
+        if (isChild) {
+          appState.childSubs[main.key] = subs;
+          log(`Stored child subs for key ${main.key} under parent ${appState.currentKey}`, 'debug', 'parsedDump');
+          debouncedRenderScreen(appState.currentSubs, appState.lastAscii, log); // Re-render to include child data
+        }
       }
-    }
-    // Fix for Favorites re-ordering after preset load
-    if (main.key === '10020010' && appState.isLoadingPreset && appState.loadingPresetName) {
-      const bankSub = subs.find(s => s.key === '10020012');
-      if (bankSub) {
-        const bankValue = appState.currentValues[bankSub.key] || bankSub.value;
-        if (bankValue.startsWith('0 ')) { // Favorites bank
-          const programSub = subs.find(s => s.key === '10020011');
-          if (programSub && programSub.options) {
-            const targetName = appState.loadingPresetName;
-            const newIndex = programSub.options.findIndex(opt => opt.desc.trim().split(' ').slice(1).join(' ') === targetName);
-            const currentProgramValue = appState.currentValues[programSub.key] || programSub.value;
-            const currentIndex = parseInt(currentProgramValue.split(' ')[0], 10);
-            if (newIndex !== -1 && newIndex !== currentIndex) {
-              log(`Correcting selection after Favorites re-order: setting to index ${newIndex} for "${targetName}"`, 'info', 'general');
-              sendValuePut(programSub.key, newIndex.toString(), log);
-              const newDesc = programSub.options[newIndex].desc;
-              appState.currentValues[programSub.key] = `${newIndex} ${newDesc}`;
-              setTimeout(() => sendValueDump(programSub.key, log), 200);
+      // Fix for Favorites re-ordering after preset load
+      if (main.key === '10020010' && appState.isLoadingPreset && appState.loadingPresetName) {
+        const bankSub = subs.find(s => s.key === '10020012');
+        if (bankSub) {
+          const bankValue = appState.currentValues[bankSub.key] || bankSub.value;
+          if (bankValue.startsWith('0 ')) { // Favorites bank
+            const programSub = subs.find(s => s.key === '10020011');
+            if (programSub && programSub.options) {
+              const targetName = appState.loadingPresetName;
+              const newIndex = programSub.options.findIndex(opt => opt.desc.trim().split(' ').slice(1).join(' ') === targetName);
+              const currentProgramValue = appState.currentValues[programSub.key] || programSub.value;
+              const currentIndex = parseInt(currentProgramValue.split(' ')[0], 10);
+              if (newIndex !== -1 && newIndex !== currentIndex) {
+                log(`Correcting selection after Favorites re-order: setting to index ${newIndex} for "${targetName}"`, 'info', 'general');
+                sendValuePut(programSub.key, newIndex.toString(), log);
+                const newDesc = programSub.options[newIndex].desc;
+                appState.currentValues[programSub.key] = `${newIndex} ${newDesc}`;
+                setTimeout(() => sendValueDump(programSub.key, log), 200);
+              }
             }
           }
         }
       }
+    } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
+      const parts = splitLine(ascii);
+      const key = parts[0];
+      const value = parts.slice(1).join(' ');
+      const oldValue = appState.currentValues[key];
+      appState.currentValues[key] = value;
+      log(`Parsed VALUE_DUMP for key ${key}: ${value}`, 'info', 'parsedDump');
+      if (oldValue && oldValue !== value) {
+        log(`Value changed from ${oldValue} to ${value}`, 'info', 'valueChange');
+      } else if (oldValue) {
+        log(`Value did not change, still ${value}`, 'debug', 'noChange');
+      }
+      if (key === '10020011' || key === '10020012') {
+        return; // Skip render for program/bank VALUE_DUMP to avoid brief wrong state
+      }
+      log(`Checking for CON on key ${key}, currentSubs length: ${appState.currentSubs.length}`, 'debug', 'general');
+      const sub = appState.currentSubs.find(s => s.key === key);
+      log(`Sub found for key ${key}: ${!!sub}, type: ${sub ? sub.type : 'undefined'}`, 'debug', 'general');
+      const isChildParam = Object.keys(appState.childSubs || {}).some(childKey => {
+        const childSubs = appState.childSubs[childKey] || [];
+        return childSubs.some(cs => cs.key === key);
+      });
+      if (sub && sub.type === 'CON') {
+        debouncedRenderScreen(appState.currentSubs, null, log); // Immediate re-render for live meter update
+        log(`Immediate re-rendered screen for CON value change on key ${key}`, 'debug', 'renderScreen');
+      } else if (key.endsWith('0002') || isChildParam) { // Fallback for meter keys or child params
+        log(`Fallback triggered for meter or child key ${key}`, 'debug', 'general');
+        debouncedRenderScreen(appState.currentSubs, null, log);
+        log(`Immediate re-rendered screen for VALUE_DUMP on key ${key}`, 'debug', 'renderScreen');
+      } else {
+        if (renderTimeout) clearTimeout(renderTimeout);
+        renderTimeout = setTimeout(() => {
+          debouncedRenderScreen(null, appState.lastAscii, log);
+          if (!appState.isLoadingPreset) {
+            hideLoading();
+          }
+          renderTimeout = null;
+        }, 200);
+      }
+    } else if (data[3] === appState.deviceId && data[4] === 0x17) { // Screen dump response
+      const nibbles = data.slice(5, data.length - 1);
+      if (nibbles.length % 2 !== 0) {
+        log('[ERROR] Odd number of nibbles in screen dump', 'error', 'error');
+        return;
+      }
+      const rawBytes = denibble(nibbles);
+      if (appState.logCategories['bitmap']) log(`[LOG] Denibbled screen data to ${rawBytes.length} bytes`, 'debug', 'bitmap');
+      renderBitmap('lcd-canvas', rawBytes, log);
     }
-  } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
-    const parts = splitLine(ascii);
-    const key = parts[0];
-    const value = parts.slice(1).join(' ');
-    const oldValue = appState.currentValues[key];
-    appState.currentValues[key] = value;
-    log(`Parsed VALUE_DUMP for key ${key}: ${value}`, 'info', 'parsedDump');
-    if (oldValue && oldValue !== value) {
-      log(`Value changed from ${oldValue} to ${value}`, 'info', 'valueChange');
-    } else if (oldValue) {
-      log(`Value did not change, still ${value}`, 'debug', 'noChange');
-    }
-    if (key === '10020011' || key === '10020012') {
-      return; // Skip render for program/bank VALUE_DUMP to avoid brief wrong state
-    }
-    log(`Checking for CON on key ${key}, currentSubs length: ${appState.currentSubs.length}`, 'debug', 'general');
-    const sub = appState.currentSubs.find(s => s.key === key);
-    log(`Sub found for key ${key}: ${!!sub}, type: ${sub ? sub.type : 'undefined'}`, 'debug', 'general');
-    const isChildParam = Object.keys(appState.childSubs || {}).some(childKey => {
-      const childSubs = appState.childSubs[childKey] || [];
-      return childSubs.some(cs => cs.key === key);
-    });
-    if (sub && sub.type === 'CON') {
-      renderScreen(appState.currentSubs, null, log); // Immediate re-render for live meter update
-      log(`Immediate re-rendered screen for CON value change on key ${key}`, 'debug', 'renderScreen');
-    } else if (key.endsWith('0002') || isChildParam) { // Fallback for meter keys or child params
-      log(`Fallback triggered for meter or child key ${key}`, 'debug', 'general');
-      renderScreen(appState.currentSubs, null, log);
-      log(`Immediate re-rendered screen for VALUE_DUMP on key ${key}`, 'debug', 'renderScreen');
-    } else {
-      if (renderTimeout) clearTimeout(renderTimeout);
-      renderTimeout = setTimeout(() => {
-        renderScreen(null, appState.lastAscii, log);
-        if (!appState.isLoadingPreset) {
-          hideLoading();
-        }
-        renderTimeout = null;
-      }, 200);
-    }
-  } else if (data[3] === appState.deviceId && data[4] === 0x17) { // Screen dump response
-    const nibbles = data.slice(5, data.length - 1);
-    if (nibbles.length % 2 !== 0) {
-      log('[ERROR] Odd number of nibbles in screen dump', 'error', 'error');
-      return;
-    }
-    const rawBytes = denibble(nibbles);
-    if (appState.logCategories['bitmap']) log(`[LOG] Denibbled screen data to ${rawBytes.length} bytes`, 'debug', 'bitmap');
-    renderBitmap('lcd-canvas', rawBytes, log);
+  } catch (err) {
+    log(`Parse response error: ${err.message}`, 'error', 'error');
+    // Optional: Fallback to root or error screen
   }
 }
 
-/**
- * Parses a single line from an OBJECTINFO_DUMP into a sub-object structure.
- * Handles types like NUM, SET, CON, extracting values, mins/maxes, options.
- * 
- * @param {string} line - A single line from the ASCII dump.
- * @returns {Object} Parsed sub-object with type, key, statement, etc.
- * 
- * @example
- * parseSubObject('SET 0 10020011 parent statement tag 0 desc 10 option1 option2 ...');
- */
 export function parseSubObject(line) {
   const parts = splitLine(line);
   const type = parts[0] || '';

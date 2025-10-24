@@ -66,6 +66,7 @@ export function log(message, level = 'info', category = 'general') {
   logArea.scrollTop = logArea.scrollHeight;
   console.log(entry);
 }
+
 let pollingInterval = null;
 
 /**
@@ -97,40 +98,16 @@ if (toggleMeterPollingBtn) {
   toggleMeterPollingBtn.addEventListener('click', () => {
     appState.pollingEnabled = !appState.pollingEnabled;
     pollingIndicator.style.display = appState.pollingEnabled ? 'inline' : 'none';
-    if (appState.pollingEnabled) startPolling(log); else stopPolling();
+    if (appState.pollingEnabled) {
+      startPolling(log);
+    } else {
+      stopPolling();
+    }
     log(`Meter polling ${appState.pollingEnabled ? 'enabled' : 'disabled'}`, 'info', 'general');
   });
 }
-
 
 copyLogBtn.addEventListener('click', () => {
-let pollingInterval = null;
-
-function startPolling(log) {
-  if (pollingInterval) clearInterval(pollingInterval);
-  pollingInterval = setInterval(() => {
-    const conSubs = appState.currentSubs.filter(s => s.type === 'CON');
-    conSubs.forEach(sub => {
-      const key = sub.key;
-      sendValueDump(key, log);
-    });
-  }, 100);
-}
-
-function stopPolling() {
-  if (pollingInterval) clearInterval(pollingInterval);
-  pollingInterval = null;
-}
-
-if (toggleMeterPollingBtn) {
-  toggleMeterPollingBtn.addEventListener('click', () => {
-    appState.pollingEnabled = !appState.pollingEnabled;
-    pollingIndicator.style.display = appState.pollingEnabled ? 'inline' : 'none';
-    if (appState.pollingEnabled) startPolling(log); else stopPolling();
-    log(`Meter polling ${appState.pollingEnabled ? 'enabled' : 'disabled'}`, 'info', 'general');
-  });
-}
-
   navigator.clipboard.writeText(logArea.value).then(() => log('Log copied to clipboard.', 'info', 'general'));
 });
 
@@ -213,7 +190,6 @@ clearConfigBtn.addEventListener('click', () => {
   clearConfig(log);
 });
 
-// ...(truncated 5124 characters)...
 pollToggle.addEventListener('click', () => {
   isPolling = !isPolling;
   if (isPolling) {

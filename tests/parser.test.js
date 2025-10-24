@@ -1,24 +1,27 @@
 // tests/parser.test.js
+jest.mock('../src/midi.js', () => ({
+  sendObjectInfoDump: jest.fn(),
+  sendValueDump: jest.fn(),
+  sendValuePut: jest.fn(),
+}));
+
+jest.mock('../src/renderer.js', () => ({
+  renderScreen: jest.fn(),
+  updateScreen: jest.fn(),
+}));
+
+jest.mock('../src/main.js', () => ({
+  hideLoading: jest.fn(),
+}));
+
 import { parseResponse } from '../src/parser.js';
 import { appState } from '../src/state.js';
+import { sendObjectInfoDump, sendValueDump, sendValuePut } from '../src/midi.js';
+import { renderScreen } from '../src/renderer.js'; // Mocked renderScreen (debounced or not)
+import { hideLoading } from '../src/main.js';
 
-// Mock log and other deps
+// Mock log
 const mockLog = jest.fn();
-const mockSendObjectInfoDump = jest.fn();
-const mockSendValueDump = jest.fn();
-const mockSendValuePut = jest.fn();
-const mockDebouncedRenderScreen = jest.fn();
-const mockHideLoading = jest.fn();
-
-// Setup mocks (replace actual imports if needed via jest.mock)
-jest.mock('../src/midi.js', () => ({
-  sendObjectInfoDump: mockSendObjectInfoDump,
-  sendValueDump: mockSendValueDump,
-  sendValuePut: mockSendValuePut,
-}));
-jest.mock('../src/renderer.js', () => ({
-  renderScreen: mockDebouncedRenderScreen, // Assuming debounced wrapper
-}));
 
 describe('parseResponse', () => {
   beforeEach(() => {
@@ -29,11 +32,11 @@ describe('parseResponse', () => {
     appState.isLoadingPreset = false;
     appState.loadingPresetName = null;
     mockLog.mockClear();
-    mockSendObjectInfoDump.mockClear();
-    mockSendValueDump.mockClear();
-    mockSendValuePut.mockClear();
-    mockDebouncedRenderScreen.mockClear();
-    mockHideLoading.mockClear();
+    sendObjectInfoDump.mockClear();
+    sendValueDump.mockClear();
+    sendValuePut.mockClear();
+    renderScreen.mockClear();
+    hideLoading.mockClear();
   });
 
   test('handles valid OBJECTINFO_DUMP and updates state', () => {

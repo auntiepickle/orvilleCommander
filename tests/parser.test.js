@@ -1,6 +1,6 @@
 // tests/parser.test.js
-import { parseResponse } from '../parser.js';
-import { appState } from '../state.js';
+import { parseResponse } from '../src/parser.js';
+import { appState } from '../src/state.js';
 
 // Mock log and other deps
 const mockLog = jest.fn();
@@ -11,12 +11,12 @@ const mockDebouncedRenderScreen = jest.fn();
 const mockHideLoading = jest.fn();
 
 // Setup mocks (replace actual imports if needed via jest.mock)
-jest.mock('../midi.js', () => ({
+jest.mock('../src/midi.js', () => ({
   sendObjectInfoDump: mockSendObjectInfoDump,
   sendValueDump: mockSendValueDump,
   sendValuePut: mockSendValuePut,
 }));
-jest.mock('../renderer.js', () => ({
+jest.mock('../src/renderer.js', () => ({
   renderScreen: mockDebouncedRenderScreen, // Assuming debounced wrapper
 }));
 

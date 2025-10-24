@@ -351,7 +351,6 @@ export function parseSubObject(line) {
         const index = j.toString(10);
         options.push({ index, desc });
       }
-      console.log('Parsed SET options for key ' + key + ':', options);
     }
   } else {
     value = parts[6] || '';

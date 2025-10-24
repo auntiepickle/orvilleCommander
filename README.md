@@ -46,7 +46,7 @@ The app follows a modular structure with separation of concerns:
 - **Config/Persistence**: In `config.js` (localStorage).
 - **Entry Point**: `main.js` (initializes everything, event listeners).
 
-High-level diagram (Mermaid syntax—render in tools like GitHub or Mermaid Live):
+High-level diagram:
 ```mermaid
 graph TD
     A["User Input (Buttons/Keypad)"] --> B["controls.js"]

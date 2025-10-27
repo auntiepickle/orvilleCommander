@@ -32,6 +32,7 @@
     "vite": "^7.1.6"
   },
   "dependencies": {
+    "jest-environment-jsdom": "^30.2.0",
     "lodash.debounce": "^4.0.8",
     "webmidi": "^3.1.12"
   }

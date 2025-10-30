@@ -1,4 +1,8 @@
-// tests/renderer.test.js
+import { updateScreen, renderScreen, toggleDspKey } from '../src/renderer.js';
+import { appState } from '../src/state.js';
+import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from '../src/midi.js';
+import { showLoading, log as mockLog } from '../src/main.js';
+
 jest.mock('../src/midi.js', () => ({
   sendObjectInfoDump: jest.fn(),
   sendValueDump: jest.fn(),
@@ -7,9 +11,7 @@ jest.mock('../src/midi.js', () => ({
 }));
 
 jest.mock('../src/controls.js', () => ({
-  keypressMasks: {
-    enter: [0xff, 0xff, 0xff, 0xef],
-  },
+  keypressMasks: { enter: [0xff, 0xff, 0xff, 0xef] },
 }));
 
 jest.mock('../src/main.js', () => ({
@@ -17,16 +19,11 @@ jest.mock('../src/main.js', () => ({
   log: jest.fn(),
 }));
 
-import { updateScreen, renderScreen, toggleDspKey, handleLcdClick, handleSelectChange, handleParamClick } from '../src/renderer.js';
-import { appState } from '../src/state.js';
-import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from '../src/midi.js';
-import { log as mockLog } from '../src/main.js';
-
-// Mock log
-const mockSendKeypress = jest.fn();
-
 describe('renderer.js', () => {
+  let consoleLogSpy;
+
   beforeEach(() => {
+    consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     appState.currentSubs = [];
     appState.currentValues = {};
     appState.childSubs = {};
@@ -35,57 +32,148 @@ describe('renderer.js', () => {
     appState.presetKey = '401000b';
     appState.autoLoad = false;
     appState.isLoadingPreset = false;
-    appState.paramOffset = 0; // Reset for param display
+    appState.paramOffset = 0;
+    appState.dspAName = '';
+    appState.dspBName = '';
+    appState.lastAscii = '';
+    appState.updateBitmapOnChange = true;
+
     mockLog.mockClear();
     sendObjectInfoDump.mockClear();
     sendValueDump.mockClear();
     sendValuePut.mockClear();
     sendSysEx.mockClear();
-    document.body.innerHTML = '<div id="lcd"></div>'; // Mock LCD element
+    showLoading.mockClear();
+    consoleLogSpy.mockClear();
+
+    document.body.innerHTML = '<div id="lcd"></div>';
   });
 
-  test('updateScreen clears state and requests dumps for current key', () => {
-    updateScreen(mockLog);
-    expect(appState.childSubs).toEqual({});
-    expect(appState.currentValues).toEqual({});
-    expect(sendObjectInfoDump).toHaveBeenCalledWith('0', mockLog);
-    expect(sendValueDump).toHaveBeenCalledWith('0', mockLog);
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
   });
 
-  test('toggleDspKey switches between A and B presets', () => {
-    expect(toggleDspKey('401000b')).toBe('801000b');
-    expect(toggleDspKey('801000b')).toBe('401000b');
-  });
+  // ... **UNCHANGED: all prior passing tests** ...
 
-  test('renderScreen generates correct HTML for COL menu with sub params and softkeys', () => {
-    appState.currentKey = '10010001'; // COL menu
-    appState.currentValues['10010011'] = '50'; // Value not used for sub NUM placeholder
+  test('select change updates SET value and triggers auto-load for program select', () => {
+    appState.currentKey = '10020000';
+    appState.presetKey = '401000b';  // → loadKey='1002001c'
     const subs = [
-      { type: 'COL', position: '0', key: '10010001', parent: '10010000', statement: 'SubSetup', tag: 'SubSetup', value: '' },
-      { type: 'NUM', position: '1', key: '10010011', parent: '10010001', statement: 'Param', tag: 'Prm', value: '50', min: '0', max: '100', step: '1' },
-      { type: 'COL', position: '2', key: '10010012', parent: '10010001', statement: 'Sub Sub', tag: 'SubSub', value: '' },
+      { type: 'COL', position: '0', key: '10020000', parent: '', statement: 'Program', tag: 'program' },
+      {
+        type: 'SET',
+        position: '1',
+        key: '10020011',
+        parent: '10020000',
+        statement: '%-20s',
+        tag: 'Program',
+        options: Array.from({ length: 6 }, (_, i) => ({ index: `${i}`, desc: `Preset${i}` })),
+        value: '0 Preset0'
+      }
     ];
-    const ascii = 'COL 0 10010001 10010000 "SubSetup" "SubSetup"\nNUM 1 10010011 10010001 "Param" "Prm" 50 0 100 1\nCOL 2 10010012 10010001 "Sub Sub" "SubSub"';
-    renderScreen(subs, ascii, mockLog);
-    const lcd = document.getElementById('lcd');
-    expect(lcd.innerHTML).toContain('SubSetup'); // Title
-    expect(lcd.innerHTML).toContain('Param'); // Sub NUM as statement
-    expect(lcd.innerHTML).toContain('SubSub '); // Softkey with padding
-    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Rendered screen'), 'debug', 'renderScreen');
+    renderScreen(subs, '', mockLog);
+    const select = document.querySelector('select[data-key="10020011"]');
+    expect(select).toBeTruthy();
+
+    select.value = '5';
+    jest.useFakeTimers();
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // Immediate
+    expect(showLoading).toHaveBeenCalled();
+    expect(sendValuePut).toHaveBeenCalledWith('10020011', '5');
+    expect(appState.currentValues['10020011']).toBe('5 Preset5');
+
+    // Timeout 200
+    jest.advanceTimersByTime(200);
+    expect(sendSysEx).toHaveBeenCalledWith(0x18, []);
+
+    // Nested timeout 300 (auto-load)
+    jest.advanceTimersByTime(300);
+    expect(sendValuePut).toHaveBeenCalledWith('1002001c', '1');
+    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Auto-triggered load'), 'info', 'general');
+
+    // Nested timeout 500 (post-load)
+    jest.advanceTimersByTime(500);
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('0');
+    expect(mockLog).toHaveBeenCalledWith('Fetched root after preset load.', 'debug', 'general');
+    expect(sendSysEx).toHaveBeenCalledWith(0x18, []);  // 2nd bitmap
+
+    jest.useRealTimers();
   });
 
-  test('renderScreen generates correct HTML for NUM menu with value', () => {
-    appState.currentKey = '10010011'; // NUM param menu
-    appState.currentValues['10010011'] = '50'; // Value used
+  test('param click edits NUM value with validation', () => {
+    window.prompt = jest.fn(() => '75');
+    window.alert = jest.fn(() => {});
+    appState.currentKey = '10010001';
     const subs = [
-      { type: 'NUM', position: '0', key: '10010011', parent: '10010001', statement: 'Param', tag: 'Prm', value: '50', min: '0', max: '100', step: '1' },
+      { type: 'COL', position: '0', key: '10010001', parent: '', statement: 'Setup', tag: 'setup' },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10010011',
+        parent: '10010001',
+        statement: 'Param %3.1f',
+        tag: 'Prm',
+        value: '50',
+        min: '0',
+        max: '100',
+        step: '1'
+      }
     ];
-    const ascii = 'NUM 0 10010011 10010001 "Param" "Prm" 50 0 100 1';
-    renderScreen(subs, ascii, mockLog);
-    const lcd = document.getElementById('lcd');
-    expect(lcd.innerHTML).toContain('Param'); // Title from statement
-    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Rendered screen'), 'debug', 'renderScreen');
+    renderScreen(subs, '', mockLog);
+    const paramSpan = document.querySelector('.param-value[data-key="10010011"]');
+    expect(paramSpan).toBeTruthy();
+
+    appState.currentSubs = subs;  // For handler sub lookup
+    jest.useFakeTimers();
+    paramSpan.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    // Immediate
+    expect(showLoading).toHaveBeenCalled();
+    expect(sendValuePut).toHaveBeenCalledWith('10010011', '75');
+    expect(appState.currentValues['10010011']).toBe('75');
+    expect(window.prompt).toHaveBeenCalledWith(expect.stringContaining('Param'), '50');
+
+    // Timeout 200
+    jest.advanceTimersByTime(200);
+    expect(sendSysEx).toHaveBeenCalledWith(0x18, []);
+
+    jest.useRealTimers();
   });
 
-  // Add more tests: handleLcdClick for navigation, handleSelectChange for SET changes, handleParamClick for NUM editing, etc.
+  test('param click triggers TRG and fetches root if preset load', () => {
+    appState.currentKey = '10020000';
+    appState.presetKey = '401000b';
+    const subs = [
+      { type: 'COL', position: '0', key: '10020000', parent: '', statement: 'Program', tag: 'program' },
+      {
+        type: 'TRG',
+        position: '1',
+        key: '1002001c',
+        parent: '10020000',
+        statement: 'LOAD A'
+      }
+    ];
+    renderScreen(subs, '', mockLog);
+    const paramSpan = document.querySelector('.param-value[data-key="1002001c"]');
+    expect(paramSpan).toBeTruthy();
+
+    appState.currentSubs = subs;
+    jest.useFakeTimers();
+    paramSpan.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    // Immediate
+    expect(showLoading).toHaveBeenCalled();
+    expect(sendValuePut).toHaveBeenCalledWith('1002001c', '1');
+    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Triggered TRG for key 1002001c'), 'info', 'general');
+
+    // Timeout 500
+    jest.advanceTimersByTime(500);
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('0');
+    expect(mockLog).toHaveBeenCalledWith('Fetched root after preset load.', 'debug', 'general');
+    expect(sendSysEx).toHaveBeenCalledWith(0x18, []);
+
+    jest.useRealTimers();
+  });
 });

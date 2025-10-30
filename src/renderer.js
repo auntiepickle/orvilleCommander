@@ -103,8 +103,8 @@ const handleSelectChange = (e) => {
   console.log(`Selected option for key ${key}: index ${selectedIndex}, desc ${selectedDesc}`);
   showLoading();
   sendValuePut(key, selectedIndex);
-  appState.currentValues[key] = `${parseInt(selectedIndex, 10).toString(16)} ${selectedDesc}`;
-  // Removed immediate renderScreen to avoid old subs with new value
+  //appState.currentValues[key] = `${parseInt(selectedIndex, 10).toString(16)} ${selectedDesc}`;
+  appState.currentValues[key] = `${selectedIndex} ${selectedDesc}`;  // Removed immediate renderScreen to avoid old subs with new value
   setTimeout(() => {
     updateScreen();
     if (appState.updateBitmapOnChange) {

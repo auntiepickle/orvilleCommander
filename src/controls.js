@@ -2,6 +2,7 @@
 import { sendKeypress, sendSysEx } from './midi.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
+import { log } from './logger.js';
 
 /**
  * Mapping of key names to their corresponding MIDI keypress mask arrays.
@@ -69,14 +70,12 @@ function toggleDspKey(key) {
  * Maps HTML button IDs to keypress names, sends MIDI keypresses on clicks,
  * handles special logic for certain keys (e.g., 'ab' for DSP toggle, 'parameter' for navigation),
  * and updates the screen with optional bitmap fetch.
- * 
- * @param {Function} log - The logging function for debug/info messages.
- * 
+ *
  * @example
  * // Called in main.js after DOM load
- * setupKeypressControls(log);
+ * setupKeypressControls();
  */
-export function setupKeypressControls(log) {
+export function setupKeypressControls() {
   const buttons = {
     'up-btn': 'up',
     'down-btn': 'down',
@@ -137,7 +136,7 @@ export function setupKeypressControls(log) {
             updateScreen();
             // Fetch screen after button press if enabled
             if (appState.fetchBitmap) {
-              sendSysEx(0x18, [], log);
+              sendSysEx(0x18, []);
               log('Fetched screen after button press.', 'debug', 'bitmap');
             } else {
               log('Bitmap fetch disabled; skipped screen after button press.', 'debug', 'bitmap');
@@ -153,14 +152,12 @@ export function setupKeypressControls(log) {
  * Tests for duplicate keypress commands by simulating a button press flow.
  * Logs the simulation steps without sending actual MIDI. Useful for debugging
  * potential issues with repeated SysEx sends.
- * 
- * @param {Function} log - The logging function for test messages.
- * 
+ *
  * @example
  * // Called via debug button in UI
- * testKeypress(log);
+ * testKeypress();
  */
-export function testKeypress(log) {
+export function testKeypress() {
   log('Starting duplicate command test...', 'info', 'general');
   // Simulate button press flow without actual MIDI send
   const mockKey = 'up';

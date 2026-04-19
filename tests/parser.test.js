@@ -16,14 +16,16 @@ jest.mock('../src/main.js', () => ({
   hideLoading: jest.fn(),
 }));
 
+jest.mock('../src/logger.js', () => ({
+  log: jest.fn(),
+}));
+
 import { parseResponse, parseSubObject } from '../src/parser.js';
 import { appState } from '../src/state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut } from '../src/midi.js';
 import { renderScreen } from '../src/renderer.js'; // Mocked renderScreen (debounced or not)
 import { hideLoading } from '../src/main.js';
-
-// Mock log
-const mockLog = jest.fn();
+import { log as mockLog } from '../src/logger.js';
 
 describe('parseResponse', () => {
   beforeEach(() => {
@@ -53,7 +55,7 @@ describe('parseResponse', () => {
     const asciiString = 'COL 0 10010000 0 "Setup" "Setup"';
     const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
-    parseResponse(data, mockLog);
+    parseResponse(data);
     jest.advanceTimersByTime(300); // Flush any potential timers (safe even if not needed)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Parsed OBJECTINFO_DUMP for key 10010000'), 'info', 'parsedDump');
     expect(appState.currentSubs).toHaveLength(1); // At least the main sub
@@ -71,7 +73,7 @@ describe('parseResponse', () => {
     const asciiString = 'COL 1 10010010 10010000 "Child" "Child"';
     const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
-    parseResponse(data, mockLog);
+    parseResponse(data);
     jest.advanceTimersByTime(300); // Flush any potential timers (safe even if not needed)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Stored child subs for key 10010010'), 'debug', 'parsedDump');
     expect(appState.childSubs['10010010']).toBeDefined();
@@ -84,7 +86,7 @@ describe('parseResponse', () => {
     const asciiString = '10030000 "42 Some Value"';
     const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x2e, ...asciiData, 0xf7];
-    parseResponse(data, mockLog);
+    parseResponse(data);
     jest.advanceTimersByTime(200); // Advance for setTimeout (debounce is synchronous)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Parsed VALUE_DUMP for key 10030000'), 'info', 'parsedDump');
     expect(appState.currentValues['10030000']).toBe('42 Some Value');
@@ -95,14 +97,14 @@ describe('parseResponse', () => {
     // Mock SysEx: device 0, cmd 0x17 (screen dump), some nibbles
     const nibbles = [0x00, 0x01, 0x02, 0x03]; // Simplified even nibbles
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x17, ...nibbles, 0xf7];
-    parseResponse(data, mockLog);
+    parseResponse(data);
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Denibbled screen data'), 'debug', 'bitmap');
     // Assert renderBitmap was called (implementation detail, but key for coverage)
   });
 
   test('catches and logs errors on invalid data', () => {
     const invalidData = [0xf0, 0x1c, 0x70, 0x00, 0x32]; // Incomplete
-    parseResponse(invalidData, mockLog);
+    parseResponse(invalidData);
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Parse response error'), 'error', 'error');
   });
 
@@ -115,9 +117,9 @@ describe('parseResponse', () => {
     const asciiString = 'COL 0 10020010 0 "Favs" "Favs"\nSET 1 10020012 10020010 "Bank" "Bank" 0 "0 Favorites" 1 "0 Favorites" "1 Other Bank"\nSET 2 10020011 10020010 "Program" "Prog" 0 "0 Other Preset" 2 "0 Other Preset" "1 Target Preset"';
     const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
-    parseResponse(data, mockLog);
+    parseResponse(data);
     jest.advanceTimersByTime(500); // Advance for setTimeout in fix
-    expect(sendValuePut).toHaveBeenCalledWith('10020011', '1', mockLog); // Correct index (desc match)
+    expect(sendValuePut).toHaveBeenCalledWith('10020011', '1'); // Correct index (desc match)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Correcting selection after Favorites re-order'), 'info', 'general');
   });
 });

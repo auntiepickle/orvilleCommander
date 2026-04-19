@@ -3,6 +3,7 @@ import { renderScreen, updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { hideLoading } from './main.js';
 import { sendValuePut, sendValueDump, sendObjectInfoDump } from './midi.js';
+import { log } from './logger.js';
 import debounce from 'lodash.debounce'; // Add import; install via npm if needed
 
 let renderTimeout = null;
@@ -36,7 +37,7 @@ export function denibble(nibbles) {
 }
 
 // Function to render the bitmap on canvas and return pixel data
-export function renderBitmap(canvasId, rawBytes, log) {
+export function renderBitmap(canvasId, rawBytes) {
     const canvas = document.getElementById(canvasId);
     const ctx = canvas.getContext('2d');
     const width = 240;
@@ -180,11 +181,11 @@ function splitLine(line) {
 }
 
 // Debounced version of renderScreen to limit calls during rapid VALUE_DUMP
-const debouncedRenderScreen = debounce((subs, ascii, log) => {
+const debouncedRenderScreen = debounce((subs, ascii) => {
   renderScreen(subs, ascii, log);
 }, 200);
 
-export function parseResponse(data, log) {
+export function parseResponse(data) {
   try {
     if (appState.deviceId === 0 && data.length > 3) {
       appState.deviceId = data[3];
@@ -215,13 +216,13 @@ export function parseResponse(data, log) {
         // Fetch child sub-menus for local COLs if not already fetched
         const localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim() && !appState.childSubs[s.key]);
         localSoftSubs.forEach(s => {
-          sendObjectInfoDump(s.key, log);
-          sendValueDump(s.key, log);
+          sendObjectInfoDump(s.key);
+          sendValueDump(s.key);
         });
         if (renderTimeout) clearTimeout(renderTimeout);
         appState.lastAscii = ascii;
         renderTimeout = setTimeout(() => {
-          debouncedRenderScreen(subs, ascii, log);
+          debouncedRenderScreen(subs, ascii);
           if (!appState.isLoadingPreset) {
             hideLoading();
           }
@@ -230,7 +231,7 @@ export function parseResponse(data, log) {
         appState.currentSubs = subs;
       } else if (main.key === '0' && appState.currentKey !== '0') {
         // Background root dump received (e.g., after preset load); re-render current screen to update top bar
-        debouncedRenderScreen(appState.currentSubs, appState.lastAscii, log);
+        debouncedRenderScreen(appState.currentSubs, appState.lastAscii);
         if (appState.isLoadingPreset) {
           hideLoading();
           appState.isLoadingPreset = false;
@@ -241,7 +242,7 @@ export function parseResponse(data, log) {
         if (isChild) {
           appState.childSubs[main.key] = subs;
           log(`Stored child subs for key ${main.key} under parent ${appState.currentKey}`, 'debug', 'parsedDump');
-          debouncedRenderScreen(appState.currentSubs, appState.lastAscii, log); // Re-render to include child data
+          debouncedRenderScreen(appState.currentSubs, appState.lastAscii); // Re-render to include child data
         }
       }
       // Fix for Favorites re-ordering after preset load
@@ -258,10 +259,10 @@ export function parseResponse(data, log) {
               const currentIndex = parseInt(currentProgramValue.split(' ')[0], 10);
               if (newIndex !== -1 && newIndex !== currentIndex) {
                 log(`Correcting selection after Favorites re-order: setting to index ${newIndex} for "${targetName}"`, 'info', 'general');
-                sendValuePut(programSub.key, newIndex.toString(), log);
+                sendValuePut(programSub.key, newIndex.toString());
                 const newDesc = programSub.options[newIndex].desc;
                 appState.currentValues[programSub.key] = `${newIndex} ${newDesc}`;
-                setTimeout(() => sendValueDump(programSub.key, log), 200);
+                setTimeout(() => sendValueDump(programSub.key), 200);
               }
             }
           }
@@ -290,16 +291,16 @@ export function parseResponse(data, log) {
         return childSubs.some(cs => cs.key === key);
       });
       if (sub && sub.type === 'CON') {
-        debouncedRenderScreen(appState.currentSubs, null, log); // Immediate re-render for live meter update
+        debouncedRenderScreen(appState.currentSubs, null); // Immediate re-render for live meter update
         log(`Immediate re-rendered screen for CON value change on key ${key}`, 'debug', 'renderScreen');
       } else if (key.endsWith('0002') || isChildParam) { // Fallback for meter keys or child params
         log(`Fallback triggered for meter or child key ${key}`, 'debug', 'general');
-        debouncedRenderScreen(appState.currentSubs, null, log);
+        debouncedRenderScreen(appState.currentSubs, null);
         log(`Immediate re-rendered screen for VALUE_DUMP on key ${key}`, 'debug', 'renderScreen');
       } else {
         if (renderTimeout) clearTimeout(renderTimeout);
         renderTimeout = setTimeout(() => {
-          debouncedRenderScreen(null, appState.lastAscii, log);
+          debouncedRenderScreen(null, appState.lastAscii);
           if (!appState.isLoadingPreset) {
             hideLoading();
           }
@@ -314,7 +315,7 @@ export function parseResponse(data, log) {
       }
       const rawBytes = denibble(nibbles);
       if (appState.logCategories['bitmap']) log(`[LOG] Denibbled screen data to ${rawBytes.length} bytes`, 'debug', 'bitmap');
-      renderBitmap('lcd-canvas', rawBytes, log);
+      renderBitmap('lcd-canvas', rawBytes);
     }
   } catch (err) {
     log(`Parse response error: ${err.message}`, 'error', 'error');

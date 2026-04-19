@@ -1,6 +1,7 @@
 // midi.js
 import { parseResponse } from './parser.js';
 import { appState } from './state.js';
+import { log } from './logger.js';
 
 let selectedOutput = null;
 let selectedInput = null;
@@ -26,14 +27,12 @@ export function setMidiPorts(output, input, devId) {
 /**
  * Adds a SysEx event listener to the selected MIDI input.
  * Parses incoming SysEx messages and categorizes them (e.g., screenDump for bitmap data).
- * 
- * @param {Function} log - The logging function for debug messages.
- * 
+ *
  * @example
  * // Called after setting ports
- * addSysexListener(log);
+ * addSysexListener();
  */
-export function addSysexListener(log) {
+export function addSysexListener() {
   if (!selectedInput) {
     log('Error: MIDI input not set; cannot add listener', 'error', 'error');
     return;
@@ -41,83 +40,78 @@ export function addSysexListener(log) {
   selectedInput.addListener('sysex', (e) => {
     const category = (e.data.length > 4 && e.data[4] === 0x17) ? 'screenDump' : 'sysexReceived';
     //log(`Received SysEx: ${e.data.map(b => b.toString(16).padStart(2, '0')).join(' ')}`, 'debug', category);
-    parseResponse(e.data, log);
+    parseResponse(e.data);
   });
 }
 
 /**
  * Sends a SysEx message to the Orville device via the selected MIDI output.
- * Constructs the full SysEx with manufacturer ID (0x1c, 0x70) and logs if provided.
- * 
+ * Constructs the full SysEx with manufacturer ID (0x1c, 0x70).
+ *
  * @param {number} cmd - The command byte (e.g., 0x31 for OBJECTINFO_DUMP).
  * @param {number[]} [dataBytes=[]] - Additional data bytes to include.
- * @param {Function} [log=null] - Optional logging function.
- * 
+ *
  * @example
- * sendSysEx(0x18, [], log); // Fetch screen bitmap
+ * sendSysEx(0x18, []); // Fetch screen bitmap
  */
-export function sendSysEx(cmd, dataBytes = [], log = null) {
+export function sendSysEx(cmd, dataBytes = []) {
   if (!selectedOutput) {
-    if (log) log('Error: MIDI output not set', 'error', 'error');
+    log('Error: MIDI output not set', 'error', 'error');
     return;
   }
   try {
     const sysex = [appState.deviceId, cmd, ...dataBytes];
     selectedOutput.sendSysex([0x1c, 0x70], sysex);
     const sentMsg = `Sent SysEx: F0 1C 70 ${sysex.map(b => b.toString(16).padStart(2, '0')).join(' ')} F7`;
-    if (log) log(sentMsg, 'debug', 'sysexSent');
+    log(sentMsg, 'debug', 'sysexSent');
   } catch (err) {
-    if (log) log(`SysEx send error: ${err.message}`, 'error', 'error');
+    log(`SysEx send error: ${err.message}`, 'error', 'error');
   }
 }
 
 /**
  * Sends an OBJECTINFO_DUMP request for the given key.
  * Converts the key string to ASCII bytes.
- * 
+ *
  * @param {string} key - The menu key to request info for (e.g., '0' for root).
- * @param {Function} [log=null] - Optional logging function.
- * 
+ *
  * @example
- * sendObjectInfoDump('401000b', log);
+ * sendObjectInfoDump('401000b');
  */
-export function sendObjectInfoDump(key, log = null) {
+export function sendObjectInfoDump(key) {
   const keyBytes = key.split('').map(c => c.charCodeAt(0));
-  sendSysEx(0x31, keyBytes, log);
+  sendSysEx(0x31, keyBytes);
 }
 
 /**
  * Sends a VALUE_DUMP request for the given key.
  * Converts the key string to ASCII bytes.
- * 
+ *
  * @param {string} key - The parameter key to request value for.
- * @param {Function} [log=null] - Optional logging function.
- * 
+ *
  * @example
- * sendValueDump('10020011', log);
+ * sendValueDump('10020011');
  */
-export function sendValueDump(key, log = null) {
+export function sendValueDump(key) {
   const keyBytes = key.split('').map(c => c.charCodeAt(0));
-  sendSysEx(0x2d, keyBytes, log);
+  sendSysEx(0x2d, keyBytes);
 }
 
 /**
  * Sends a VALUE_PUT command to set a value for the given key.
  * Converts key and value strings to ASCII bytes, separated by space (0x20).
- * Logs the action if provided.
- * 
+ *
  * @param {string} key - The parameter key to set.
  * @param {string} value - The value to set (e.g., '1' for trigger).
- * @param {Function} [log=null] - Optional logging function.
- * 
+ *
  * @example
- * sendValuePut('1002001c', '1', log); // Trigger preset load
+ * sendValuePut('1002001c', '1'); // Trigger preset load
  */
-export function sendValuePut(key, value, log = null) {
+export function sendValuePut(key, value) {
   const keyBytes = key.split('').map(c => c.charCodeAt(0));
   const valueBytes = value.split('').map(c => c.charCodeAt(0));
-  sendSysEx(0x2d, [...keyBytes, 0x20, ...valueBytes], log);
-  if (log) log(`Sent VALUE_PUT for key ${key}: ${value}`, 'info', 'general');
+  sendSysEx(0x2d, [...keyBytes, 0x20, ...valueBytes]);
+  log(`Sent VALUE_PUT for key ${key}: ${value}`, 'info', 'general');
 }
 
 /**
@@ -133,14 +127,13 @@ function nibble(mask) {
 
 /**
  * Sends a keypress SysEx command using the nibbled mask.
- * 
+ *
  * @param {number[]} mask - The keypress mask from keypressMasks.
- * @param {Function} [log=null] - Optional logging function.
- * 
+ *
  * @example
- * sendKeypress(keypressMasks['enter'], log);
+ * sendKeypress(keypressMasks['enter']);
  */
-export function sendKeypress(mask, log = null) {
+export function sendKeypress(mask) {
   const nibbled = nibble(mask);
-  sendSysEx(0x01, nibbled, log);
+  sendSysEx(0x01, nibbled);
 }

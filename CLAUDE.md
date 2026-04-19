@@ -11,7 +11,7 @@ npm run combine # Concatenate src/ into combine/ (LLM pasting aid)
 npm run zip     # Archive repo into orvilleCommander.zip
 ```
 
-Open the dev URL in Chrome (WebMIDI requirement). Grant MIDI permissions, pick input/output ports, set device ID (default 0).
+Open the dev URL in Chrome, Edge, or Opera (WebMIDI requirement — Firefox and Safari will silently fail to connect). Grant MIDI permissions, pick input/output ports, set device ID (default 0).
 
 ## Architecture (current, not aspirational)
 
@@ -30,7 +30,7 @@ Data flow: user clicks → `controls.js` sends SysEx via `midi.js` → Orville r
 
 ## Known structural issues (refactor in flight)
 
-Five import cycles are real, load-tolerated by ES modules because everything across the cycles is accessed late (function calls, not top-level reads):
+Five import cycles exist and must be dismantled in the order specified in `docs/refactor/04-roadmap.md`. They are currently load-tolerated by ES modules because everything across the cycles is accessed late (function calls, not top-level reads) — but that is not license to 'fix' them opportunistically. Order matters.
 
 1. `midi.js` ↔ `parser.js`
 2. `parser.js` ↔ `renderer.js`
@@ -38,7 +38,7 @@ Five import cycles are real, load-tolerated by ES modules because everything acr
 4. `renderer.js` ↔ `main.js`
 5. `controls.js` ↔ `renderer.js`
 
-See `docs/refactor/` for the dependency graph, coupling analysis, and the eight-step roadmap. **Check the roadmap before proposing structural changes** — work happens in a specific order to keep each commit shippable.
+See `docs/refactor/` for the dependency graph, coupling analysis, and the eight-step roadmap. See `docs/refactor/future-work.md` for ideas explicitly deferred past the roadmap. **Check the roadmap before proposing structural changes** — work happens in a specific order to keep each commit shippable.
 
 `appState` (in `state.js`) is a shared mutable object every module writes to directly. Treat it as legacy; Step 4 of the roadmap introduces a `store.js` façade.
 
@@ -50,7 +50,7 @@ Jest config: `jest.config.cjs` → babel-jest transform, jsdom environment.
 
 - `tests/parser.test.js` — real coverage of `parseResponse` and `parseSubObject`.
 - `tests/renderer.test.js` — covers SET change, NUM click, TRG click flows.
-- `tests/main.test.js` — **currently broken**: imports `initMidi`, `setupUI`, `togglePolling` which don't exist in `src/main.js`. First step of the roadmap repairs this.
+- `tests/main.test.js` — removed in roadmap step 1 (it imported functions that didn't exist in main.js and pulled in missing devDependencies). Real coverage for main.js can be added later if needed.
 
 When writing new tests:
 - Mock `webmidi`, `./src/midi.js`, and `./src/main.js` per the patterns already in `parser.test.js`.
@@ -84,6 +84,10 @@ Sub-object types in the ASCII dump: `COL` (column/menu), `NUM`, `SET`, `CON` (co
 - Prefer editing existing files; this repo is small enough that splitting should be deliberate (roadmap Step 6+).
 - Keep comments minimal — the JSDoc on existing exports is fine; don't narrate new code unless the *why* is non-obvious.
 - When touching render logic, add a renderer snapshot test first (see `03-test-coverage-gap.md`).
+- Before claiming a task complete, run `npm test` and report the output. Do not declare success based on reading the diff.
+- Commit messages follow conventional commits (`fix:`, `refactor:`, `test:`, `docs:`, `chore:`). Reference the roadmap step in the body when relevant.
+- If a task grows beyond its stated scope mid-session, stop and ask rather than expanding. Mechanically necessary follow-throughs (e.g., updating a test mock after an import change) are in-scope and do not require asking.
+- Refactor work happens on the `refactor_main` branch. Never commit directly to `main`. If `git branch --show-current` shows `main`, stop and ask.
 
 ## Build tools (repo root, not src/)
 

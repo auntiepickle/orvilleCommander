@@ -6,6 +6,9 @@ import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut,
 import { updateScreen, toggleDspKey } from './renderer.js';
 import { appState } from './state.js';
 import { denibble, renderBitmap, extractNibbles, exportBMP } from './parser.js'; // Updated imports
+// TODO: remove after Step 3
+import { log } from './logger.js';
+export { log };
 
 const lcdEl = document.getElementById('lcd');
 const logArea = document.getElementById('log-area');
@@ -45,28 +48,6 @@ let pollInterval = null;
 let isPolling = false;
 const toggleMeterPollingBtn = document.getElementById('toggle-meter-polling');
 const pollingIndicator = document.getElementById('polling-indicator');
-const levels = { error: 0, info: 1, debug: 2 };
-
-/**
- * Logs a message to the UI log area and console if the level and category are enabled.
- * Filters based on appState.logLevel and appState.logCategories.
- * 
- * @param {string} message - The message to log.
- * @param {string} [level='info'] - The log level ('error', 'info', 'debug').
- * @param {string} [category='general'] - The log category (e.g., 'sysexSent', 'bitmap').
- * 
- * @example
- * log('App initialized', 'info', 'general');
- */
-export function log(message, level = 'info', category = 'general') {
-  if (levels[appState.logLevel] < levels[level] || !appState.logCategories[category]) return;
-  const timestamp = new Date().toISOString();
-  const entry = `[${timestamp}] ${message}\n`;
-  logArea.value += entry;
-  logArea.scrollTop = logArea.scrollHeight;
-  console.log(entry);
-}
-
 let pollingInterval = null;
 
 /**

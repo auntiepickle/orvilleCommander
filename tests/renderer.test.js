@@ -1,7 +1,8 @@
 import { updateScreen, renderScreen, toggleDspKey } from '../src/renderer.js';
 import { appState } from '../src/state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from '../src/midi.js';
-import { showLoading, log as mockLog } from '../src/main.js';
+import { showLoading } from '../src/main.js';
+import { log as mockLog } from '../src/logger.js';
 
 jest.mock('../src/midi.js', () => ({
   sendObjectInfoDump: jest.fn(),
@@ -16,6 +17,9 @@ jest.mock('../src/controls.js', () => ({
 
 jest.mock('../src/main.js', () => ({
   showLoading: jest.fn(),
+}));
+
+jest.mock('../src/logger.js', () => ({
   log: jest.fn(),
 }));
 

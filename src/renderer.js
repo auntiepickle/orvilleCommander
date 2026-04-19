@@ -4,7 +4,7 @@ import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './mi
 import { keypressMasks } from './controls.js';
 import { parseSubObject } from './parser.js';
 import { showLoading } from './main.js';
-import { log } from './main.js'; // Added import for log
+import { log } from './logger.js';
 
 /**
  * Updates the current screen by requesting OBJECTINFO_DUMP and VALUE_DUMP for the current key.

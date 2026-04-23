@@ -1,6 +1,7 @@
 // parser.js
 import { renderScreen, updateScreen } from './renderer.js';
 import { appState } from './state.js';
+import { setState } from './store.js';
 import { hideLoading } from './main.js';
 import { sendValuePut, sendValueDump, sendObjectInfoDump } from './midi.js';
 import { log } from './logger.js';
@@ -188,7 +189,7 @@ const debouncedRenderScreen = debounce((subs, ascii) => {
 export function parseResponse(data) {
   try {
     if (appState.deviceId === 0 && data.length > 3) {
-      appState.deviceId = data[3];
+      setState({ deviceId: data[3] }, 'parser');
       log(`Detected device ID: ${appState.deviceId}`, 'info', 'general');
     }
     const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).trim();
@@ -199,17 +200,17 @@ export function parseResponse(data) {
       if (main.key === '0') {
         const dspASub = subs.find(s => s.key.startsWith('4'));
         const dspBSub = subs.find(s => s.key.startsWith('8'));
-        appState.dspAKey = dspASub?.key || '401000b';
-        appState.dspBKey = dspBSub?.key || '801000b';
-        appState.dspAName = dspASub?.statement || '';
-        appState.dspBName = dspBSub?.statement || '';
+        setState({ dspAKey: dspASub?.key || '401000b' }, 'parser');
+        setState({ dspBKey: dspBSub?.key || '801000b' }, 'parser');
+        setState({ dspAName: dspASub?.statement || '' }, 'parser');
+        setState({ dspBName: dspBSub?.statement || '' }, 'parser');
       }
       if (main.key.endsWith('000b')) {
         const dsp = main.key[0] === '4' ? 'A' : 'B';
-        appState[`menus${dsp}`] = subs.slice(1).filter(s => s.type === 'COL');
-        appState[`dsp${dsp}Name`] = main.statement;
+        setState({ [`menus${dsp}`]: subs.slice(1).filter(s => s.type === 'COL') }, 'parser');
+        setState({ [`dsp${dsp}Name`]: main.statement }, 'parser');
         if (main.key === appState.currentKey) {
-          appState.presetKey = main.key;
+          setState({ presetKey: main.key }, 'parser');
         }
       }
       if (main.key === appState.currentKey) {
@@ -220,7 +221,7 @@ export function parseResponse(data) {
           sendValueDump(s.key);
         });
         if (renderTimeout) clearTimeout(renderTimeout);
-        appState.lastAscii = ascii;
+        setState({ lastAscii: ascii }, 'parser');
         renderTimeout = setTimeout(() => {
           debouncedRenderScreen(subs, ascii);
           if (!appState.isLoadingPreset) {
@@ -228,13 +229,13 @@ export function parseResponse(data) {
           }
           renderTimeout = null;
         }, 200);
-        appState.currentSubs = subs;
+        setState({ currentSubs: subs }, 'parser');
       } else if (main.key === '0' && appState.currentKey !== '0') {
         // Background root dump received (e.g., after preset load); re-render current screen to update top bar
         debouncedRenderScreen(appState.currentSubs, appState.lastAscii);
         if (appState.isLoadingPreset) {
           hideLoading();
-          appState.isLoadingPreset = false;
+          setState({ isLoadingPreset: false }, 'parser');
         }
       } else {
         // Store child sub-menu data if it's a child of the current menu

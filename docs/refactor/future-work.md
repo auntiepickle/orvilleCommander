@@ -32,4 +32,8 @@ SysEx command bytes. 0x01, 0x17, 0x18, 0x2d, 0x2e, 0x31, 0x32 appear inline as m
 Hardcoded parameter keys. Specific parameter keys appear as magic strings at call sites: '8060001' (t_rate, in the sync test loop), '10020011' (in tests), '1002001c' and '401000b' (in JSDoc examples). Parameter keys are normally discovered dynamically from OBJECTINFO dumps, so only the handful hardcoded for application logic need constants. Extract these specific ones and name them for what they are (e.g. T_RATE_KEY, PRESET_LOAD_TRIGGER_KEY).
 Both are low-risk, mechanical, and deliberately off the 8-step roadmap. Do as standalone refactors between steps.
 
+## Move logCategories out of appState
+
+Move logCategories out of appState so logger.js doesn't need to import state. Would collapse the store↔logger↔state cycle introduced in Step 5.
+
 ## (add more ideas here as they come up)

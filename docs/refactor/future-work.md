@@ -36,4 +36,26 @@ Both are low-risk, mechanical, and deliberately off the 8-step roadmap. Do as st
 
 Move logCategories out of appState so logger.js doesn't need to import state. Would collapse the store↔logger↔state cycle introduced in Step 5.
 
+## Step 5.5 — close startup coverage gap
+
+Characterization test for the startup sequence, driven by canned SysEx bytes instead of a live Orville. Asserts final appState.currentKey / appState.currentSubs / appState.presetKey and (if worth the effort) the rendered LCD text. jest.useFakeTimers() is needed for parser.js's 200ms setTimeout and the lodash.debounce wrapper.
+
+Also ship a baseline-trace artifact under docs/refactor/traces/ capturing the [stateWrite] trace from a known-good startup (ideally both a cached-preset boot and a first-run boot). Future startup-timing changes can diff against it. Baseline will need to be recaptured after the autoload-race fix in Step 7; that's fine, intentional.
+
+Driven by: post-Step-5 live-capture diagnostic where we had no pre-Step-5 trace to compare against and could only argue by mechanism about whether Step 5 changed startup ordering. A trace-level regression test closes that gap.
+
+## Audit-tool cache-overwrite bug (two gates)
+
+Two independent mechanisms silence new audit traces for users with pre-existing cached config:
+
+1. **Category gate.** config.js's loadConfig replaces appState.logCategories with the cached object from localStorage.midiConfig at boot, so any new category added to store.js defaults is silently absent for existing users. logger.js gates on `!appState.logCategories[category]`, and undefined keys are treated as off.
+2. **Level gate.** The cached logLevel (typically `'info'` for most users) overrides the store default, so any trace emitted at `'debug'` is suppressed regardless of whether the category is enabled.
+
+Fix candidates:
+- config.js should merge cached config over defaults rather than replacing subtrees. This collapses the category gate for all future additions without requiring migration hooks.
+- The level gate is by design — traces emitted at `'debug'` are meant to be opt-in. But it interacts badly with the category gate: a step that adds a debug trace AND a new category defaulting false needs users to flip two things. Consider documenting the emit-level choice (`'info'` for audit aids that should be visible whenever the category is on; `'debug'` only when the category is already a known-verbose firehose).
+- Check for the same replace-don't-merge pattern on other cached subtrees in localStorage.midiConfig, not just logCategories.
+
+Surfaced during the Step 5 diagnostic — burned two capture cycles before the trace survived both gates. Out of scope for Step 5 itself.
+
 ## (add more ideas here as they come up)

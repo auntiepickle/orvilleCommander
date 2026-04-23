@@ -2,6 +2,10 @@
 
 Observations and decisions captured during review of each roadmap step. Terse — the "why" that doesn't fit in a commit body.
 
+## Cross-cutting findings
+
+- **Cached-config overrides make new state fields invisible to existing users.** Any new field added to the `appState` defaults in `store.js` is silently overridden at boot by `config.js`'s `loadConfig`, which replaces cached-object subtrees (e.g. `logCategories`, `logLevel`) wholesale from `localStorage.midiConfig` rather than merging. Result: the field lives on fresh installs only — a user who ran the app before the field was added will never see it until they clear or hand-edit their cache. This is a landmine for Steps 6/7/8: every step that touches store.js defaults needs either (a) config.js migrated to merge instead of replace (logged in future-work.md), or (b) an explicit rollout note telling existing users to clear localStorage. Surfaced twice during Step 5 (stateWrite category absent from cached logCategories; trace silenced by cached logLevel=info even if the category had been present).
+
 ## Step 5 — parser.js setState migration
 
 - Batching rejected in favor of 1:1 to preserve reversibility before any subscribers exist
@@ -12,3 +16,23 @@ Observations and decisions captured during review of each roadmap step. Terse �
 - setState builds trace string unconditionally before logger gates on category; cheap today, wrap in `if (appState.logCategories.stateWrite)` if it ever shows up in a profile
 - Hunk-count from Claude Code does not match plan's table row count; invariant is "no multi-key coalescing into one setState call," verified per-hunk
 - logCategories on appState is what creates the store↔logger↔state cycle; moving it off would collapse the cycle (entry in future-work.md)
+
+### Post-commit diagnostic: startup landing-page regression (setup vs Black Hole)
+
+- Symptom: post-Step-5 fresh-boot LCD lands on the setup menu; user recalls pre-Step-5 landing on Black Hole (the cached presetKey).
+- Ran a live capture with stateWrite trace enabled (localStorage.midiConfig hand-edited to add stateWrite: true; store.js trace level bumped from debug to info for the capture; both reverted after). Trace showed:
+  - Root dump at t+0 writes dspA/BKey, dspA/BName, then lastAscii + currentSubs (the root-dump `main.key === appState.currentKey` branch fires because both are '0' at boot).
+  - renderer.js autoload fires at ~t+510 and flips currentKey to '10010000' via a direct write (not parser.js, so no trace line).
+  - 401000b dump arrives at ~t+763 — 253ms after autoload already claimed currentKey. parser.js:212 gate (`main.key === appState.currentKey`) now fails, so presetKey is NOT updated, lastAscii/currentSubs are NOT updated, and the 401000b data lands only in menusA/dspAName. It becomes an orphaned fetch.
+  - Setup menu's own follow-up dump arrives at t+3228 and populates the visible screen.
+- Diagnosis: pre-existing race in the renderer-autoload vs. preset-fetch ordering. Step 5 exposed but did not cause it — the gate line (parser.js:212) is textually unchanged, currentKey is written by renderer.js (untouched by Step 5), and Step 5's per-call overhead is sub-millisecond against a 253ms device round trip.
+- No fix in Step 5. Fix belongs post-Step-6 or folded into Step 7's event-bus rewiring, where the parse → render → navigation handoff is being reshaped anyway.
+
+### Audit-tool bug exposed during the diagnostic
+
+- Two independent silencers for new audit traces on existing users, either one alone enough:
+  - **Level gate.** logger.js:9 checks `levels[appState.logLevel] < levels[level]`. Cached `logLevel=info` plus a trace emitted at `'debug'` drops the line before the category check even runs.
+  - **Category gate.** logger.js:9 also checks `!appState.logCategories[category]`. Cached `logCategories` from localStorage lacks any field added after the cache was first written; `undefined` is treated as off.
+- Burned two capture cycles during the Step 5 post-mortem: first run at `'debug'` with default category yielded an empty trace (level gate won); second run required both a source change (trace level → `'info'`) AND a manual localStorage edit to inject `stateWrite: true` into the cached `logCategories`.
+- Each future step that adds a new audit trace needs to think through both gates.
+- Not a Step 5 regression — both gates predate Step 5. Fix out of scope here; logged in future-work.md.

@@ -5,7 +5,7 @@ import { setupKeypressControls, testKeypress } from './controls.js';
 import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut, sendObjectInfoDump } from './midi.js';
 import { updateScreen, toggleDspKey } from './renderer.js';
 import { appState } from './state.js';
-import { denibble, renderBitmap, extractNibbles, exportBMP } from './parser.js'; // Updated imports
+import { denibble, renderBitmap, extractNibbles, exportBMP } from './bitmap.js';
 import { log } from './logger.js';
 
 const lcdEl = document.getElementById('lcd');

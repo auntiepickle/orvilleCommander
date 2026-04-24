@@ -58,4 +58,12 @@ Fix candidates:
 
 Surfaced during the Step 5 diagnostic — burned two capture cycles before the trace survived both gates. Out of scope for Step 5 itself.
 
+## Bitmap renderer: top-left-corner black-pixel artifact
+
+Rendered bitmaps show black pixels in the top-left corner that are not present in the source SysEx data. Symptom observed during Step 6 smoke testing against both a real 0x17 screen capture (via Process Debug File) and a live 0x18 Get Screen round-trip — same artifact in both paths.
+
+Likely origin: the `SHIFT_FIRST_COLUMN` post-processing block in `renderBitmap` (now in `bitmap.js`). The block performs a non-wrapping shift that zeroes the top `shiftAmount` pixels of the first 8 columns regardless of source content. If the goal is to correct a 1px vertical offset in the Orville framebuffer output, the zeroing should probably wrap pixels from the bottom or preserve source data at the top.
+
+Pre-existing behavior — not caused by Step 6, preserved verbatim by the extraction. No owner, no priority assigned.
+
 ## (add more ideas here as they come up)

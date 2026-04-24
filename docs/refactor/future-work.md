@@ -95,4 +95,6 @@ Architectural opinions consolidated during Step 5.5's development. Each item is 
 
 - **The Step 5.5 characterization test itself is a map of current timing-workaround patches.** Every Tier A entry mentioning `autoLoad`, `hideLoading`, post-autoload fan-out, or the 200ms render latency is a symptom of debounce-based rendering. Step 7's cleanup reshapes the sequence substantially; treat Tier A divergences during Step 7 as *expected and informative*, not as regressions. Read the diff against `tests/startup.test.js`'s pinned sequence as the inventory of what got cleaned up, not as a failure log.
 
+- **Expanded timing-patch inventory in `docs/refactor/session-knowledge-dump.md` question 5.** Beyond the two patches already listed above, additional `setTimeout(200)` instances exist at `parser.js:121` (favorites re-fetch) and `parser.js:158` (VALUE_DUMP render gate), plus the 200/300/500ms chains on the renderer side verified by `renderer.test.js`. Step 7's "eliminate timing patches" scope should cover all of these, not just the startup-flow ones pinned by the characterization test.
+
 ## (add more ideas here as they come up)

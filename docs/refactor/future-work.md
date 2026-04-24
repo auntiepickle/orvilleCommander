@@ -36,13 +36,14 @@ Both are low-risk, mechanical, and deliberately off the 8-step roadmap. Do as st
 
 Move logCategories out of appState so logger.js doesn't need to import state. Would collapse the store↔logger↔state cycle introduced in Step 5.
 
-## Step 5.5 — close startup coverage gap
+## Step 5.5 — close startup coverage gap (complete)
 
-Characterization test for the startup sequence, driven by canned SysEx bytes instead of a live Orville. Asserts final appState.currentKey / appState.currentSubs / appState.presetKey and (if worth the effort) the rendered LCD text. jest.useFakeTimers() is needed for parser.js's 200ms setTimeout and the lodash.debounce wrapper.
+Characterization test landed at `tests/startup.test.js`, driven by canned SysEx fixtures captured via `npm run capture:fixtures` against a live Orville. Pinned observable state writes, MIDI outbound calls, render/bitmap calls, and terminal appState for the cached-config startup flow. Tier A (62 events under the current fixture set) and Tier B (terminal appState subset) both green on first run. Full design, rationale, and oddity-reporting protocol in `docs/refactor/review-notes.md` under the Step 5.5 section.
 
-Also ship a baseline-trace artifact under docs/refactor/traces/ capturing the [stateWrite] trace from a known-good startup (ideally both a cached-preset boot and a first-run boot). Future startup-timing changes can diff against it. Baseline will need to be recaptured after the autoload-race fix in Step 7; that's fine, intentional.
+Outstanding follow-ups deferred from Step 5.5 scope:
 
-Driven by: post-Step-5 live-capture diagnostic where we had no pre-Step-5 trace to compare against and could only argue by mechanism about whether Step 5 changed startup ordering. A trace-level regression test closes that gap.
+- Fan-out response fixtures (childSubs population) not captured. Test's Tier B pins `childSubs === {}` at terminal state as a consequence. Expand fixture capture if a specific Step 7 regression demands childSubs coverage.
+- Standalone baseline-trace artifact under `docs/refactor/traces/` not shipped. The test now serves the regression-net function, but a checked-in trace artifact remains useful for manual diffs during Step 7 development. Low priority.
 
 ## Audit-tool cache-overwrite bug (two gates)
 
@@ -65,5 +66,17 @@ Rendered bitmaps show black pixels in the top-left corner that are not present i
 Likely origin: the `SHIFT_FIRST_COLUMN` post-processing block in `renderBitmap` (now in `bitmap.js`). The block performs a non-wrapping shift that zeroes the top `shiftAmount` pixels of the first 8 columns regardless of source content. If the goal is to correct a 1px vertical offset in the Orville framebuffer output, the zeroing should probably wrap pixels from the bottom or preserve source data at the top.
 
 Pre-existing behavior — not caused by Step 6, preserved verbatim by the extraction. No owner, no priority assigned.
+
+## Root OBJECTINFO_DUMP contains type=8 sub entries
+
+Observed during Step 5.5 capture: the root dump contains a sub at position 3 with `type=8`, `key=10040000`, empty statement and empty tag. Filtered out of the renderer autoload correctly by the `type === 'COL'` check at `renderer.js:737`, and lands in `currentSubs` via `parseSubObject` (which accepts any type). The `8` type is undocumented; `system_commands.txt` does not enumerate non-letter type tokens.
+
+Low priority. Investigate if any Step 7+ refactor touches `parseSubObject`'s type dispatch or the autoload filter — the type=8 entry's behavior is pinned by the Step 5.5 test's Tier B `currentSubs[0].key` assertion only insofar as it affects the subs array length.
+
+## Preset name quoting inconsistency in OBJECTINFO_DUMP responses
+
+Observed during Step 5.5 capture: DSP A preset name is quoted in the OBJECTINFO_DUMP response (`'Black Hole'`), DSP B preset name is not (`MetallicChamber`). `splitLine` in `parser.js` handles both because unquoted single tokens are parsed as one word, but a multi-word unquoted preset name would break — `splitLine` would parse it as two separate tokens and parseSubObject would pick up only the first word as `statement`.
+
+Pre-existing parser quirk, currently unobservable under realistic device state (Orville's own preset editor always quotes multi-word names when saving). Flag if it ever causes a test or production parse failure.
 
 ## (add more ideas here as they come up)

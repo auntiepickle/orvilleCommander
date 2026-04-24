@@ -24,6 +24,9 @@ Thumbs.db
 # Project-specific
 project-files.txt
 
+# Raw MIDI capture working folder — promote to tests/fixtures/ explicitly
+MIDI_Captures/
+
 # Git internals (should never be committed)
 .git/
 orvilleCommander_combined.txt

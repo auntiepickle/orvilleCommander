@@ -45,3 +45,9 @@ Observations and decisions captured during review of each roadmap step. Terse â€
 - Unused local `let row = 0;` inside `exportBMP`'s outer y-loop (bitmap.js:125). Declared, never read or written. Pre-existing dead code in parser.js, preserved verbatim. Candidate for the same standalone cleanup commit as the dead imports above.
 - Indentation inside the moved block is inconsistent: `denibble` is 2-space; `renderBitmap`, `extractNibbles`, `exportBMP` are 4-space. Preserved verbatim from parser.js. A prettier/format pass is explicitly out of Step 6 scope.
 - Renderer bug observed during smoke but not caused by Step 6: top-left corner of rendered bitmap shows black pixels not present in the source data. Consistent with the `SHIFT_FIRST_COLUMN` non-wrapping shift in `renderBitmap` that zeroes the top `shiftAmount` pixels of the first 8 columns. Pre-existing behavior preserved by the move. Tracked separately in future-work.md.
+
+## Follow-up: smoke capture promoted to tests/fixtures/
+
+Step 6's live-smoke SysEx capture was promoted into the first project fixture at `tests/fixtures/screen-dump-black-hole.txt` â€” captured via MIDI-OX as the `0x17` screen bitmap response to a `0x18` Get Screen Request (Orville at device ID 1), saved as space-separated ASCII hex in the format `Process Debug File` expects.
+
+Establishes `tests/fixtures/` as the home for canned SysEx inputs that future characterization tests (roadmap Step 5.5) will consume; `MIDI_Captures/` is now gitignored so raw captures stay out of git until explicitly promoted.

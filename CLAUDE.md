@@ -109,3 +109,17 @@ Everything runtime is on `appState` (state.js). Everything persistent is in `loc
 2. `npm run dev` — connect to real Orville (or, if offline, upload a known-good debug file via the "Process Debug File" button and confirm the bitmap renders).
 3. Navigate into a preset, change a SET parameter, confirm the LCD updates and the device reflects the change.
 4. Toggle A/B; confirm the clicked preset name highlights and both DSPs still render.
+
+## Claude Code session notes
+
+Observations about the Claude Code tooling itself, captured as Step 5.5 shipped. Keep these in mind when reviewing a session's output.
+
+- **Heredoc blank-line preservation.** Commit messages composed via `git commit -m "$(cat <<'EOF' ... EOF)"` sometimes display as blank-line-stripped in Claude Code's diff viewer, but `git log -1 --format=%B` consistently shows blank lines preserved in the actual commit. Display artifact, not content bug. If a commit body looks collapsed, verify via `%B` before amending — the terminal output from git is the truth.
+
+- **Long-file diff viewer duplication.** Claude Code's diff viewer occasionally renders a block of lines twice when displaying a proposed edit (observed around line 200 of multi-hundred-line files). Display artifact only — the actual file content is correct. Reread the file via `Read` if in doubt before editing; do not amend for apparent duplication unless `Read` confirms it.
+
+- **Gate doc updates on verification.** Claude Code may batch documentation updates (marking features "complete", writing past-tense claims about code behavior) before the code behind them is verified. Explicitly require test passage or other evidence before doc changes that assert behavior. "This test pins X" in review-notes.md is a claim that only becomes true after `npm test` confirms it.
+
+- **Require raw output, not self-summary.** For any "is my work correct" verification, require Claude Code to paste raw tool output verbatim into the chat rather than accepting its summary. Claude Code will sometimes read a long output, declare it clean, and move on — which collapses the human review step. Ask for the raw bytes when it matters.
+
+- **Session-blanket approval, when.** For mechanical sequential edits to a single file (e.g., three amendments to the same function), shift+tab session approval is reasonable and saves real time. For structural edits, new files, or the first edit in an unfamiliar area, per-edit approval is the right friction level.

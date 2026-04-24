@@ -79,4 +79,20 @@ Observed during Step 5.5 capture: DSP A preset name is quoted in the OBJECTINFO_
 
 Pre-existing parser quirk, currently unobservable under realistic device state (Orville's own preset editor always quotes multi-word names when saving). Flag if it ever causes a test or production parse failure.
 
+## Step 7 architecture targets
+
+Architectural opinions consolidated during Step 5.5's development. Each item is a symptom of missing primitives that Step 7's events-bus rewrite should address. The Step 5.5 characterization test at `tests/startup.test.js` is effectively a machine-readable inventory of these patches; diffs against its pinned Tier A sequence during Step 7 are a map of what the cleanup changed.
+
+- **parser.js:78-87 debounce + setTimeout wrappers are patches for missing "dump complete" semantics.** The 200ms `setTimeout` plus the `lodash.debounce(..., 200)` wrapper together approximate "the device finished sending a dump" by waiting for silence. Step 7 should replace with explicit `dumpComplete(key, data)` events that the renderer subscribes to, eliminating both timer layers. The characterization test will fail loudly on this change — update the Tier A expected array in the same commit to reflect the new event shape.
+
+- **`isLoadingPreset` boolean is a patch for "when is it safe to render" semantics.** Guards `hideLoading()` calls and a secondary render path in parser.js's background-root-dump branch. Deletable once events-bus exposes dump-complete events natively. `tests/startup.test.js` pins `isLoadingPreset === false` at terminal state; update that assertion when the flag is removed.
+
+- **`autoLoad` flag + main.js:142-154 500ms setTimeout pattern is the landing-page race's mechanism.** Step 7 should replace with "autoload is an explicit subscriber to `rootDumpComplete && cachedPresetKey` condition." This deliberately changes the landing-page destination from `10010000` (setup, the current race outcome) to the cached preset (`401000b` = DSP A preset, the user's actual expectation). `tests/startup.test.js`'s Tier A sequence AND Tier B terminal state both change substantially; update in the same commit as the fix.
+
+- **keyStack mixed-types is a type-smell.** Index 0 is a raw string (pushed by `main.js:143`); index 1+ is a `{key, tag, subs}` object (pushed by the renderer autoload at `renderer.js:742`). Normalize to always-objects, or deliberately split into two separate data structures for different navigation contexts. The characterization test pins the current mixed shape at Tier B (`keyStack[0]` is string, `keyStack[1]` is object); update those assertions when normalization lands.
+
+- **Audit-tool two-gate silencer (config.js cache overwrite + cached 'info' logLevel) is contributor UX debt.** Currently hides the `[stateWrite]` debug output that a developer debugging startup actually wants to see. The startup test mocks logger ungated to sidestep this; real-app debugging still requires manually editing `localStorage.midiConfig`. Low priority but track as UX debt alongside the structural debt above.
+
+- **The Step 5.5 characterization test itself is a map of current timing-workaround patches.** Every Tier A entry mentioning `autoLoad`, `hideLoading`, post-autoload fan-out, or the 200ms render latency is a symptom of debounce-based rendering. Step 7's cleanup reshapes the sequence substantially; treat Tier A divergences during Step 7 as *expected and informative*, not as regressions. Read the diff against `tests/startup.test.js`'s pinned sequence as the inventory of what got cleaned up, not as a failure log.
+
 ## (add more ideas here as they come up)

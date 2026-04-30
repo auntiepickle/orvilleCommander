@@ -94,7 +94,7 @@ export function renderBitmap(canvasId, rawBytes) {
     if (SAVE_MONO_BMP) exportBMP(canvas);
 }
 
-export function exportBMP(canvas) {
+function exportBMP(canvas) {
   const ctx = canvas.getContext('2d');
   const width = canvas.width;
   const height = canvas.height;
@@ -122,7 +122,6 @@ export function exportBMP(canvas) {
   const rowBytes = Math.ceil(width / 8);
   const paddedRow = Math.ceil(rowBytes / 4) * 4;
   for (let y = height - 1; y >= 0; y--) { // BMP is bottom-up
-    let row = 0;
     for (let x = 0; x < width; x += 8) {
       let byte = 0;
       for (let bit = 0; bit < 8; bit++) {

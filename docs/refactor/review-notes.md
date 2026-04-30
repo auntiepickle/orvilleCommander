@@ -43,7 +43,7 @@ Observations and decisions captured during review of each roadmap step. Terse �
 - Dead imports in main.js preserved, not cleaned up. `extractNibbles` has no caller anywhere in the repo; `exportBMP` is called only from inside `renderBitmap` under `SAVE_MONO_BMP` (hardcoded false). Both are still imported by main.js at the new `./bitmap.js` path and remain unused at any call site. Strict move-fidelity kept the import line symmetric; deletion deferred to a standalone cleanup commit or folded into Step 8 (which will churn the main.js import block anyway).
 - Constants ordering: `NO_FLIP` / `ROTATE_COLUMNS` / `SHIFT_FIRST_COLUMN` / `SAVE_MONO_BMP` moved from tail-of-file in parser.js to top-of-file in bitmap.js. Pure ordering change, no behavior delta — they were only referenced inside called functions, so hoist-vs-tail was irrelevant at runtime. Flagged so a future bisect doesn't misread the const position as a semantic edit.
 - Unused local `let row = 0;` inside `exportBMP`'s outer y-loop (bitmap.js:125). Declared, never read or written. Pre-existing dead code in parser.js, preserved verbatim. Candidate for the same standalone cleanup commit as the dead imports above.
-- Indentation inside the moved block is inconsistent: `denibble` is 2-space; `renderBitmap`, `extractNibbles`, `exportBMP` are 4-space. Preserved verbatim from parser.js. A prettier/format pass is explicitly out of Step 6 scope.
+- Indentation inside the moved block is inconsistent. Verified via `cat -A`: `denibble` is 2-space outer with +4-space-jump nesting (function body 2-space, for-body 6-space, if-body 10-space — internally inconsistent, not cleanly 2-space); `extractNibbles` is 4-space; `renderBitmap` is 4-space; `exportBMP` is 2-space. Preserved verbatim from parser.js. A prettier/format pass is explicitly out of Step 6 scope; deferred to future-work.md.
 - Renderer bug observed during smoke but not caused by Step 6: top-left corner of rendered bitmap shows black pixels not present in the source data. Consistent with the `SHIFT_FIRST_COLUMN` non-wrapping shift in `renderBitmap` that zeroes the top `shiftAmount` pixels of the first 8 columns. Pre-existing behavior preserved by the move. Tracked separately in future-work.md.
 
 ## Follow-up: smoke capture promoted to tests/fixtures/
@@ -88,6 +88,20 @@ Do not dump Jest failure output and ask for interpretation. The test surfaces si
 - `tests/helpers/sysex-fixture.js` duplicates `splitLine` from `parser.js` (same duplication pattern as `build_tools/capture-fixtures.cjs`). Both places would update if the ASCII sub-object format ever changed — low risk, external device contract.
 - Setup menu's short-tag COL children include two 4-prefixed keys (`40090000` tempo, `40090100` timer — DSP A scope) in addition to setup-scope keys; surfaced by the Tier A fan-out assertion. Pre-existing, expected (setup menu legitimately references DSP A config), mentioned here as reader context for anyone puzzled by the key mixture.
 - Commit body formatting reminder: when composing commit messages via heredoc, preserve blank lines between the subject and body and between body paragraphs. Earlier commit 1 work had the appearance of collapsed blanks in a diff-viewer tool output but the actual `%B` output retained them — display artifact, not content bug. Worth knowing when reviewing commit bodies via secondary tooling.
+
+## Step 6 cleanup commit (post-Step 5.5)
+
+One commit on refactor_main beyond the prior tip (9f3b2a7). Three mechanical changes from deferred Step 6 work:
+
+- src/main.js: removed `extractNibbles` and `exportBMP` from the `./bitmap.js` import. Both names had zero callers in main.js. `extractNibbles` has zero callers anywhere in the repo; `exportBMP` is called only from inside `renderBitmap` (same file) via the `SAVE_MONO_BMP` gated branch.
+- src/bitmap.js:97: dropped the `export` keyword on `exportBMP`. Same-file caller still resolves; module-internal visibility now matches the actual call graph.
+- src/bitmap.js:125: removed unused `let row = 0;` local at the top of `exportBMP`'s outer y-loop. Declared, never read or written. No closure capture (synchronous nested-loop body, no callbacks).
+
+Closes deferred items previously flagged at the `## Step 6 — bitmap.js extraction` section above (dead main.js imports; unused `let row = 0;`).
+
+16/16 tests passing across 3 suites with zero expected-value updates. This validated that the Step 5.5 startup test holds under "refactor that shouldn't change behavior" — Tier A (event log) and Tier B (terminal appState subset) both unchanged, which is the signal we wanted from a no-behavior-change cleanup.
+
+Indentation normalization, `extractNibbles` delete-vs-leave, and the `SAVE_MONO_BMP=false` dead branch were deliberately deferred. See future-work.md `## Bitmap.js residual cleanup`.
 
 ## Audit trail coverage gap (post-Step-5 finding)
 

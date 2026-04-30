@@ -67,6 +67,21 @@ Likely origin: the `SHIFT_FIRST_COLUMN` post-processing block in `renderBitmap` 
 
 Pre-existing behavior — not caused by Step 6, preserved verbatim by the extraction. No owner, no priority assigned.
 
+## Bitmap.js residual cleanup
+
+Three deferred items from the Step 6 cleanup commit (see review-notes.md `## Step 6 cleanup commit (post-Step 5.5)`).
+
+**Indentation normalization.** bitmap.js is internally inconsistent: `extractNibbles` and `renderBitmap` are 4-space, `exportBMP` is 2-space, and `denibble` (lines 27-35) has a 2/6/10-space pattern (function body 2-space, for-body 6-space, if-body 10-space). Verified genuine via `cat -A` — not a tab artifact. Best handled in a project-wide formatter pass rather than per-file, since the project lacks a prettier config and other files (e.g. parser.js) likely have their own inherited inconsistencies. Don't normalize bitmap.js alone in a behavior-preserving commit; that imposes a convention without project-wide buy-in.
+
+**`extractNibbles` is a fully-dead exported function.** src/bitmap.js:16. Zero callers across src/, tests/, build_tools/, and HTML. No dynamic references (eval, import(), property access). Delete-or-leave decision deferred. Recommend bundling into a Step 8 prune pass alongside other dead-export audits across the codebase, to keep blame contiguous and avoid one-off "delete this function" commits.
+
+**`SAVE_MONO_BMP` flag and gated `exportBMP` call.** src/bitmap.js:7 hardcodes `SAVE_MONO_BMP = false`, gating the only call to `exportBMP` (line 94, now module-internal post-Step-6-cleanup). Reads more like a feature-flag-held-off (a developer-only escape hatch for dumping mono BMPs during bitmap-rendering debugging) than dead code in the same sense as truly orphaned functions. Needs intentionality check before pruning:
+
+- If intentional: add a comment marking it as a dev-only debug hatch, leave the flag and call path in place.
+- If unintentional / forgotten: remove the flag, the gated call at line 94, and `exportBMP` outright as a single coherent commit.
+
+Either resolution is fine; just don't half-prune (e.g. removing the flag while keeping the function, or vice versa).
+
 ## Root OBJECTINFO_DUMP contains type=8 sub entries
 
 Observed during Step 5.5 capture: the root dump contains a sub at position 3 with `type=8`, `key=10040000`, empty statement and empty tag. Filtered out of the renderer autoload correctly by the `type === 'COL'` check at `renderer.js:737`, and lands in `currentSubs` via `parseSubObject` (which accepts any type). The `8` type is undocumented; `system_commands.txt` does not enumerate non-letter type tokens.

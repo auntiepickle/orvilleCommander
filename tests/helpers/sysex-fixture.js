@@ -53,7 +53,7 @@ function splitLine(line) {
 }
 
 function decodeSubs(rawBytes) {
-  const ascii = String.fromCharCode(...rawBytes.slice(5, -1)).trim();
+  const ascii = String.fromCharCode(...rawBytes.slice(5, -1)).replace(/\0+$/, '').trim();
   return ascii
     .split('\n')
     .map(l => l.trim())

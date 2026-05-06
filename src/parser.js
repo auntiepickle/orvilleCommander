@@ -47,7 +47,7 @@ export function parseResponse(data) {
       setState({ deviceId: data[3] }, 'parser');
       log(`Detected device ID: ${appState.deviceId}`, 'info', 'general');
     }
-    const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).trim();
+    const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).replace(/\0+$/, '').trim();
     if (data[3] === appState.deviceId && data[4] === 0x32) { // OBJECTINFO_DUMP
       const subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
       log(`Parsed OBJECTINFO_DUMP for key ${subs[0]?.key || 'unknown'}: ${ascii}`, 'info', 'parsedDump');

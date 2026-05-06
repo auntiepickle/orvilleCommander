@@ -59,6 +59,9 @@ The startup test captures state writes via the log mock (parsing `[stateWrite]` 
 
 **renderer.js:** renderer.test.js verifies setTimeouts at 200ms (bitmap re-fetch after value change), 300ms (nested auto-load inside handleSelectChange), 500ms (nested post-preset-load root fetch). Same "wait for device" class.
 
+**controls.js:**
+- `:124` — `setTimeout(..., 200)` — keypress-settle delay before `updateScreen()` and the optional 0x18 fetch in `setupKeypressControls`. Same "wait for device" class as the parser timers.
+
 ## 6. Audit-tool silencer mechanism
 
 On boot, `main.js:314` calls `loadConfig(...)` which reads `localStorage.midiConfig`, parses it, populates UI selects, returns parsed. Then `main.js:316`:

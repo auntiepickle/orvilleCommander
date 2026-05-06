@@ -73,12 +73,16 @@ export function getRenderScreenSnapshots() {
 // bucket.
 //
 // Coalescing rule (roadmap step 5.5 Q9.3): the invariant this test
-// characterizes is "parser writes this SET of keys per parseResponse
-// invocation", not "parser makes exactly N separate setState calls in
-// exactly this order". Step 7's event-bus refactor should be free to
-// collapse adjacent `setState({a:x}); setState({b:y})` into one
-// `setState({a:x, b:y})` without failing the test — the bucket's sorted
-// key-set is unchanged.
+// characterizes is "the SET of keys written in any run of consecutive
+// same-origin stateWrites", not "the exact number of setState calls
+// within such a run, nor the intra-run ordering of keys". Bucket
+// boundaries are event-stream-scoped (see next paragraph), not
+// parseResponse-scoped — the per-parseResponse grouping in expected
+// Tier A is emergent from intervening non-stateWrite events, not a
+// parseResponse-aware check. Step 7's event-bus refactor should be
+// free to collapse adjacent `setState({a:x}); setState({b:y})` into
+// one `setState({a:x, b:y})` without failing the test — the bucket's
+// sorted key-set is unchanged.
 //
 // An intervening non-stateWrite event (midiSend, log, renderScreen,
 // bitmap, hideLoading) TERMINATES the bucket. If parser writes A, then

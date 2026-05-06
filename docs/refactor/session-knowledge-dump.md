@@ -110,7 +110,7 @@ Or use the "Apply Log Categories" UI button (index.html:102-103, textarea accept
 
 ## 9. Known bugs / oddities not yet surfaced
 
-- **Direct `appState.x = y` writes outside parser.js are orphaned from the Step-5 setState audit.** parser.js:132 (currentValues), :99 (childSubs), :120 (favorites fix), renderer.js updateScreen's cache-clears, renderer.js autoload's keyStack/currentKey/autoLoad, renderer.js handleLcdClick's writes (`:49-90`), midi.js:24 deviceId, main.js:76 pollingEnabled, main.js:163 logLevel, main.js:315-319 startup init. The `[stateWrite]` trace covers a small fraction of actual state mutation.
+- **Audit trail coverage gap closed in 7a.3** — see review-notes.md `## Audit trail coverage gap (post-Step-5 finding)` for the authoritative inventory of the 53 writes that migrated to setState with per-cluster origin tags.
 - **Hardcoded magic keys at parser.js:139** — `'10020011'`, `'10020012'` (program/bank) inline, no named constants.
 - **`endsWith('0002')` heuristic at parser.js:152** — meter-key detection. A heuristic masquerading as protocol.
 - **Optimistic write at parser.js:119-120** — sets `appState.currentValues[programSub.key]` BEFORE device confirms; if sendValuePut fails or device rejects, appState lies. No rollback.

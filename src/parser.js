@@ -44,7 +44,7 @@ const debouncedRenderScreen = debounce((subs, ascii) => {
 export function parseResponse(data) {
   try {
     if (appState.deviceId === 0 && data.length > 3) {
-      setState({ deviceId: data[3] }, 'parser');
+      setState({ deviceId: data[3] }, 'parser:device-id-detect');
       log(`Detected device ID: ${appState.deviceId}`, 'info', 'general');
     }
     const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).replace(/\0+$/, '').trim();
@@ -55,17 +55,21 @@ export function parseResponse(data) {
       if (main.key === '0') {
         const dspASub = subs.find(s => s.key.startsWith('4'));
         const dspBSub = subs.find(s => s.key.startsWith('8'));
-        setState({ dspAKey: dspASub?.key || '401000b' }, 'parser');
-        setState({ dspBKey: dspBSub?.key || '801000b' }, 'parser');
-        setState({ dspAName: dspASub?.statement || '' }, 'parser');
-        setState({ dspBName: dspBSub?.statement || '' }, 'parser');
+        setState({
+          dspAKey: dspASub?.key || '401000b',
+          dspBKey: dspBSub?.key || '801000b',
+          dspAName: dspASub?.statement || '',
+          dspBName: dspBSub?.statement || '',
+        }, 'parser:root-dsp-meta');
       }
       if (main.key.endsWith('000b')) {
         const dsp = main.key[0] === '4' ? 'A' : 'B';
-        setState({ [`menus${dsp}`]: subs.slice(1).filter(s => s.type === 'COL') }, 'parser');
-        setState({ [`dsp${dsp}Name`]: main.statement }, 'parser');
+        setState({
+          [`menus${dsp}`]: subs.slice(1).filter(s => s.type === 'COL'),
+          [`dsp${dsp}Name`]: main.statement,
+        }, 'parser:preset-meta');
         if (main.key === appState.currentKey) {
-          setState({ presetKey: main.key }, 'parser');
+          setState({ presetKey: main.key }, 'parser:preset-key');
         }
       }
       if (main.key === appState.currentKey) {
@@ -76,7 +80,7 @@ export function parseResponse(data) {
           sendValueDump(s.key);
         });
         if (renderTimeout) clearTimeout(renderTimeout);
-        setState({ lastAscii: ascii }, 'parser');
+        setState({ lastAscii: ascii }, 'parser:current-key-ascii');
         renderTimeout = setTimeout(() => {
           debouncedRenderScreen(subs, ascii);
           if (!appState.isLoadingPreset) {
@@ -84,19 +88,19 @@ export function parseResponse(data) {
           }
           renderTimeout = null;
         }, 200);
-        setState({ currentSubs: subs }, 'parser');
+        setState({ currentSubs: subs }, 'parser:current-subs');
       } else if (main.key === '0' && appState.currentKey !== '0') {
         // Background root dump received (e.g., after preset load); re-render current screen to update top bar
         debouncedRenderScreen(appState.currentSubs, appState.lastAscii);
         if (appState.isLoadingPreset) {
           hideLoading();
-          setState({ isLoadingPreset: false }, 'parser');
+          setState({ isLoadingPreset: false }, 'parser:loading-preset-clear');
         }
       } else {
         // Store child sub-menu data if it's a child of the current menu
         const isChild = appState.currentSubs.some(s => s.key === main.key && s.parent === appState.currentKey);
         if (isChild) {
-          appState.childSubs[main.key] = subs;
+          setState({ childSubs: { ...appState.childSubs, [main.key]: subs } }, 'parser:child-subs-store');
           log(`Stored child subs for key ${main.key} under parent ${appState.currentKey}`, 'debug', 'parsedDump');
           debouncedRenderScreen(appState.currentSubs, appState.lastAscii); // Re-render to include child data
         }
@@ -117,7 +121,7 @@ export function parseResponse(data) {
                 log(`Correcting selection after Favorites re-order: setting to index ${newIndex} for "${targetName}"`, 'info', 'general');
                 sendValuePut(programSub.key, newIndex.toString());
                 const newDesc = programSub.options[newIndex].desc;
-                appState.currentValues[programSub.key] = `${newIndex} ${newDesc}`;
+                setState({ currentValues: { ...appState.currentValues, [programSub.key]: `${newIndex} ${newDesc}` } }, 'parser:favorites-fix-optimistic');
                 setTimeout(() => sendValueDump(programSub.key), 200);
               }
             }
@@ -129,7 +133,7 @@ export function parseResponse(data) {
       const key = parts[0];
       const value = parts.slice(1).join(' ');
       const oldValue = appState.currentValues[key];
-      appState.currentValues[key] = value;
+      setState({ currentValues: { ...appState.currentValues, [key]: value } }, 'parser:value-cache');
       log(`Parsed VALUE_DUMP for key ${key}: ${value}`, 'info', 'parsedDump');
       if (oldValue && oldValue !== value) {
         log(`Value changed from ${oldValue} to ${value}`, 'info', 'valueChange');

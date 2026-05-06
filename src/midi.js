@@ -1,6 +1,7 @@
 // midi.js
 import { parseResponse } from './parser.js';
 import { appState } from './state.js';
+import { setState } from './store.js';
 import { log } from './logger.js';
 
 let selectedOutput = null;
@@ -21,7 +22,7 @@ let selectedInput = null;
 export function setMidiPorts(output, input, devId) {
   selectedOutput = output;
   selectedInput = input;
-  appState.deviceId = devId;
+  setState({ deviceId: devId }, 'midi:set-ports');
 }
 
 /**

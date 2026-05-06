@@ -5,6 +5,7 @@ import { setupKeypressControls, testKeypress } from './controls.js';
 import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut, sendObjectInfoDump } from './midi.js';
 import { updateScreen, toggleDspKey } from './renderer.js';
 import { appState } from './state.js';
+import { setState } from './store.js';
 import { denibble, renderBitmap } from './bitmap.js';
 import { log } from './logger.js';
 
@@ -73,7 +74,7 @@ function stopPolling() {
 
 if (toggleMeterPollingBtn) {
   toggleMeterPollingBtn.addEventListener('click', () => {
-    appState.pollingEnabled = !appState.pollingEnabled;
+    setState({ pollingEnabled: !appState.pollingEnabled }, 'main:polling-toggle');
     pollingIndicator.style.display = appState.pollingEnabled ? 'inline' : 'none';
     if (appState.pollingEnabled) {
       startPolling();
@@ -140,9 +141,11 @@ function selectPorts() {
   lcdEl.innerText = 'Connected. Fetching root screen...';
   updateScreen(log);
   setTimeout(() => {
-    appState.keyStack.push(appState.currentKey);
-    appState.currentKey = appState.presetKey;
-    appState.autoLoad = true;
+    setState({
+      keyStack: [...appState.keyStack, appState.currentKey],
+      currentKey: appState.presetKey,
+      autoLoad: true,
+    }, 'main:select-ports-init');
     updateScreen(log);
     sendObjectInfoDump(toggleDspKey(appState.presetKey));
     if (appState.fetchBitmap) {
@@ -160,7 +163,7 @@ selectPortsBtn.addEventListener('click', selectPorts);
 
 saveConfigBtn.addEventListener('click', () => {
   saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, appState.presetKey);
-  appState.logLevel = logLevelSelect.value;
+  setState({ logLevel: logLevelSelect.value }, 'main:save-config-log-level');
 });
 
 clearConfigBtn.addEventListener('click', () => {
@@ -194,7 +197,7 @@ testKeypressBtn.addEventListener('click', () => {
 });
 
 syncBtn.addEventListener('click', () => {
-  appState.currentKey = '0';
+  setState({ currentKey: '0' }, 'main:sync-root');
   updateScreen(log);
   log('Synced to root', 'info', 'general');
 });
@@ -261,12 +264,12 @@ if (testTRateBtn) {
   testTRateBtn.addEventListener('click', async () => {
     log('Starting t_rate test...', 'info', 'general');
     // Navigate to Auto Tape Flanger
-    appState.currentKey = '801000b';
+    setState({ currentKey: '801000b' }, 'main:test-trate-nav');
     updateScreen(log);
     await new Promise(r => setTimeout(r, 1000));
     log('Navigated to Auto Tape Flanger', 'info', 'general');
     // Navigate to delay parameters
-    appState.currentKey = '8040001';
+    setState({ currentKey: '8040001' }, 'main:test-trate-nav');
     updateScreen(log);
     await new Promise(r => setTimeout(r, 1000));
     log('Navigated to delay parameters', 'info', 'general');
@@ -312,9 +315,11 @@ if (testTRateBtn) {
 setupKeypressControls();
 
 const cachedConfig = loadConfig(deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox);
-appState.logLevel = logLevelSelect.value;
-appState.logCategories = cachedConfig?.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
-appState.fetchBitmap = fetchBitmapCheckbox.checked;
-appState.updateBitmapOnChange = updateBitmapOnChangeCheckbox.checked;
-appState.presetKey = cachedConfig?.presetKey || '401000b';
+setState({
+  logLevel: logLevelSelect.value,
+  logCategories: cachedConfig?.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true])),
+  fetchBitmap: fetchBitmapCheckbox.checked,
+  updateBitmapOnChange: updateBitmapOnChangeCheckbox.checked,
+  presetKey: cachedConfig?.presetKey || '401000b',
+}, 'main:boot-init');
 connectMidi(cachedConfig);

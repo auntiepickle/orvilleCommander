@@ -2,6 +2,7 @@
 import { sendKeypress, sendSysEx } from './midi.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
+import { setState } from './store.js';
 import { log } from './logger.js';
 
 /**
@@ -124,13 +125,15 @@ export function setupKeypressControls() {
           setTimeout(() => {
             if (key === 'ab') {
               if (appState.currentKey === '0') {
-                appState.presetKey = toggleDspKey(appState.presetKey);
+                setState({ presetKey: toggleDspKey(appState.presetKey) }, 'controls:keypress-ab-toggle');
               }
             } else if (key === 'parameter') {
               if (appState.currentKey === '0') {
-                appState.keyStack.push(appState.currentKey);
-                appState.currentKey = appState.presetKey;
-                appState.autoLoad = true;
+                setState({
+                  keyStack: [...appState.keyStack, appState.currentKey],
+                  currentKey: appState.presetKey,
+                  autoLoad: true,
+                }, 'controls:keypress-parameter-nav');
               }
             }
             updateScreen();

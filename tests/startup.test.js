@@ -111,6 +111,7 @@ import { parseResponse } from '../src/parser.js';
 import { updateScreen } from '../src/renderer.js';
 import { sendObjectInfoDump, sendSysEx } from '../src/midi.js';
 import { appState } from '../src/state.js';
+import { setState } from '../src/store.js';
 import {
   loadFixture,
   extractExpectedFromRoot,
@@ -245,10 +246,14 @@ describe('startup characterization (roadmap step 5.5)', () => {
     updateScreen();
     // (c) feed root fixture — parseResponse schedules setTimeout(200)
     parseResponse(rootBytes);
-    // (d) inline main.js:142-154 — BEFORE advance, sets autoLoad=true
-    appState.keyStack.push(appState.currentKey);
-    appState.currentKey = appState.presetKey;
-    appState.autoLoad = true;
+    // (d) inline main.js:142-154 — BEFORE advance, sets autoLoad=true.
+    //     Mirrors main:select-ports-init's combined-per-cluster setState
+    //     so this simulation tracks the production module.
+    setState({
+      keyStack: [...appState.keyStack, appState.currentKey],
+      currentKey: appState.presetKey,
+      autoLoad: true,
+    }, 'main:select-ports-init');
     updateScreen();
     sendObjectInfoDump(toggleDspKey(appState.presetKey));
     if (appState.fetchBitmap) sendSysEx(0x18, []);
@@ -344,20 +349,24 @@ describe('startup characterization (roadmap step 5.5)', () => {
     simulateSelectPorts();
 
     const expected = [
-      // Step (b) updateScreen('0') from main.js:141 — two MIDI sends for the
-      // root key. If these move or disappear, selectPorts' initial screen
-      // fetch was reordered or dropped.
+      // Step (b) updateScreen('0') from main.js:141. The first event is
+      // R1's combined-per-cluster setState — currentKey === '0' (default
+      // from beforeEach) hits the renderer.js:21 conditional, so all three
+      // keys (childSubs, currentValues, currentSoftkeys) appear in the
+      // patch. Two MIDI sends follow. If these move or disappear,
+      // selectPorts' initial screen fetch was reordered or dropped.
+      'state:renderer:update-screen-clear:childSubs,currentSoftkeys,currentValues',
       'midi:objectinfo:0',
       'midi:valuedump:0',
 
-      // Step (c) root OBJECTINFO_DUMP parseResponse. First pass: deviceId
-      // auto-detect fires (coalesces alone because 'Detected device ID' log
-      // breaks the bucket). If the coalesced state bucket changes keys,
-      // parser.js:51-70 restructured its setState calls.
-      'state:parser:deviceId',
+      // Step (c) root OBJECTINFO_DUMP parseResponse. deviceId auto-detect
+      // fires alone (parser:device-id-detect cluster) because 'Detected
+      // device ID' log breaks the bucket. Root-DSP metadata is one combined
+      // setState (parser:root-dsp-meta) over the 4 keys.
+      'state:parser:device-id-detect:deviceId',
       'log:general:info:Detected device ID',
       'log:parsedDump:info:Parsed OBJECTINFO_DUMP',
-      'state:parser:dspAKey,dspAName,dspBKey,dspBName',
+      'state:parser:root-dsp-meta:dspAKey,dspAName,dspBKey,dspBName',
 
       // Root fan-out (4 short-tag COLs × 2 MIDI calls each). Order follows
       // fixture order; derived from rootShortTagKeys for Option B robustness.
@@ -365,37 +374,58 @@ describe('startup characterization (roadmap step 5.5)', () => {
         `midi:objectinfo:${k}`,
         `midi:valuedump:${k}`,
       ]),
-      'state:parser:currentSubs,lastAscii',
+      // 7a.3 split: lastAscii (parser.js:79) and currentSubs (parser.js:87)
+      // now have different origin strings (parser:current-key-ascii vs
+      // parser:current-subs), so same-origin coalescing breaks. The two
+      // entries used to be one bucket pre-7a.3.
+      'state:parser:current-key-ascii:lastAscii',
+      'state:parser:current-subs:currentSubs',
 
-      // Step (d) inline main.js:142-154. If sendSysEx(0x18) disappears,
-      // appState.fetchBitmap may have been read differently or the bitmap
-      // fetch was gated elsewhere.
+      // Step (d) inline main.js:142-154 mirror — simulateSelectPorts
+      // emits one combined setState tagged main:select-ports-init.
+      // Then the second updateScreen() runs with currentKey === '401000b'
+      // (NOT in renderer.js:21's conditional list), so currentSoftkeys is
+      // omitted from the patch — bucket has 2 keys, not 3. The conditional-
+      // omit asymmetry between this entry and step (b)'s is what pins the
+      // updateScreen conditional behavior.
+      'state:main:select-ports-init:autoLoad,currentKey,keyStack',
+      'state:renderer:update-screen-clear:childSubs,currentValues',
       'midi:objectinfo:401000b',
       'midi:valuedump:401000b',
       'midi:objectinfo:801000b',
       'midi:sysex:cmd=0x18,len=0',
 
       // Step (e) root's setTimeout fires, renderScreen runs with autoLoad=
-      // true, autoload branch flips currentKey to first short-tag COL and
-      // calls updateScreen. This is the landing-page race in action. If the
-      // renderScreen line changes, the autoload preconditions moved.
+      // true. The renderScreen call is recorded with snapshot. Inside the
+      // real renderScreen body: :266 currentSubs and :529 currentSoftkeys
+      // both setState with origin renderer:render-pin and coalesce because
+      // no intervening non-stateWrite events fire on the root render path
+      // (root has no NUM/SET/CON params triggering sendValueDump and no
+      // matching potentialEmbedSubs). Then autoload branch fires:
+      // autoload-clear flag, log breaks the bucket, autoload-descend
+      // (currentKey + keyStack), inner updateScreen with currentKey now
+      // '10010000' which IS in the conditional list (3 keys in patch).
       `render:autoLoad=true,key=401000b,subsCount=${expectedRoot.subsCount},subsFirst=0`,
+      'state:renderer:render-pin:currentSoftkeys,currentSubs',
+      'state:renderer:autoload-clear:autoLoad',
       'log:general:info:Auto-loading first menu',
+      'state:renderer:autoload-descend:currentKey,keyStack',
+      'state:renderer:update-screen-clear:childSubs,currentSoftkeys,currentValues',
       `midi:objectinfo:${expectedRoot.firstShortTagCOLKey}`,
       `midi:valuedump:${expectedRoot.firstShortTagCOLKey}`,
       'hideLoading',
 
       // Step (f) 401000b dump arrives. Gate fails (currentKey is now
       // firstShortTagCOLKey, not '401000b'), so ONLY the endsWith('000b')
-      // branch runs — menusA + dspAName written, no presetKey/currentSubs/
-      // lastAscii updates. If presetKey appears in this bucket, the race
-      // was fixed without updating expectations.
+      // branch runs — menusA + dspAName written via parser:preset-meta,
+      // no presetKey/currentSubs/lastAscii updates. If presetKey appears
+      // in this bucket, the race was fixed without updating expectations.
       'log:parsedDump:info:Parsed OBJECTINFO_DUMP',
-      'state:parser:dspAName,menusA',
+      'state:parser:preset-meta:dspAName,menusA',
 
       // Step (h) 801000b dump — same silent-drop pattern as 401000b.
       'log:parsedDump:info:Parsed OBJECTINFO_DUMP',
-      'state:parser:dspBName,menusB',
+      'state:parser:preset-meta:dspBName,menusB',
 
       // Step (i) bitmap. denibble is real; renderBitmap is mocked and only
       // records rawByteLen (asserted separately in Tier B).
@@ -403,19 +433,23 @@ describe('startup characterization (roadmap step 5.5)', () => {
       'bitmap',
 
       // Step (j) 10010000 dump — currentKey === main.key, so full
-      // processing fires: 14 short-tag COL fan-outs, then lastAscii +
-      // currentSubs writes.
+      // processing fires: 14 short-tag COL fan-outs, then split lastAscii
+      // and currentSubs (same mechanism as in step (c)).
       'log:parsedDump:info:Parsed OBJECTINFO_DUMP',
       ...expected10010000.shortTagKeys.flatMap(k => [
         `midi:objectinfo:${k}`,
         `midi:valuedump:${k}`,
       ]),
-      'state:parser:currentSubs,lastAscii',
+      'state:parser:current-key-ascii:lastAscii',
+      'state:parser:current-subs:currentSubs',
 
       // Step (k) 10010000's setTimeout fires. renderScreen runs with
-      // autoLoad=false (root's autoload already cleared it), so no second
-      // autoload. hideLoading completes the flow.
+      // autoLoad=false (root's autoload already cleared it), so no
+      // autoload branch fires (no autoload-clear/descend entries). Inside
+      // renderScreen, :266 and :529 same-origin coalesce as in step (e).
+      // hideLoading completes the flow.
       `render:autoLoad=false,key=${expectedRoot.firstShortTagCOLKey},subsCount=${expected10010000.subsCount},subsFirst=${expectedRoot.firstShortTagCOLKey}`,
+      'state:renderer:render-pin:currentSoftkeys,currentSubs',
       'hideLoading',
     ];
 

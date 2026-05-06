@@ -1,5 +1,6 @@
 // renderer.js
 import { appState } from './state.js';
+import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { keypressMasks } from './controls.js';
 import { parseSubObject } from './parser.js';
@@ -16,11 +17,11 @@ import { log } from './logger.js';
  * updateScreen(log); // Refresh current menu
  */
 export function updateScreen(logParam = null) {
-  appState.childSubs = {}; // Clear childSubs on update to prevent stale data
-  appState.currentValues = {};
+  const patch = { childSubs: {}, currentValues: {} };
   if (appState.currentKey === '0' || ['10010000', '10020000', '10030000', '10030500'].includes(appState.currentKey)) {
-    appState.currentSoftkeys = []; // Clear at root or top-level non-preset menu roots to prevent leakage
+    patch.currentSoftkeys = []; // Clear at root or top-level non-preset menu roots to prevent leakage
   }
+  setState(patch, 'renderer:update-screen-clear');
   sendObjectInfoDump(appState.currentKey, logParam);
   sendValueDump(appState.currentKey, logParam);
 }
@@ -46,16 +47,20 @@ export function toggleDspKey(key) {
  */
 const handleLcdClick = (e) => {
   if (e.target.classList.contains('dsp-clickable')) {
-    appState.presetKey = e.target.dataset.key;
+    const newPresetKey = e.target.dataset.key;
+    const patch = {
+      presetKey: newPresetKey,
+      currentKey: newPresetKey,
+      autoLoad: true,
+      currentSoftkeys: [], // Clear softkeys on DSP switch
+      childSubs: {}, // Clear child subs on DSP switch
+    };
     if (!appState.currentKey.startsWith('4') && !appState.currentKey.startsWith('8')) {
       const parentMain = appState.currentSubs[0];
       const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
-      appState.keyStack.push({key: appState.currentKey, tag: parentTag, subs: (appState.currentSubs || []).slice()});
+      patch.keyStack = [...appState.keyStack, {key: appState.currentKey, tag: parentTag, subs: (appState.currentSubs || []).slice()}];
     }
-    appState.currentKey = appState.presetKey;
-    appState.autoLoad = true;
-    appState.currentSoftkeys = []; // Clear softkeys on DSP switch
-    appState.childSubs = {}; // Clear child subs on DSP switch
+    setState(patch, 'renderer:lcd-click-dsp-toggle');
     updateScreen();
   } else if (e.target.classList.contains('softkey')) {
     const newKey = e.target.dataset.key;
@@ -63,10 +68,12 @@ const handleLcdClick = (e) => {
       const parentEntry = appState.keyStack[appState.keyStack.length - 1];
       if (parentEntry.subs.some(s => s.key === newKey && s.type === 'COL') && newKey !== appState.currentKey) {
         log(`User clicked sibling softkey: ${newKey} - ${e.target.textContent.trim()}`, 'info', 'general');
-        appState.currentKey = newKey;
-        appState.paramOffset = 0;
-        appState.autoLoad = true;
-        appState.childSubs = {};
+        setState({
+          currentKey: newKey,
+          paramOffset: 0,
+          autoLoad: true,
+          childSubs: {},
+        }, 'renderer:lcd-click-softkey-sibling');
         updateScreen();
         return;
       }
@@ -74,18 +81,22 @@ const handleLcdClick = (e) => {
     log(`User clicked virtual softkey: ${newKey} - ${e.target.textContent.trim()}`, 'info', 'general');
     const parentMain = appState.currentSubs[0];
     const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
-    appState.keyStack.push({key: appState.currentKey, tag: parentTag, subs: (appState.currentSubs || []).slice()});
-    appState.currentKey = newKey;
-    appState.paramOffset = 0; // Reset offset for new menu
-    appState.autoLoad = true;
-    appState.childSubs = {}; // Clear child subs on navigation
+    setState({
+      keyStack: [...appState.keyStack, {key: appState.currentKey, tag: parentTag, subs: (appState.currentSubs || []).slice()}],
+      currentKey: newKey,
+      paramOffset: 0, // Reset offset for new menu
+      autoLoad: true,
+      childSubs: {}, // Clear child subs on navigation
+    }, 'renderer:lcd-click-softkey-descend');
     updateScreen();
   } else if (e.target.classList.contains('back-link')) {
     const clickedKey = e.target.dataset.key;
-    appState.keyStack.pop();
-    appState.currentKey = clickedKey;
-    appState.autoLoad = true;
-    appState.currentSoftkeys = [];
+    setState({
+      keyStack: appState.keyStack.slice(0, -1),
+      currentKey: clickedKey,
+      autoLoad: true,
+      currentSoftkeys: [],
+    }, 'renderer:lcd-click-back');
     updateScreen();
   }
 };
@@ -104,7 +115,7 @@ const handleSelectChange = (e) => {
   showLoading();
   sendValuePut(key, selectedIndex);
   //appState.currentValues[key] = `${parseInt(selectedIndex, 10).toString(16)} ${selectedDesc}`;
-  appState.currentValues[key] = `${selectedIndex} ${selectedDesc}`;  // Removed immediate renderScreen to avoid old subs with new value
+  setState({ currentValues: { ...appState.currentValues, [key]: `${selectedIndex} ${selectedDesc}` } }, 'renderer:select-change-value-cache');  // Removed immediate renderScreen to avoid old subs with new value
   setTimeout(() => {
     updateScreen();
     if (appState.updateBitmapOnChange) {
@@ -123,7 +134,7 @@ const handleSelectChange = (e) => {
     if (key === '10020011') {
       setTimeout(() => {
         const loadKey = appState.presetKey.startsWith('4') ? '1002001c' : '1002001d';
-        appState.isLoadingPreset = true;
+        setState({ isLoadingPreset: true }, 'renderer:select-change-load-preset');
         sendValuePut(loadKey, '1');
         log(`Auto-triggered load for ${loadKey} after program change`, 'info', 'general');
         setTimeout(() => {
@@ -164,7 +175,7 @@ const handleParamClick = (e) => {
           if (!isNaN(newValue) && newValue >= min && newValue <= max) {
             showLoading();
             sendValuePut(key, newValueStr);
-            appState.currentValues[key] = newValueStr;
+            setState({ currentValues: { ...appState.currentValues, [key]: newValueStr } }, 'renderer:param-click-num-value-cache');
             renderScreen(null, appState.lastAscii); // Immediate local update
             setTimeout(() => {
               updateScreen();
@@ -180,7 +191,7 @@ const handleParamClick = (e) => {
       } else if (sub.type === 'TRG') {
         showLoading();
         if (key === '1002001c' || key === '1002001d') {
-          appState.isLoadingPreset = true;
+          setState({ isLoadingPreset: true }, 'renderer:param-click-trg-load-preset');
           log('Started loading preset.', 'info', 'general');
         }
         sendValuePut(key, '1');
@@ -263,7 +274,7 @@ export function renderScreen(subs, ascii, logParam) {
     log('Skipping render: no subs available', 'debug', 'renderScreen');
     return;
   }
-  appState.currentSubs = subs;
+  setState({ currentSubs: subs }, 'renderer:render-pin');
   const main = subs[0];
   if (!main) {
     log('Skipping render: main sub undefined', 'debug', 'renderScreen');
@@ -526,7 +537,7 @@ export function renderScreen(subs, ascii, logParam) {
       softSubs = localSoftSubs;
     }
     if (softSubs.length > 0) {
-      appState.currentSoftkeys = softSubs;
+      setState({ currentSoftkeys: softSubs }, 'renderer:render-pin');
     }
     // Build current/sibling soft text lines (lower level first)
     const itemsPerLine = 4;
@@ -733,17 +744,19 @@ export function renderScreen(subs, ascii, logParam) {
   // Auto load first menu if applicable
   const hasParams = subs.slice(1).some(s => ['NUM', 'SET', 'CON', 'TRG', 'INF'].includes(s.type));
   if (appState.autoLoad && !hasParams) {
-    appState.autoLoad = false;
+    setState({ autoLoad: false }, 'renderer:autoload-clear');
     const softSubsLocal = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <=10 && s.tag.trim());
     if (softSubsLocal.length > 1) {
       log(`Auto-loading first menu: ${softSubsLocal[0].key} - ${softSubsLocal[0].tag}`, 'info', 'general');
       const parentMain = appState.currentSubs[0];
       const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
-      appState.keyStack.push({key: appState.currentKey, tag: parentTag, subs: (appState.currentSubs || []).slice()});
-      appState.currentKey = softSubsLocal[0].key;
+      setState({
+        keyStack: [...appState.keyStack, {key: appState.currentKey, tag: parentTag, subs: (appState.currentSubs || []).slice()}],
+        currentKey: softSubsLocal[0].key,
+      }, 'renderer:autoload-descend');
       updateScreen();
     }
   } else if (appState.autoLoad) {
-    appState.autoLoad = false;
+    setState({ autoLoad: false }, 'renderer:autoload-clear');
   }
 }

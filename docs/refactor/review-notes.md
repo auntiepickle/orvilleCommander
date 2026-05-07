@@ -118,3 +118,13 @@ Step 5's `setState(partial, origin)` was introduced to establish an audit tripwi
 **keyStack mixed-types symmetry.** `main.js:143` and `controls.js:131` are the two string-push sites — both push `appState.currentKey` as a raw string before navigating. The three object-push sites at `renderer.js:53`, `:77`, and `:742` push `{key, tag, subs}` objects. The Step 5.5 startup test pinned this mixed shape at Tier B (`keyStack[0]` string, `keyStack[1]` object); 7e1 unifies the type.
 
 **Implication for Step 7.** The events-bus migration is the natural completion point for the audit. Every direct write in the inventory above is a candidate for migration to `setState(patch, origin)` as part of Step 7's rewiring — not just the writes inside parser.js. The Step 5.5 startup test's Tier A sequence catches parser-origin writes only; the other 50 sites remain invisible to the characterization test, which means Step 7 can remove or rewire them without the test objecting. Reviewers of Step 7 diffs should cross-check against the inventory above rather than relying on the test alone.
+
+## 7c.0 — populated VALUE_DUMP fixture capture
+
+One commit on `refactor_main` beyond the 7a.3 tip (`fe9e198`), at SHA `15f62a1`. Fixture-only — no `src/` changes.
+
+- Target: `8060001` (t_rate, SET-type) accessible from current device state via the `testTRateBtn` harness path at `main.js:264-312` with Auto Tape Flanger loaded into DSP B.
+- Captured fixture: `tests/fixtures/valuedump-8060001.txt`, 21 bytes. Payload after the `0x20` separator decodes as `"1b off "` — option index `0x1b` ("off") for t_rate.
+- NUL-trailer asymmetry empirically observed: VALUE_DUMP responses end `... 20 F7` (no NUL), OBJECTINFO_DUMP responses end `... 20 00 F7` (NUL present, stripped by `parser.js:50` since 7a.2). Cross-ref: `session-knowledge-dump.md` §13. Implication for 7c proper: the dumpComplete request-counter mechanism does not need NUL handling for VALUE_DUMP fan-out.
+- Capture-script change: option (b) chosen over option (a) — `--only <name>` flag added to `build_tools/capture-fixtures.cjs` plus a permanent FIXTURES entry. Fail-fasts with known-name listing if `--only` doesn't match. Existing fixtures untouched, so Tier B of the Step 5.5 startup test cannot drift from a recapture-induced device-state shift.
+- Tests: 16/16 unchanged across parser, renderer, and startup suites. The new fixture is unreferenced by any test (`tests/startup.test.js:183-187` covers the four objectinfo fixtures and `screen-dump-black-hole.txt` only).

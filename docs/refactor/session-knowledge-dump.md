@@ -150,3 +150,7 @@ Also: **`tests/startup.test.js`'s header comment block** is a self-documenting m
 - **main.js dead imports:** `extractNibbles` and `exportBMP` are imported from bitmap.js but only denibble/renderBitmap are used. Flagged in Step 6 notes as deferred cleanup.
 - **`jest-environment-jsdom` is in `dependencies` not `devDependencies`.** Minor misclassification; harmless.
 - **Capture script renames silently on fixture-name mismatch.** If a re-capture with a different device state lands on a different first-short-tag-COL key, `objectinfo-10010000.txt` is semantically wrong. Q9.1 verification in the script prints the actual key for manual rename; not automated.
+
+## 13. Protocol response framing observations
+
+- **VALUE_DUMP framing has no NUL trailer; OBJECTINFO_DUMP does.** Captured OBJECTINFO_DUMP fixtures end `... 0D 0A 20 00 F7` — `parser.js:50`'s `.replace(/\0+$/, '')` was added in 7a.2 to strip this. Captured VALUE_DUMP fixtures end `... <payload> 20 F7` — trailing space, no NUL. Verified across all three captured VALUE_DUMP fixtures (`tests/fixtures/valuedump-{root,401000b,8060001}.txt`). The 7a.2 NUL-strip is a no-op on the VALUE_DUMP path. Sample is one populated case (8060001 in 7c.0); treat as observed-not-proven if 7c surfaces a VALUE_DUMP under different conditions.

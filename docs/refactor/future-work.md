@@ -112,4 +112,17 @@ Architectural opinions consolidated during Step 5.5's development. Each item is 
 
 - **Expanded timing-patch inventory in `docs/refactor/session-knowledge-dump.md` question 5.** Beyond the two patches already listed above, additional `setTimeout(200)` instances exist at `parser.js:121` (favorites re-fetch) and `parser.js:158` (VALUE_DUMP render gate), plus the 200/300/500ms chains on the renderer side verified by `renderer.test.js`. Step 7's "eliminate timing patches" scope should cover all of these, not just the startup-flow ones pinned by the characterization test.
 
+## Orville preset taxonomy cache
+
+Surfaced during 7c.0 fixture capture. The commit's brief named "Auto Tape Flanger" without specifying its bank, but Orville presets are organized into ~70 banks (Auto Tape Flanger lives in "Delays - Modulated", bankIndex 8). The bank/preset taxonomy is firmware-defined and effectively immutable per device, but is not currently cached anywhere in the repo — every preset lookup either requires consulting an external reference or traversing the device's program-bank menu via OBJECTINFO_DUMP fan-out.
+
+A reference doc capturing the bank/preset map would resolve this. Path is TBD — candidates:
+
+- `docs/refactor/orville-preset-taxonomy.json` (data file, machine-readable for tooling)
+- `docs/orville-banks.md` (human-readable prose)
+
+Sources for the taxonomy: an external JSON the user provided in 7c.0 (off-repo) maps the full set; alternatively, derivable programmatically from device OBJECTINFO_DUMP responses across all program-bank menus.
+
+Out of scope for the current refactor — doesn't block any of Steps 7-8. Lands when convenient. Useful for any future fixture-capture or harness work that needs to name a preset by bank.
+
 ## (add more ideas here as they come up)

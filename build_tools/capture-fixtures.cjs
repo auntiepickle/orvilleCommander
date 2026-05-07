@@ -10,13 +10,15 @@
  * Usage:
  *   npm run capture:fixtures
  *   node build_tools/capture-fixtures.cjs --port-in "MIDIIN3 (U6MIDI Pro)" --port-out "MIDIOUT2 (U6MIDI Pro)" --device-id 1
+ *   npm run capture:fixtures -- --only valuedump-8060001
  *
  * Flags:
  *   --port-in <substring>   match on MIDI input port name (default: "MIDIIN3 (U6MIDI Pro)")
  *   --port-out <substring>  match on MIDI output port name (default: "MIDIOUT2 (U6MIDI Pro)")
  *   --device-id <n>         Orville device ID (default: 1)
+ *   --only <name>           capture only the named fixture (must match a FIXTURES entry)
  *
- * Exit: 0 if every fixture captured, 1 if any timed out or no port.
+ * Exit: 0 if every fixture captured, 1 if any timed out, no port, or --only name unknown.
  */
 
 const fs = require('node:fs');
@@ -48,6 +50,7 @@ const FIXTURES = [
   { name: 'objectinfo-10010000', build: d => buildObjectInfoRequest('10010000', d), expectCmd: 0x32 },
   { name: 'valuedump-root',      build: d => buildValueDumpRequest('0', d),         expectCmd: 0x2e },
   { name: 'valuedump-401000b',   build: d => buildValueDumpRequest('401000b', d),   expectCmd: 0x2e },
+  { name: 'valuedump-8060001',   build: d => buildValueDumpRequest('8060001', d),   expectCmd: 0x2e },
 ];
 
 const RESPONSE_TIMEOUT_MS = 1500;
@@ -60,13 +63,15 @@ function parseArgs(argv) {
     portIn: 'MIDIIN3 (U6MIDI Pro)',
     portOut: 'MIDIOUT2 (U6MIDI Pro)',
     deviceId: 1,
+    only: null,
   };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--port-in') out.portIn = argv[++i];
     else if (argv[i] === '--port-out') out.portOut = argv[++i];
     else if (argv[i] === '--device-id') out.deviceId = parseInt(argv[++i], 10);
+    else if (argv[i] === '--only') out.only = argv[++i];
     else if (argv[i] === '--help' || argv[i] === '-h') {
-      console.log('Usage: node build_tools/capture-fixtures.cjs [--port-in <substring>] [--port-out <substring>] [--device-id <n>]');
+      console.log('Usage: node build_tools/capture-fixtures.cjs [--port-in <substring>] [--port-out <substring>] [--device-id <n>] [--only <name>]');
       process.exit(0);
     }
   }
@@ -184,7 +189,18 @@ function extractFirstShortTagCOL(rawBytes) {
 // ----- main -----------------------------------------------------------
 
 async function main() {
-  const { portIn, portOut, deviceId } = parseArgs(process.argv.slice(2));
+  const { portIn, portOut, deviceId, only } = parseArgs(process.argv.slice(2));
+
+  let fixtures = FIXTURES;
+  if (only) {
+    fixtures = FIXTURES.filter(fx => fx.name === only);
+    if (fixtures.length === 0) {
+      console.error(`ERROR: --only '${only}' did not match any FIXTURES entry`);
+      console.error('Known names:');
+      for (const fx of FIXTURES) console.error(`  ${fx.name}`);
+      process.exit(1);
+    }
+  }
 
   let midiLib;
   try {
@@ -236,7 +252,7 @@ async function main() {
   let rootDumpBytes = null;
   let timedOutCount = 0;
 
-  for (const fx of FIXTURES) {
+  for (const fx of fixtures) {
     const req = fx.build(deviceId);
     const expectedCmdHex = fx.expectCmd.toString(16).padStart(2, '0');
     try {

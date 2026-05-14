@@ -114,15 +114,14 @@ Architectural opinions consolidated during Step 5.5's development. Each item is 
 
 ## Orville preset taxonomy cache
 
+Updated 2026-05-13 (not resolved): scope and source understanding revised; cache itself deferred until after the refactor.
+
 Surfaced during 7c.0 fixture capture. The commit's brief named "Auto Tape Flanger" without specifying its bank, but Orville presets are organized into ~70 banks (Auto Tape Flanger lives in "Delays - Modulated", bankIndex 8). The bank/preset taxonomy is firmware-defined and effectively immutable per device, but is not currently cached anywhere in the repo — every preset lookup either requires consulting an external reference or traversing the device's program-bank menu via OBJECTINFO_DUMP fan-out.
 
-A reference doc capturing the bank/preset map would resolve this. Path is TBD — candidates:
+Authoritative source is the device's own OBJECTINFO_DUMP fan-out across all program-bank menus, captured at connect time and held in-memory by the running app. A previously-considered off-repo hand-curated JSON (an Ableton program-change control map) has known issues and one-off indices baked in for its PC-message use case; caching it would bake in those issues and overclaim what the file represents. The cache, if built, should be derived programmatically from a captured device dump rather than hand-curated.
 
-- `docs/refactor/orville-preset-taxonomy.json` (data file, machine-readable for tooling)
-- `docs/orville-banks.md` (human-readable prose)
+The right time to build the cache is after the refactor, when Step 7's events.js and dumpComplete subscriber model provide the substrate a capture-derived cache would lean on. Before that, no commit is blocked by the cache's absence; preset lookups today rely on external reference or live device traversal.
 
-Sources for the taxonomy: an external JSON the user provided in 7c.0 (off-repo) maps the full set; alternatively, derivable programmatically from device OBJECTINFO_DUMP responses across all program-bank menus.
-
-Out of scope for the current refactor — doesn't block any of Steps 7-8. Lands when convenient. Useful for any future fixture-capture or harness work that needs to name a preset by bank.
+Out of scope for the current refactor — doesn't block any of Steps 7-8. Useful for any future fixture-capture or harness work that needs to name a preset by bank.
 
 ## (add more ideas here as they come up)

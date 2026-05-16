@@ -3,7 +3,7 @@ import { renderScreen, updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { hideLoading } from './main.js';
-import { sendValuePut, sendValueDump, sendObjectInfoDump } from './midi.js';
+import { sendValuePut, sendValueDump, sendObjectInfoDump, notifyResponse } from './midi.js';
 import { log } from './logger.js';
 import { denibble, renderBitmap } from './bitmap.js';
 import debounce from 'lodash.debounce'; // Add import; install via npm if needed
@@ -62,6 +62,7 @@ export function parseResponse(data) {
           dspBName: dspBSub?.statement || '',
         }, 'parser:root-dsp-meta');
       }
+      notifyResponse('objectinfo', main.key);
       if (main.key.endsWith('000b')) {
         const dsp = main.key[0] === '4' ? 'A' : 'B';
         setState({
@@ -131,6 +132,7 @@ export function parseResponse(data) {
     } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
       const parts = splitLine(ascii);
       const key = parts[0];
+      notifyResponse('valuedump', key);
       const value = parts.slice(1).join(' ');
       const oldValue = appState.currentValues[key];
       setState({ currentValues: { ...appState.currentValues, [key]: value } }, 'parser:value-cache');

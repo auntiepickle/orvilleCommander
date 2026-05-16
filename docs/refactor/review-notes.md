@@ -128,3 +128,187 @@ One commit on `refactor_main` beyond the 7a.3 tip (`fe9e198`), at SHA `15f62a1`.
 - NUL-trailer asymmetry empirically observed: VALUE_DUMP responses end `... 20 F7` (no NUL), OBJECTINFO_DUMP responses end `... 20 00 F7` (NUL present, stripped by `parser.js:50` since 7a.2). Cross-ref: `session-knowledge-dump.md` §13. Implication for 7c proper: the dumpComplete request-counter mechanism does not need NUL handling for VALUE_DUMP fan-out.
 - Capture-script change: option (b) chosen over option (a) — `--only <name>` flag added to `build_tools/capture-fixtures.cjs` plus a permanent FIXTURES entry. Fail-fasts with known-name listing if `--only` doesn't match. Existing fixtures untouched, so Tier B of the Step 5.5 startup test cannot drift from a recapture-induced device-state shift.
 - Tests: 16/16 unchanged across parser, renderer, and startup suites. The new fixture is unreferenced by any test (`tests/startup.test.js:183-187` covers the four objectinfo fixtures and `screen-dump-black-hole.txt` only).
+
+## 7c — events.js, request counter, dumpComplete breadcrumb
+
+One commit on `refactor_main` beyond 7c.0 (`15f62a1`). Adds the shadow-fire mechanism for dump-complete detection: a tiny pub/sub (`events.js`), a per-wave request counter in `midi.js`, a 1500ms hard-ceiling watchdog, a `notifyResponse` decrement called from `parser.js`, and a `dumpComplete` event + setState + log breadcrumb when a wave closes. No production consumers this step — the existing 200ms parser timers remain in place. Consumer migration is 7d.
+
+- **events.js (new).** `Map<type, Set<fn>>` pub/sub. `emit(type, payload)` fires subscribers synchronously in insertion order; `on(type, fn)` returns an unsubscribe closure; unknown event types are a no-op. Re-entrancy and live-mutation semantics follow the same model as `store.js`'s subscribers Set — entries added during iteration are visited, entries removed before being visited are skipped. No guard rails this step; no real subscribers yet (7d).
+
+- **Watchdog is option A — hard ceiling, not silence detector.** The 1500ms timer arms exactly once when `outstanding` transitions 0→1 (arm-guard in `recordRequest`: `outstanding === 0 && watchdogHandle === null`). Subsequent sends within the same wave do NOT reset it. The wave ends either when all responses arrive (`reason='all-received'`) or when the timer fires (`reason='watchdog'`). The `'watchdog is per-wave hard ceiling'` test in `midi.test.js` pins this — two sends at t+0 and t+1000 within the same wave, then asserts the watchdog still fires at t+1500.
+
+- **notifyResponse decrement, called from parser.js.** Imported into `parser.js` and called at `parser.js:65` (every accepted 0x32 OBJECTINFO_DUMP) and `parser.js:135` (every accepted 0x2e VALUE_DUMP), after the minimal parse needed to know the response key, before any setState fan-out. Args (`type`, `key`) are reserved for 7d per-type accounting and request/response correlation; the current counter does not differentiate or correlate.
+
+- **finishWave breadcrumb has three sinks.** `emit('dumpComplete', payload)` for events-bus subscribers (none yet — 7d wires them); `setState({ lastDumpComplete: payload }, 'midi:dump-complete')` for state-snapshot consumers; `log(...)` at info/general for human eyeballs. Payload shape: `{ reason, sendCount, receiveCount, durationMs, lastKey }`.
+
+- **sendValuePut deliberately not request-counted.** The Orville does not emit a VALUE_DUMP response to a PUT; the counter tracks request/response pairs only. JSDoc comment in `midi.js` documents this so future readers don't add a `recordRequest` call there.
+
+- **getDumpStats is shadow-only.** Returns `{ ...dumpStats }` (snapshot copy, not live ref). No production caller this step; tests are the only consumer. The 5%-watchdog-rate-over-30-minutes escalation criterion is in the function's JSDoc — if watchdog firings exceed that threshold over a smoke session, the wave-detection mechanism needs redesign before 7d.
+
+- **startup.test.js mock-factory update.** `tests/startup.test.js`'s `midi.js` mock factory adds `notifyResponse: jest.fn(),` as a no-op stub. Without it, `parser.js`'s new `notifyResponse` import would resolve to `undefined` in that suite and the call sites at `parser.js:65` and `:135` would throw `TypeError` (swallowed by `parseResponse`'s try/catch but short-circuiting fan-out for every 0x32/0x2e response). The stub is unrecorded — Tier A array stays unchanged from HEAD, which the kickoff projects.
+
+### Cross-wave straggler contamination
+
+A wave that ends via `finishWave('watchdog')` resets `outstanding`/`waveSends`/`waveReceives` to 0 but cannot un-send the device's pending responses. If any of those stragglers arrive *during* a subsequent wave, they decrement the new wave's counter — `parser.js` calls `notifyResponse` for every accepted response, irrespective of which wave issued the original request. Worst case: a straggler decrements the new wave's `outstanding` to 0 prematurely, firing `finishWave('all-received')` with bogus `sendCount`/`receiveCount`/`durationMs`.
+
+- **Manifestation condition.** Requires (a) a wave times out (watchdog fires) AND (b) at least one of the timed-out wave's responses arrives during a subsequent wave. Against the 1500ms ceiling and normal device responsiveness, both conditions together are uncommon.
+- **In-the-wild catch.** The 5% watchdog-rate escalation criterion (documented in `getDumpStats`'s JSDoc) is designed to surface exactly this class of accounting drift. If watchdog firings stay below 5% across a 30-minute smoke window, contamination opportunities are rare too. If they exceed 5%, the wave-detection mechanism needs redesign before 7d for reasons that subsume this specific issue.
+- **Decision: document, do not pre-solve.** Pre-solving requires an epoch/generation counter on each wave and on each tagged response, with stale-epoch responses dropped at `notifyResponse`. That's a control-surface change; 7c treats the counter as a measurement instrument and the kickoff explicitly classes `notifyResponse`'s args as 7d-reserved. The epoch-tag fix belongs in 7d *if* the escalation criterion actually triggers — not as preemptive 7c scope creep.
+
+### lastDumpComplete is subject to the cached-config landmine
+
+`lastDumpComplete: null` was added to `appState` defaults in `store.js`. Per the cross-cutting finding at the top of this file, `config.js`'s wholesale-replace of cached subtrees from `localStorage.midiConfig` at boot will silently override any new default for users with a pre-existing cache. For `lastDumpComplete` this is **audit-visibility only**: the first `dumpComplete` event overwrites whatever's there via `setState`, so behavior is unaffected. Recorded as a same-class finding alongside the Step 5 `logCategories`/`logLevel` cases; the underlying merge-don't-replace fix is still owed by 7e2.
+
+### midi.test.js wave-isolation is implicit
+
+`midi.js` carries module-level state across tests in this file: `outstanding`, `waveSends`, `waveReceives`, `waveStart`, `waveLastKey`, `watchdogHandle`, `dumpStats`. The test file does NOT export a reset, and the suite's `beforeEach` only resets the event subscriber and `appState.lastDumpComplete` — it does not zero the module's wave counters. The 5 tests pass in any order *because* every test closes its own wave before the next starts: tests 1 ("first send (0→1) starts the watchdog") and 3 ("watchdog is per-wave hard ceiling") end via watchdog-fires-to-0; tests 2 and 4 end via all-responses-received-to-0; test 5 (snapshot copy) uses before/after delta arithmetic that's tally-baseline-independent.
+
+If a future test starts a wave and asserts mid-wave without closing it (or adds a `recordRequest` call followed by a throw before `notifyResponse`), the next test inherits non-zero `outstanding` and produces wrong results. Add an explicit `afterEach` reset (or export a `__resetForTests` helper from `midi.js`) when that happens — don't rely on the implicit invariant indefinitely.
+
+### 0x32 vs 0x2e completion-semantics asymmetry
+
+Both `parser.js` branches call `notifyResponse` for accepted responses, but the parse paths differ in where they can throw before reaching that call:
+
+- **0x32 OBJECTINFO_DUMP.** `parser.js:55` dereferences `main.key` (the `if (main.key === '0')` line); on a malformed payload with `subs === []` (empty ASCII), `main` is `undefined` and the dereference throws `TypeError` BEFORE reaching `notifyResponse` at `parser.js:65`. `parseResponse`'s try/catch swallows the throw and logs `'Parse response error'`. **Result:** malformed 0x32 responses do NOT decrement the wave counter — for accounting purposes, the device's malformed send looks identical to a non-response. Repeated malformed 0x32s would inflate `watchdog` reasons.
+
+- **0x2e VALUE_DUMP.** `parser.js:135` reads `parts[0]` after `splitLine(ascii)`; even on empty ASCII, `parts` is `[]` and `parts[0]` is `undefined` — no throw at the key-extraction line. `notifyResponse('valuedump', undefined)` fires regardless. **Result:** malformed 0x2e responses DO decrement the wave counter, masking malformed input from the watchdog signal.
+
+This asymmetry isn't a bug — `parseResponse` catches and logs in both cases — but it's load-bearing for how the wave counter interprets device misbehavior. The 5% escalation criterion picks up 0x32-malformed cases naturally (they look like timeouts); 0x2e-malformed cases are invisible to the counter and would only surface via the existing `'Parse response error'` log. Worth knowing when reading `dumpStats` in the wild, and a candidate consideration for the 7d epoch/key-correlation work if that lands.
+
+---
+
+Suite at step end: 27/27 across 5 suites (events 5, midi 5, parser 11, renderer 3, startup 3). `startup.test.js`'s Tier A array unchanged from HEAD — the kickoff's "Tier A unchanged via mocked counter + stubbed `notifyResponse`" projection holds.
+
+### Smoke session: instructions
+
+Exercise the shadow-fire counter and watchdog against a real Orville for ~30 minutes of normal use, compute the watchdog-rate metric, decide pass/fail vs the 5% threshold from the kickoff.
+
+#### Setup
+
+1. **Working tree:** `refactor_main` with the 7c commit at HEAD. If running before the smoke session is complete, restart the dev server cleanly and start a fresh session — the in-memory `dumpStats` counter resets when the browser tab refreshes or the module reloads.
+2. **Hardware:** Orville on the U6MIDI Pro interface (`MIDIIN3 (U6MIDI Pro)` / `MIDIOUT2 (U6MIDI Pro)`). Power-cycle the Orville before starting so it's in a known state.
+3. **Browser:** Chrome, Edge, or Opera (WebMIDI requirement). Open DevTools → Console *before* connecting MIDI so the boot-time wave log lines are captured.
+4. **App start:** `npm run dev`, open the dev URL, grant MIDI permissions, pick the U6MIDI Pro input/output ports, set device ID to 0 (default).
+
+#### Pre-session checklist
+
+Verify all before connecting MIDI:
+
+- [ ] `git status --short` shows a clean tree at the 7c commit (no unstaged/uncommitted changes).
+- [ ] `npm test` passes 27/27 across 5 suites.
+- [ ] No other MIDI software holding the U6MIDI Pro: close Logic / Ableton / MIDI-OX / `capture-fixtures.cjs` / any other process using the WebMIDI driver. Silent port contention manifests as WebMIDI either failing to connect or behaving erratically — neither will produce a clean smoke run.
+- [ ] Orville powered, in normal operating mode (not in any test/diagnostic submenu), idle on a known landing state.
+- [ ] DevTools Console open BEFORE you click connect/select-ports, with `dumpComplete:` filter ready (Console search bar, not the network tab).
+- [ ] ~30 uninterrupted minutes available.
+
+#### Mandatory pre-run channel validation
+
+This step must succeed before you invest the 30 minutes. Its purpose is to detect a phantom-instance failure mode in Channel 2 (see below) — if Channel 2 reads a different module instance than the running app, `getDumpStats()` returns `{all:0, watchdog:0}` forever regardless of actual wave activity, and the authoritative metric is silently fake.
+
+**Procedure:**
+
+1. After port-select completes, wait 2–3 seconds for the boot waves to settle.
+2. In DevTools Console, run:
+   ```js
+   const { getDumpStats } = await import('/src/midi.js');
+   getDumpStats();
+   ```
+3. Observe the result. Expected: `{ all: N, watchdog: M }` with `N + M > 0` (the boot waves, fired during port-select autoload, have closed and counted).
+4. Cross-check Channel 1: filter the Console for `dumpComplete:` and count the visible log lines. The line count must equal `N + M` from the snapshot.
+
+**Branch on result:**
+
+- **Snapshot non-zero AND matches Channel 1 line count** → Channel 2 is reading the live module instance. Both channels are authoritative; proceed with the run, using Channel 2 for end-of-session metric.
+- **Snapshot zero BUT Channel 1 shows `dumpComplete:` lines** → Channel 2 is reading a phantom module instance. **Channel 2 is unusable for this session.** Fall back to Channel 1 as the sole authoritative channel; see the Channel 1 counting method below.
+- **Snapshot zero AND Channel 1 shows no `dumpComplete:` lines** → no waves have fired yet (boot didn't trigger, or logger is silent). Investigate before the timed run starts: confirm `appState.logCategories.general === true`, confirm `appState.logLevel` is `info` or `debug`, fire one explicit menu navigation and re-check both channels. Do NOT start the 30-min run with neither channel verified.
+
+#### Start-of-session snapshot
+
+Once channel validation passes, record the starting state:
+
+- **Channel 2 path:** Run `getDumpStats()` again, record the result verbatim as `START = { all: A0, watchdog: W0 }`. This includes the boot waves.
+- **Channel 1 path (fallback):** Note the current `dumpComplete:` line count in Console, plus a breakdown by reason (count of `reason=all-received` lines = A0, count of `reason=watchdog` lines = W0). Record both.
+
+The start snapshot is for diagnostic context only — the pass/fail metric does NOT subtract it. Boot waves are real waves the mechanism handled, and they count.
+
+#### Exercise (~30 minutes of mixed activity)
+
+Goal: fire enough waves that the all/watchdog ratio is statistically meaningful. Each navigation, preset load, and parameter touch produces a wave (request burst + response burst, terminating either via all-received or watchdog). Aim for 50+ waves over the session.
+
+Suggested mix (rotate freely — guided-freeform is the point; don't follow as a rigid script):
+
+- **Menu navigation.** Click into setup, walk through ~5 nested menus, back out, repeat in a few different sub-trees.
+- **DSP A/B toggle.** Press `ab` on the device or click the DSP toggle in the UI several times. Each toggle re-fetches the new active DSP's preset.
+- **Preset loads.** From a program select, change presets in DSP A and DSP B several times. Mix Favorites with other banks (the Favorites re-order fix path exercises a slightly different fan-out).
+- **Parameter edits.** Change SET-type parameters via dropdowns, NUM-type via the prompt-click, TRG-type via load buttons. Each one fires sendValuePut (not counted) followed by a fan-out re-fetch (counted).
+- **Idle period.** Let the app sit fully idle for ~2 minutes mid-session — no clicks, no scrolling, no anything. During the idle, watch Channel 1 (`dumpComplete:` filter): if any `dumpComplete` log line appears with no preceding user input, that's a finding to record (could indicate spurious activity, an unexpected timer, or polling that wasn't paused).
+- **Rapid burst.** Do ~5 navigations in under 1 second total. Then observe Channel 1: did the resulting wave(s) close `all-received` or `watchdog`? Did any subsequent wave show `recv > send` in its log line? (`recv > send` would be the cross-wave straggler limitation firing in practice — which is exactly what this test exists to surface.) Record either outcome.
+
+#### Observation channels
+
+`getDumpStats` is shadow-only (no production caller), so observation is manual via DevTools.
+
+**Channel 1 — DevTools Console, live log lines.** Every closed wave emits a log line at `info/general` that looks like:
+
+```
+dumpComplete: reason=all-received send=12 recv=12 dur=843ms
+dumpComplete: reason=watchdog send=8 recv=6 dur=1500ms
+```
+
+Filter the Console for `dumpComplete:` to see them all. `reason=all-received` is a clean wave; `reason=watchdog` is a wave that hit the 1500ms ceiling. Useful throughout the session for spotting individual problem waves and the burst-test recv>send signature.
+
+**Channel 1 counting method (used as authoritative if Channel 2 fails validation):**
+
+At session end, with the `dumpComplete:` filter active in Console:
+
+1. Total wave count: count visible log lines = `A_end + W_end`.
+2. Refine the filter to `dumpComplete: reason=watchdog` → visible line count = `W_end`.
+3. Refine the filter to `dumpComplete: reason=all-received` → visible line count = `A_end`.
+4. Sanity-check `step 1 == step 2 + step 3`. If not equal, console truncated old lines (DevTools has a default scrollback limit) — restart the run with a larger Console buffer (Settings → Preferences → Console → "preserve log on navigation" + maximize "log buffer size") OR copy the full filtered output to a text file periodically during the session.
+
+**Channel 2 — DevTools Console, on-demand snapshot.**
+
+```js
+const { getDumpStats } = await import('/src/midi.js');
+getDumpStats();
+// → { all: 47, watchdog: 2 }
+```
+
+Run this:
+- During pre-run validation (covered above).
+- Immediately after port-select settles, recorded as the START snapshot.
+- Periodically mid-session (every ~5 min) as a sanity check that waves are accumulating and that the import still resolves to the same instance.
+- Once at session end, recorded as the END snapshot — **the load-bearing measurement** if Channel 2 passed validation.
+
+If a periodic mid-session snapshot suddenly returns `{all:0, watchdog:0}` after previously showing non-zero, the import has switched to a fresh instance (HMR or module reload) — Channel 2 is now unreliable for the remainder of the session; switch to Channel 1.
+
+#### Pass/fail computation
+
+End-of-session snapshot: `END = { all: A, watchdog: W }`. Use Channel 2's snapshot if validation passed; use Channel 1's tally otherwise. **Compute the metric on the END numbers as-is — boot waves are included and not subtracted.**
+
+Metric: `W / (A + W)`.
+
+- **Under 5%** → 7c mechanism sound. The cross-wave straggler limitation (documented above) remains theoretical; epoch-tag fix in 7d is not load-bearing. Proceed to 7d planning in a later session, no redesign owed.
+- **At or over 5%** → mechanism needs redesign before 7d. The cross-wave straggler limitation now matters in practice — every watchdog firing creates a window where the next wave's accounting can be corrupted by stragglers. Surface candidates: epoch/generation counter on each wave (the deferred fix documented above), bumping `WATCHDOG_MS` if device responses legitimately exceed 1.5s, or replacing the per-wave counter with per-request correlation (uses the `notifyResponse(type, key)` args reserved for 7d).
+
+Sample size sanity: if `A + W < 30`, the ratio is too noisy to act on — extend the session or repeat under heavier activity.
+
+#### What to also record
+
+- **App or device misbehavior unrelated to the metric.** Any UI hang, any wave that took an unusually long time even when it eventually closed all-received, any `Parse response error` log line, any visible LCD glitch. These are smoke-test signal independent of the watchdog ratio.
+- **Apparent counter anomalies.** Any wave that closes with `recv > send` (would indicate cross-wave straggler contamination actually firing — the limitation the cross-wave section above documented). Any silent stretch in `dumpComplete:` log lines (>5 seconds with no user input) that doesn't reconcile with snapshot increments.
+- **Channel disagreement.** If Channel 2 validated initially but a mid-session spot-check shows the snapshot diverging from Channel 1's tally, record the divergence point and switch authoritative source. Note in the result whether the metric was computed from Channel 1 or Channel 2.
+- **Idle-period and rapid-burst observations.** Per the Exercise section.
+- **Session metadata.** Date, app commit, Orville firmware version if known, U6MIDI Pro driver version if known, total session duration, observed mix of activities, START and END snapshots raw, computed metric, pass/fail verdict.
+
+#### Where the result goes
+
+The smoke session result fills in the `### Smoke session result -- PENDING (hardware run owed)` stub below, replacing it entirely. Format mirrors Step 5's `### Post-commit diagnostic` style — symptom (raw START and END snapshots), interpretation (under/over threshold), implication for 7d (proceed vs redesign), any anomalies flagged.
+
+If the session reveals something that's better recorded as ongoing background context rather than a one-shot result (e.g., a recurring watchdog pattern tied to a specific menu path), that goes to `docs/refactor/session-knowledge-dump.md` as a numbered entry instead.
+
+The smoke run and the result fill-in are deferred — they happen in a later session after this 7c commit lands. The instructions themselves are committed in this commit so they survive the session boundary.
+
+### Smoke session result -- PENDING (hardware run owed)
+
+To be replaced with the smoke session result after the hardware run. See `#### Where the result goes` above for format and disposition guidance. Until the hardware run completes, the 7c mechanism is in place but not verified against real device traffic; the >5% watchdog-rate-over-30-minute escalation criterion is outstanding, and a hot result (>=5%) may force watchdog mechanism redesign before 7d.

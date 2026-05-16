@@ -5,6 +5,7 @@ jest.mock('../src/midi.js', () => ({
   sendObjectInfoDump: jest.fn(),
   sendValueDump: jest.fn(),
   sendValuePut: jest.fn(),
+  notifyResponse: jest.fn(),
 }));
 
 jest.mock('../src/renderer.js', () => ({
@@ -22,7 +23,7 @@ jest.mock('../src/logger.js', () => ({
 
 import { parseResponse, parseSubObject } from '../src/parser.js';
 import { appState } from '../src/state.js';
-import { sendObjectInfoDump, sendValueDump, sendValuePut } from '../src/midi.js';
+import { sendObjectInfoDump, sendValueDump, sendValuePut, notifyResponse } from '../src/midi.js';
 import { renderScreen } from '../src/renderer.js'; // Mocked renderScreen (debounced or not)
 import { hideLoading } from '../src/main.js';
 import { log as mockLog } from '../src/logger.js';
@@ -42,6 +43,7 @@ describe('parseResponse', () => {
     sendObjectInfoDump.mockClear();
     sendValueDump.mockClear();
     sendValuePut.mockClear();
+    notifyResponse.mockClear();
     renderScreen.mockClear();
     hideLoading.mockClear();
   });
@@ -121,6 +123,14 @@ describe('parseResponse', () => {
     jest.advanceTimersByTime(500); // Advance for setTimeout in fix
     expect(sendValuePut).toHaveBeenCalledWith('10020011', '1'); // Correct index (desc match)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Correcting selection after Favorites re-order'), 'info', 'general');
+  });
+
+  test('calls notifyResponse on well-formed 0x32 OBJECTINFO_DUMP', () => {
+    const asciiString = 'COL 0 10010000 0 "Setup" "Setup"';
+    const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
+    const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
+    parseResponse(data);
+    expect(notifyResponse).toHaveBeenCalledWith('objectinfo', '10010000');
   });
 });
 

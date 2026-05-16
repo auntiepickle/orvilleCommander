@@ -41,6 +41,7 @@ jest.mock('../src/midi.js', () => {
     sendObjectInfoDump: jest.fn((key) => recorder.recordMidiSend('objectinfo', key)),
     sendValueDump: jest.fn((key) => recorder.recordMidiSend('valuedump', key)),
     sendValuePut: jest.fn((key, value) => recorder.recordMidiSend('valueput', `${key}=${value}`)),
+    notifyResponse: jest.fn(),
     sendSysEx: jest.fn((cmd, bytes) => recorder.recordMidiSend('sysex', `cmd=0x${cmd.toString(16)},len=${bytes?.length ?? 0}`)),
     setMidiPorts: jest.fn(),
     addSysexListener: jest.fn(),

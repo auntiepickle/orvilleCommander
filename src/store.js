@@ -53,7 +53,8 @@ export const appState = {
   currentSoftkeys: [],
   pollingEnabled: false,
   isLoadingPreset: false,
-  childSubs: {} // Added for child sub-menu storage
+  childSubs: {}, // Added for child sub-menu storage
+  lastDumpComplete: null // 7c shadow-fire breadcrumb; written by midi:dump-complete
 };
 
 const subscribers = new Set();

@@ -113,6 +113,8 @@ import { updateScreen } from '../src/renderer.js';
 import { sendObjectInfoDump, sendSysEx } from '../src/midi.js';
 import { appState } from '../src/state.js';
 import { setState } from '../src/store.js';
+import { hideLoading } from '../src/main.js';
+import { registerEventBridge } from '../src/event-bridge.js';
 import {
   loadFixture,
   extractExpectedFromRoot,
@@ -168,6 +170,8 @@ function normalize(e) {
       return `unknown:${e.kind}`;
   }
 }
+
+let teardownEventBridge = null;
 
 describe('startup characterization (roadmap step 5.5)', () => {
   let rootBytes;
@@ -230,9 +234,18 @@ describe('startup characterization (roadmap step 5.5)', () => {
     // menusA/menusB may exist from a prior test; blow them away.
     delete appState.menusA;
     delete appState.menusB;
+    // Wire the production parser->renderer dispatch via event-bridge.js. The
+    // mocked main.js (lines 51-57) supplies hideLoading as a recording stub;
+    // the bridge gets it via DI so this harness exercises real bridge code,
+    // not a copy. Teardown in afterEach prevents cross-test subscriber leakage.
+    teardownEventBridge = registerEventBridge({ hideLoading });
   });
 
   afterEach(() => {
+    if (teardownEventBridge) {
+      teardownEventBridge();
+      teardownEventBridge = null;
+    }
     jest.useRealTimers();
   });
 

@@ -3,7 +3,6 @@ import { appState } from './state.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { keypressMasks } from './controls.js';
-import { parseSubObject } from './parser.js';
 import { showLoading } from './main.js';
 import { log } from './logger.js';
 
@@ -176,7 +175,7 @@ const handleParamClick = (e) => {
             showLoading();
             sendValuePut(key, newValueStr);
             setState({ currentValues: { ...appState.currentValues, [key]: newValueStr } }, 'renderer:param-click-num-value-cache');
-            renderScreen(null, appState.lastAscii); // Immediate local update
+            renderScreen(appState.currentSubs, appState.lastAscii); // Immediate local update
             setTimeout(() => {
               updateScreen();
               if (appState.updateBitmapOnChange) {
@@ -196,7 +195,7 @@ const handleParamClick = (e) => {
         }
         sendValuePut(key, '1');
         log(`Triggered TRG for key ${key}: ${sub.statement}`, 'info', 'general');
-        renderScreen(null, appState.lastAscii); // Immediate local update
+        renderScreen(appState.currentSubs, appState.lastAscii); // Immediate local update
         setTimeout(() => {
           updateScreen();
           if (key === '1002001c' || key === '1002001d') {
@@ -254,11 +253,11 @@ function formatValue(statement, value, isHtml = false, key = '') {
 }
 
 /**
- * Renders the screen to the LCD element using subs or ASCII dump.
+ * Renders the screen to the LCD element using subs.
  * Builds text/HTML lines for titles, params (NUM/SET/CON/TRG/INF), softkeys (current, parent, grandparent, static).
  * Handles embedding child subs, auto-fetching, event listeners, and auto-load.
  * 
- * @param {Object[]} [subs] - Parsed sub-objects (if not provided, parses from ascii).
+ * @param {Object[]} subs - Parsed sub-objects (required).
  * @param {string} [ascii] - Raw ASCII dump string.
  * @param {Function} [logParam] - Logging function.
  * 
@@ -267,9 +266,6 @@ function formatValue(statement, value, isHtml = false, key = '') {
  */
 export function renderScreen(subs, ascii, logParam) {
   const lcdEl = document.getElementById('lcd');
-  if (!subs) {
-    subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
-  }
   if (!subs || subs.length === 0) {
     log('Skipping render: no subs available', 'debug', 'renderScreen');
     return;

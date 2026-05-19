@@ -8,6 +8,7 @@ import { appState } from './state.js';
 import { setState } from './store.js';
 import { denibble, renderBitmap } from './bitmap.js';
 import { log } from './logger.js';
+import { registerEventBridge } from './event-bridge.js';
 
 const lcdEl = document.getElementById('lcd');
 const logArea = document.getElementById('log-area');
@@ -258,6 +259,8 @@ export function hideLoading() {
   }
   log('Screen loaded.', 'debug', 'general');
 }
+
+registerEventBridge({ hideLoading });
 
 // New testing feature
 if (testTRateBtn) {

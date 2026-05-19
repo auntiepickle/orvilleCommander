@@ -1,5 +1,4 @@
 // tests/parser.test.js
-jest.mock('lodash.debounce', () => (fn) => fn); // Make debounce synchronous in tests
 
 jest.mock('../src/midi.js', () => ({
   sendObjectInfoDump: jest.fn(),
@@ -8,13 +7,9 @@ jest.mock('../src/midi.js', () => ({
   notifyResponse: jest.fn(),
 }));
 
-jest.mock('../src/renderer.js', () => ({
-  renderScreen: jest.fn(),
-  updateScreen: jest.fn(),
-}));
-
-jest.mock('../src/main.js', () => ({
-  hideLoading: jest.fn(),
+jest.mock('../src/events.js', () => ({
+  emit: jest.fn(),
+  on: jest.fn(),
 }));
 
 jest.mock('../src/logger.js', () => ({
@@ -24,8 +19,7 @@ jest.mock('../src/logger.js', () => ({
 import { parseResponse, parseSubObject } from '../src/parser.js';
 import { appState } from '../src/state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, notifyResponse } from '../src/midi.js';
-import { renderScreen } from '../src/renderer.js'; // Mocked renderScreen (debounced or not)
-import { hideLoading } from '../src/main.js';
+import { emit } from '../src/events.js';
 import { log as mockLog } from '../src/logger.js';
 
 describe('parseResponse', () => {
@@ -44,8 +38,7 @@ describe('parseResponse', () => {
     sendValueDump.mockClear();
     sendValuePut.mockClear();
     notifyResponse.mockClear();
-    renderScreen.mockClear();
-    hideLoading.mockClear();
+    emit.mockClear();
   });
 
   afterEach(() => {
@@ -62,7 +55,7 @@ describe('parseResponse', () => {
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Parsed OBJECTINFO_DUMP for key 10010000'), 'info', 'parsedDump');
     expect(appState.currentSubs).toHaveLength(1); // At least the main sub
     expect(appState.currentSubs[0].key).toBe('10010000');
-    expect(renderScreen).toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith('objectinfo:received', expect.objectContaining({ key: '10010000', subs: expect.any(Array), ascii: expect.any(String) }));
   });
 
   test('handles valid OBJECTINFO_DUMP for child sub-menu and stores in childSubs', () => {
@@ -79,7 +72,7 @@ describe('parseResponse', () => {
     jest.advanceTimersByTime(300); // Flush any potential timers (safe even if not needed)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Stored child subs for key 10010010'), 'debug', 'parsedDump');
     expect(appState.childSubs['10010010']).toBeDefined();
-    expect(renderScreen).toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith('objectinfo:received', { key: '10010010' });
   });
 
   test('handles valid VALUE_DUMP and updates currentValues', () => {
@@ -92,7 +85,7 @@ describe('parseResponse', () => {
     jest.advanceTimersByTime(200); // Advance for setTimeout (debounce is synchronous)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Parsed VALUE_DUMP for key 10030000'), 'info', 'parsedDump');
     expect(appState.currentValues['10030000']).toBe('42 Some Value');
-    expect(renderScreen).toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith('value:received', { key: '10030000', immediate: false });
   });
 
   test('handles screen dump (bitmap) and calls renderBitmap', () => {
@@ -101,7 +94,7 @@ describe('parseResponse', () => {
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x17, ...nibbles, 0xf7];
     parseResponse(data);
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Denibbled screen data'), 'debug', 'bitmap');
-    // Assert renderBitmap was called (implementation detail, but key for coverage)
+    expect(emit).toHaveBeenCalledWith('screen:received', expect.objectContaining({ rawBytes: expect.anything() }));
   });
 
   test('catches and logs errors on invalid data', () => {

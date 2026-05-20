@@ -4,6 +4,7 @@ import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { log } from './logger.js';
+import { toggleDspKey } from './navigation.js';
 
 /**
  * Mapping of key names to their corresponding MIDI keypress mask arrays.
@@ -51,20 +52,6 @@ export const keypressMasks = {
   'minus': [0xFF, 0xFF, 0xEF, 0xFF],
   'cxl': [0xFF, 0xFF, 0xFF, 0xDF],
 };
-
-/**
- * Toggles a DSP key between A (starting with '4') and B (starting with '8').
- * Used for switching between DSP presets.
- * 
- * @param {string} key - The DSP key to toggle (e.g., '401000b').
- * @returns {string} The toggled key (e.g., '801000b' if input starts with '4').
- * 
- * @example
- * toggleDspKey('401000b'); // '801000b'
- */
-function toggleDspKey(key) {
-  return key.startsWith('4') ? '8' + key.slice(1) : '4' + key.slice(1);
-}
 
 /**
  * Sets up event listeners for virtual button controls in the UI.

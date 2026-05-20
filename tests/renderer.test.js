@@ -1,4 +1,5 @@
-import { updateScreen, renderScreen, toggleDspKey } from '../src/renderer.js';
+import { updateScreen, renderScreen } from '../src/renderer.js';
+import { toggleDspKey } from '../src/navigation.js';
 import { appState } from '../src/state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from '../src/midi.js';
 import { showLoading } from '../src/main.js';

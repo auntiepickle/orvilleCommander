@@ -15,7 +15,9 @@ Step 8: partial. Navigation extraction landed; cycle 5 closed; toggleDspKey
 ## Closed cycles (per CLAUDE.md canonical numbering)
   Cycle 2 (parser↔renderer): closed by Step 7 (events.js bus)
   Cycle 3 (parser↔main): closed by Steps 2 + 6 + 7
-  Cycle 4 (renderer↔main): closed by Step 7 (events.js bus)
+  Cycle 4 (renderer↔main): partial — Step 7 closed the parser↔renderer↔main
+        triangle; a 2-node showLoading↔updateScreen cycle remains
+        (pre-existing, not roadmapped).
   Cycle 5 (controls↔renderer): closed by Step 8 partial (f38111e)
   (Cycle 1, midi↔parser, never closed — see "Open / not addressed".)
 
@@ -27,6 +29,9 @@ Step 8: partial. Navigation extraction landed; cycle 5 closed; toggleDspKey
         refresh through events.js. Deferred indefinitely.
   Honorable mentions from 02-top-couplings.md (dom.js id-binding
         extraction) — not roadmapped, not blocking.
+  Residual renderer↔main 2-node cycle (renderer.js imports showLoading from
+        main.js; main.js imports updateScreen from renderer.js). Pre-dates the
+        refactor; never roadmapped.
 
 ## Gate gap (precondition for any future renderer folder-split)
 The renderer golden-snapshot test (tests/renderer.snapshot.test.js,

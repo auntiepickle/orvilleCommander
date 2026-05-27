@@ -3,9 +3,13 @@ import { WebMidi } from 'webmidi';
 import { loadConfig, saveConfig, clearConfig } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
 import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut, sendObjectInfoDump } from './midi.js';
-import { updateScreen, toggleDspKey } from './renderer.js';
+import { updateScreen } from './renderer.js';
+import { toggleDspKey } from './navigation.js';
 import { appState } from './state.js';
-import { denibble, renderBitmap, extractNibbles, exportBMP } from './parser.js'; // Updated imports
+import { setState } from './store.js';
+import { denibble, renderBitmap } from './bitmap.js';
+import { log } from './logger.js';
+import { registerEventBridge } from './event-bridge.js';
 
 const lcdEl = document.getElementById('lcd');
 const logArea = document.getElementById('log-area');
@@ -45,43 +49,19 @@ let pollInterval = null;
 let isPolling = false;
 const toggleMeterPollingBtn = document.getElementById('toggle-meter-polling');
 const pollingIndicator = document.getElementById('polling-indicator');
-const levels = { error: 0, info: 1, debug: 2 };
-
-/**
- * Logs a message to the UI log area and console if the level and category are enabled.
- * Filters based on appState.logLevel and appState.logCategories.
- * 
- * @param {string} message - The message to log.
- * @param {string} [level='info'] - The log level ('error', 'info', 'debug').
- * @param {string} [category='general'] - The log category (e.g., 'sysexSent', 'bitmap').
- * 
- * @example
- * log('App initialized', 'info', 'general');
- */
-export function log(message, level = 'info', category = 'general') {
-  if (levels[appState.logLevel] < levels[level] || !appState.logCategories[category]) return;
-  const timestamp = new Date().toISOString();
-  const entry = `[${timestamp}] ${message}\n`;
-  logArea.value += entry;
-  logArea.scrollTop = logArea.scrollHeight;
-  console.log(entry);
-}
-
 let pollingInterval = null;
 
 /**
  * Starts polling for CON-type subs (e.g., meters) by requesting VALUE_DUMP at intervals.
  * Clears any existing interval before starting.
- * 
- * @param {Function} log - The logging function.
  */
-function startPolling(log) {
+function startPolling() {
   if (pollingInterval) clearInterval(pollingInterval);
   pollingInterval = setInterval(() => {
     const conSubs = appState.currentSubs.filter(s => s.type === 'CON');
     conSubs.forEach(sub => {
       const key = sub.key;
-      sendValueDump(key, log);
+      sendValueDump(key);
     });
   }, 100);
 }
@@ -96,10 +76,10 @@ function stopPolling() {
 
 if (toggleMeterPollingBtn) {
   toggleMeterPollingBtn.addEventListener('click', () => {
-    appState.pollingEnabled = !appState.pollingEnabled;
+    setState({ pollingEnabled: !appState.pollingEnabled }, 'main:polling-toggle');
     pollingIndicator.style.display = appState.pollingEnabled ? 'inline' : 'none';
     if (appState.pollingEnabled) {
-      startPolling(log);
+      startPolling();
     } else {
       stopPolling();
     }
@@ -158,18 +138,20 @@ function selectPorts() {
   const inputId = inputSelect.value;
   const devId = parseInt(deviceIdInput.value, 10);
   setMidiPorts(WebMidi.getOutputById(outputId), WebMidi.getInputById(inputId), devId);
-  addSysexListener(log);
+  addSysexListener();
   log('Ports selected and listener added. Device ID set to ' + devId, 'info', 'general');
   lcdEl.innerText = 'Connected. Fetching root screen...';
   updateScreen(log);
   setTimeout(() => {
-    appState.keyStack.push(appState.currentKey);
-    appState.currentKey = appState.presetKey;
-    appState.autoLoad = true;
+    setState({
+      keyStack: [...appState.keyStack, appState.currentKey],
+      currentKey: appState.presetKey,
+      autoLoad: true,
+    }, 'main:select-ports-init');
     updateScreen(log);
-    sendObjectInfoDump(toggleDspKey(appState.presetKey), log);
+    sendObjectInfoDump(toggleDspKey(appState.presetKey));
     if (appState.fetchBitmap) {
-      sendSysEx(0x18, [], log);
+      sendSysEx(0x18, []);
       log('Fetched initial preset screen.', 'info', 'general');
     } else {
       log('Bitmap fetch disabled; skipped initial preset screen dump.', 'info', 'bitmap');
@@ -182,12 +164,12 @@ connectBtn.addEventListener('click', () => connectMidi());
 selectPortsBtn.addEventListener('click', selectPorts);
 
 saveConfigBtn.addEventListener('click', () => {
-  saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, appState.presetKey, log);
-  appState.logLevel = logLevelSelect.value;
+  saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, appState.presetKey);
+  setState({ logLevel: logLevelSelect.value }, 'main:save-config-log-level');
 });
 
 clearConfigBtn.addEventListener('click', () => {
-  clearConfig(log);
+  clearConfig();
 });
 
 pollToggle.addEventListener('click', () => {
@@ -209,22 +191,22 @@ sendCustomBtn.addEventListener('click', () => {
   for (let i = 0; i < hex.length; i += 2) {
     bytes.push(parseInt(hex.substr(i, 2), 16));
   }
-  sendSysEx(bytes[0], bytes.slice(1), log);
+  sendSysEx(bytes[0], bytes.slice(1));
 });
 
 testKeypressBtn.addEventListener('click', () => {
-  testKeypress(log);
+  testKeypress();
 });
 
 syncBtn.addEventListener('click', () => {
-  appState.currentKey = '0';
+  setState({ currentKey: '0' }, 'main:sync-root');
   updateScreen(log);
   log('Synced to root', 'info', 'general');
 });
 
 getScreenBtn.addEventListener('click', () => {
   if (appState.fetchBitmap) {
-    sendSysEx(0x18, [], log);
+    sendSysEx(0x18, []);
     log('Sent Get Screen request (0x18)', 'info', 'general');
   } else {
     log('Bitmap fetch disabled; skipped Get Screen request.', 'info', 'bitmap');
@@ -248,7 +230,7 @@ processDebugFileBtn.addEventListener('click', () => {
         log(`[LOG] Extracted ${nibbles.length} nibbles from uploaded file`, 'debug', 'general');
         const rawBytes = denibble(nibbles);
         log(`[LOG] Denibbled to ${rawBytes.length} bytes`, 'debug', 'general');
-        renderBitmap('lcd-canvas', rawBytes, log);
+        renderBitmap('lcd-canvas', rawBytes);
       } else {
         log('[ERROR] No hex data found in file', 'error', 'error');
       }
@@ -279,17 +261,19 @@ export function hideLoading() {
   log('Screen loaded.', 'debug', 'general');
 }
 
+registerEventBridge({ hideLoading });
+
 // New testing feature
 if (testTRateBtn) {
   testTRateBtn.addEventListener('click', async () => {
     log('Starting t_rate test...', 'info', 'general');
     // Navigate to Auto Tape Flanger
-    appState.currentKey = '801000b';
+    setState({ currentKey: '801000b' }, 'main:test-trate-nav');
     updateScreen(log);
     await new Promise(r => setTimeout(r, 1000));
     log('Navigated to Auto Tape Flanger', 'info', 'general');
     // Navigate to delay parameters
-    appState.currentKey = '8040001';
+    setState({ currentKey: '8040001' }, 'main:test-trate-nav');
     updateScreen(log);
     await new Promise(r => setTimeout(r, 1000));
     log('Navigated to delay parameters', 'info', 'general');
@@ -303,9 +287,9 @@ if (testTRateBtn) {
     log('Found t_rate with options: ' + setSub.options.length, 'info', 'general');
     for (let opt of setSub.options) { // Test all, but can limit if too long
       log(`Testing option: ${opt.index} ${opt.desc}`, 'info', 'general');
-      sendValuePut('8060001', opt.index, log);
+      sendValuePut('8060001', opt.index);
       await new Promise(r => setTimeout(r, 500));
-      sendValueDump('8060001', log);
+      sendValueDump('8060001');
       await new Promise(r => setTimeout(r, 500));
       const currentValue = appState.currentValues['8060001'];
       const expected = `${opt.index} ${opt.desc}`;
@@ -332,12 +316,14 @@ if (testTRateBtn) {
   });
 }
 
-setupKeypressControls(log);
+setupKeypressControls();
 
-const cachedConfig = loadConfig(log, deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox);
-appState.logLevel = logLevelSelect.value;
-appState.logCategories = cachedConfig?.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true]));
-appState.fetchBitmap = fetchBitmapCheckbox.checked;
-appState.updateBitmapOnChange = updateBitmapOnChangeCheckbox.checked;
-appState.presetKey = cachedConfig?.presetKey || '401000b';
+const cachedConfig = loadConfig(deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox);
+setState({
+  logLevel: logLevelSelect.value,
+  logCategories: cachedConfig?.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true])),
+  fetchBitmap: fetchBitmapCheckbox.checked,
+  updateBitmapOnChange: updateBitmapOnChangeCheckbox.checked,
+  presetKey: cachedConfig?.presetKey || '401000b',
+}, 'main:boot-init');
 connectMidi(cachedConfig);

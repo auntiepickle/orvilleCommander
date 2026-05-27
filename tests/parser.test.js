@@ -1,29 +1,26 @@
 // tests/parser.test.js
-jest.mock('lodash.debounce', () => (fn) => fn); // Make debounce synchronous in tests
 
 jest.mock('../src/midi.js', () => ({
   sendObjectInfoDump: jest.fn(),
   sendValueDump: jest.fn(),
   sendValuePut: jest.fn(),
+  notifyResponse: jest.fn(),
 }));
 
-jest.mock('../src/renderer.js', () => ({
-  renderScreen: jest.fn(),
-  updateScreen: jest.fn(),
+jest.mock('../src/events.js', () => ({
+  emit: jest.fn(),
+  on: jest.fn(),
 }));
 
-jest.mock('../src/main.js', () => ({
-  hideLoading: jest.fn(),
+jest.mock('../src/logger.js', () => ({
+  log: jest.fn(),
 }));
 
 import { parseResponse, parseSubObject } from '../src/parser.js';
 import { appState } from '../src/state.js';
-import { sendObjectInfoDump, sendValueDump, sendValuePut } from '../src/midi.js';
-import { renderScreen } from '../src/renderer.js'; // Mocked renderScreen (debounced or not)
-import { hideLoading } from '../src/main.js';
-
-// Mock log
-const mockLog = jest.fn();
+import { sendObjectInfoDump, sendValueDump, sendValuePut, notifyResponse } from '../src/midi.js';
+import { emit } from '../src/events.js';
+import { log as mockLog } from '../src/logger.js';
 
 describe('parseResponse', () => {
   beforeEach(() => {
@@ -40,8 +37,8 @@ describe('parseResponse', () => {
     sendObjectInfoDump.mockClear();
     sendValueDump.mockClear();
     sendValuePut.mockClear();
-    renderScreen.mockClear();
-    hideLoading.mockClear();
+    notifyResponse.mockClear();
+    emit.mockClear();
   });
 
   afterEach(() => {
@@ -53,12 +50,12 @@ describe('parseResponse', () => {
     const asciiString = 'COL 0 10010000 0 "Setup" "Setup"';
     const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
-    parseResponse(data, mockLog);
+    parseResponse(data);
     jest.advanceTimersByTime(300); // Flush any potential timers (safe even if not needed)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Parsed OBJECTINFO_DUMP for key 10010000'), 'info', 'parsedDump');
     expect(appState.currentSubs).toHaveLength(1); // At least the main sub
     expect(appState.currentSubs[0].key).toBe('10010000');
-    expect(renderScreen).toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith('objectinfo:received', expect.objectContaining({ key: '10010000', subs: expect.any(Array), ascii: expect.any(String) }));
   });
 
   test('handles valid OBJECTINFO_DUMP for child sub-menu and stores in childSubs', () => {
@@ -71,11 +68,11 @@ describe('parseResponse', () => {
     const asciiString = 'COL 1 10010010 10010000 "Child" "Child"';
     const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
-    parseResponse(data, mockLog);
+    parseResponse(data);
     jest.advanceTimersByTime(300); // Flush any potential timers (safe even if not needed)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Stored child subs for key 10010010'), 'debug', 'parsedDump');
     expect(appState.childSubs['10010010']).toBeDefined();
-    expect(renderScreen).toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith('objectinfo:received', { key: '10010010' });
   });
 
   test('handles valid VALUE_DUMP and updates currentValues', () => {
@@ -84,25 +81,25 @@ describe('parseResponse', () => {
     const asciiString = '10030000 "42 Some Value"';
     const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x2e, ...asciiData, 0xf7];
-    parseResponse(data, mockLog);
+    parseResponse(data);
     jest.advanceTimersByTime(200); // Advance for setTimeout (debounce is synchronous)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Parsed VALUE_DUMP for key 10030000'), 'info', 'parsedDump');
     expect(appState.currentValues['10030000']).toBe('42 Some Value');
-    expect(renderScreen).toHaveBeenCalled();
+    expect(emit).toHaveBeenCalledWith('value:received', { key: '10030000', immediate: false });
   });
 
   test('handles screen dump (bitmap) and calls renderBitmap', () => {
     // Mock SysEx: device 0, cmd 0x17 (screen dump), some nibbles
     const nibbles = [0x00, 0x01, 0x02, 0x03]; // Simplified even nibbles
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x17, ...nibbles, 0xf7];
-    parseResponse(data, mockLog);
+    parseResponse(data);
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Denibbled screen data'), 'debug', 'bitmap');
-    // Assert renderBitmap was called (implementation detail, but key for coverage)
+    expect(emit).toHaveBeenCalledWith('screen:received', expect.objectContaining({ rawBytes: expect.anything() }));
   });
 
   test('catches and logs errors on invalid data', () => {
     const invalidData = [0xf0, 0x1c, 0x70, 0x00, 0x32]; // Incomplete
-    parseResponse(invalidData, mockLog);
+    parseResponse(invalidData);
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Parse response error'), 'error', 'error');
   });
 
@@ -115,10 +112,18 @@ describe('parseResponse', () => {
     const asciiString = 'COL 0 10020010 0 "Favs" "Favs"\nSET 1 10020012 10020010 "Bank" "Bank" 0 "0 Favorites" 1 "0 Favorites" "1 Other Bank"\nSET 2 10020011 10020010 "Program" "Prog" 0 "0 Other Preset" 2 "0 Other Preset" "1 Target Preset"';
     const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
-    parseResponse(data, mockLog);
+    parseResponse(data);
     jest.advanceTimersByTime(500); // Advance for setTimeout in fix
-    expect(sendValuePut).toHaveBeenCalledWith('10020011', '1', mockLog); // Correct index (desc match)
+    expect(sendValuePut).toHaveBeenCalledWith('10020011', '1'); // Correct index (desc match)
     expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Correcting selection after Favorites re-order'), 'info', 'general');
+  });
+
+  test('calls notifyResponse on well-formed 0x32 OBJECTINFO_DUMP', () => {
+    const asciiString = 'COL 0 10010000 0 "Setup" "Setup"';
+    const asciiData = asciiString.split('').map(c => c.charCodeAt(0));
+    const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
+    parseResponse(data);
+    expect(notifyResponse).toHaveBeenCalledWith('objectinfo', '10010000');
   });
 });
 

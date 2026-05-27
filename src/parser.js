@@ -1,157 +1,10 @@
 // parser.js
-import { renderScreen, updateScreen } from './renderer.js';
 import { appState } from './state.js';
-import { hideLoading } from './main.js';
-import { sendValuePut, sendValueDump, sendObjectInfoDump } from './midi.js';
-import debounce from 'lodash.debounce'; // Add import; install via npm if needed
-
-let renderTimeout = null;
-
-// Bit reverse table
-const bit_reverse_table = new Array(256);
-for (let i = 0; i < 256; i++) {
-    bit_reverse_table[i] = parseInt(i.toString(2).padStart(8, '0').split('').reverse().join(''), 2);
-}
-
-// Function to extract nibbles from SysEx hex string
-export function extractNibbles(sysExHex) {
-    const hexMatches = sysExHex.toLowerCase().match(/[0-9a-f]{1,2}/g);
-    if (!hexMatches) return [];
-    const startIdx = hexMatches.indexOf('17') + 1;
-    if (startIdx === 0) return []; // '17' not found
-    const endIdx = hexMatches.indexOf('f7', startIdx) !== -1 ? hexMatches.indexOf('f7', startIdx) : hexMatches.length;
-    const nibbles = hexMatches.slice(startIdx, endIdx).map(h => parseInt(h, 16));
-    return nibbles;
-}
-
-// Function to denibble nibbles to bytes
-export function denibble(nibbles) {
-  const rawBytes = [];
-  for (let i = 0; i < nibbles.length; i += 2) {
-      if (i + 1 < nibbles.length) {
-          rawBytes.push((nibbles[i] << 4) | nibbles[i + 1]);
-      }
-  }
-  return rawBytes;
-}
-
-// Function to render the bitmap on canvas and return pixel data
-export function renderBitmap(canvasId, rawBytes, log) {
-    const canvas = document.getElementById(canvasId);
-    const ctx = canvas.getContext('2d');
-    const width = 240;
-    const height = 64;
-    canvas.width = width;
-    canvas.height = height;
-    canvas.style.width = '480px';
-    canvas.style.height = '128px';
-    canvas.style.aspectRatio = '240 / 64'; // Force aspect ratio
-    canvas.style.imageRendering = 'pixelated'; // Sharp pixels
-    const imgData = ctx.getImageData(0, 0, width, height);
-    const data = imgData.data;
-    // Skip 13-byte header
-    const bitmap = rawBytes.slice(13, 13 + 1920);
-    // Optional bit flip (hardcoded to false)
-    const processedBitmap = NO_FLIP ? bitmap : bitmap.map(b => bit_reverse_table[b]);
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            let originalX = x;
-            if (ROTATE_COLUMNS) {
-                originalX = (x + (width - 8)) % width;
-            }
-            const byteIdx = y * 30 + Math.floor(originalX / 8);
-            const byte = processedBitmap[byteIdx];
-            const bit = (byte >> (7 - (originalX % 8))) & 1; // MSB-left
-            const idx = (y * width + x) * 4;
-            data[idx] = 0;
-            data[idx + 1] = bit * 255; // Green on
-            data[idx + 2] = 0;
-            data[idx + 3] = 255; // Alpha
-        }
-    }
-    // Post-processing: Non-wrapping shift for first 8 columns if enabled
-    if (SHIFT_FIRST_COLUMN) {
-        const shiftAmount = 1; // Down by 1px
-        for (let x = 0; x < 8; x++) {
-            for (let y = height - 1; y >= shiftAmount; y--) {
-                const fromIdx = ((y - shiftAmount) * width + x) * 4;
-                const idx = (y * width + x) * 4;
-                data[idx] = data[fromIdx];
-                data[idx + 1] = data[fromIdx + 1];
-                data[idx + 2] = data[fromIdx + 2];
-                data[idx + 3] = data[fromIdx + 3];
-            }
-            for (let y = 0; y < shiftAmount; y++) {
-                const idx = (y * width + x) * 4;
-                data[idx] = 0;
-                data[idx + 1] = 0;
-                data[idx + 2] = 0;
-                data[idx + 3] = 255;
-            }
-        }
-    }
-    ctx.putImageData(imgData, 0, 0);
-    log('[LOG] Rendered bitmap to canvas');
-    if (SAVE_MONO_BMP) exportBMP(canvas);
-}
-
-export function exportBMP(canvas) {
-  const ctx = canvas.getContext('2d');
-  const width = canvas.width;
-  const height = canvas.height;
-  const imgData = ctx.getImageData(0, 0, width, height);
-  const data = imgData.data;
-  const buffer = new Uint8Array(54 + width * height);
-  // BMP header
-  buffer[0] = 66; buffer[1] = 77; // 'BM'
-  const fileSize = 54 + width * height;
-  buffer[2] = fileSize & 0xff;
-  buffer[3] = (fileSize >> 8) & 0xff;
-  buffer[4] = (fileSize >> 16) & 0xff;
-  buffer[5] = (fileSize >> 24) & 0xff;
-  buffer[10] = 54; // Offset to pixel data
-  buffer[14] = 40; // DIB header size
-  buffer[18] = width & 0xff;
-  buffer[19] = (width >> 8) & 0xff;
-  buffer[22] = height & 0xff;
-  buffer[23] = (height >> 8) & 0xff;
-  buffer[26] = 1; // Planes
-  buffer[28] = 1; // Bits per pixel (1 for mono)
-  buffer[30] = 0; // Compression (0 = none)
-  // Pixel data (monochrome, padded to 4-byte rows)
-  let offset = 54;
-  const rowBytes = Math.ceil(width / 8);
-  const paddedRow = Math.ceil(rowBytes / 4) * 4;
-  for (let y = height - 1; y >= 0; y--) { // BMP is bottom-up
-    let row = 0;
-    for (let x = 0; x < width; x += 8) {
-      let byte = 0;
-      for (let bit = 0; bit < 8; bit++) {
-        if (x + bit < width) {
-          const idx = (y * width + x + bit) * 4 + 1; // Green channel for on/off
-          byte |= (data[idx] > 0 ? 0 : 1) << (7 - bit); // Black=0, White=1? Adjust if needed
-        }
-      }
-      buffer[offset++] = byte;
-    }
-    // Pad row
-    for (let p = rowBytes; p < paddedRow; p++) {
-      buffer[offset++] = 0;
-    }
-  }
-  const a = document.createElement('a');
-  const url = URL.createObjectURL(new Blob([buffer], {type: 'image/bmp'}));
-  a.href = url;
-  a.download = 'lcd_mono.bmp';
-  a.click();
-  URL.revokeObjectURL(url);
-  log('[LOG] Exported monochrome BMP');
-}
-
-const NO_FLIP = true; // Hardcoded, adjust if needed
-const ROTATE_COLUMNS = true;
-const SHIFT_FIRST_COLUMN = true;
-const SAVE_MONO_BMP = false;
+import { setState } from './store.js';
+import { sendValuePut, sendValueDump, sendObjectInfoDump, notifyResponse } from './midi.js';
+import { log } from './logger.js';
+import { denibble } from './bitmap.js';
+import { emit } from './events.js';
 
 function splitLine(line) {
   const parts = [];
@@ -179,18 +32,13 @@ function splitLine(line) {
   return parts;
 }
 
-// Debounced version of renderScreen to limit calls during rapid VALUE_DUMP
-const debouncedRenderScreen = debounce((subs, ascii, log) => {
-  renderScreen(subs, ascii, log);
-}, 200);
-
-export function parseResponse(data, log) {
+export function parseResponse(data) {
   try {
     if (appState.deviceId === 0 && data.length > 3) {
-      appState.deviceId = data[3];
+      setState({ deviceId: data[3] }, 'parser:device-id-detect');
       log(`Detected device ID: ${appState.deviceId}`, 'info', 'general');
     }
-    const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).trim();
+    const ascii = String.fromCharCode(...data.slice(5, data.length - 1)).replace(/\0+$/, '').trim();
     if (data[3] === appState.deviceId && data[4] === 0x32) { // OBJECTINFO_DUMP
       const subs = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
       log(`Parsed OBJECTINFO_DUMP for key ${subs[0]?.key || 'unknown'}: ${ascii}`, 'info', 'parsedDump');
@@ -198,50 +46,45 @@ export function parseResponse(data, log) {
       if (main.key === '0') {
         const dspASub = subs.find(s => s.key.startsWith('4'));
         const dspBSub = subs.find(s => s.key.startsWith('8'));
-        appState.dspAKey = dspASub?.key || '401000b';
-        appState.dspBKey = dspBSub?.key || '801000b';
-        appState.dspAName = dspASub?.statement || '';
-        appState.dspBName = dspBSub?.statement || '';
+        setState({
+          dspAKey: dspASub?.key || '401000b',
+          dspBKey: dspBSub?.key || '801000b',
+          dspAName: dspASub?.statement || '',
+          dspBName: dspBSub?.statement || '',
+        }, 'parser:root-dsp-meta');
       }
+      notifyResponse('objectinfo', main.key);
       if (main.key.endsWith('000b')) {
         const dsp = main.key[0] === '4' ? 'A' : 'B';
-        appState[`menus${dsp}`] = subs.slice(1).filter(s => s.type === 'COL');
-        appState[`dsp${dsp}Name`] = main.statement;
+        setState({
+          [`menus${dsp}`]: subs.slice(1).filter(s => s.type === 'COL'),
+          [`dsp${dsp}Name`]: main.statement,
+        }, 'parser:preset-meta');
         if (main.key === appState.currentKey) {
-          appState.presetKey = main.key;
+          setState({ presetKey: main.key }, 'parser:preset-key');
         }
       }
       if (main.key === appState.currentKey) {
         // Fetch child sub-menus for local COLs if not already fetched
         const localSoftSubs = subs.slice(1).filter(s => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim() && !appState.childSubs[s.key]);
         localSoftSubs.forEach(s => {
-          sendObjectInfoDump(s.key, log);
-          sendValueDump(s.key, log);
+          sendObjectInfoDump(s.key);
+          sendValueDump(s.key);
         });
-        if (renderTimeout) clearTimeout(renderTimeout);
-        appState.lastAscii = ascii;
-        renderTimeout = setTimeout(() => {
-          debouncedRenderScreen(subs, ascii, log);
-          if (!appState.isLoadingPreset) {
-            hideLoading();
-          }
-          renderTimeout = null;
-        }, 200);
-        appState.currentSubs = subs;
+        setState({ lastAscii: ascii }, 'parser:current-key-ascii');
+        setState({ currentSubs: subs }, 'parser:current-subs');
+        emit('objectinfo:received', { key: main.key, subs, ascii });
       } else if (main.key === '0' && appState.currentKey !== '0') {
-        // Background root dump received (e.g., after preset load); re-render current screen to update top bar
-        debouncedRenderScreen(appState.currentSubs, appState.lastAscii, log);
-        if (appState.isLoadingPreset) {
-          hideLoading();
-          appState.isLoadingPreset = false;
-        }
+        // Background root dump received (e.g., after preset load); subscriber re-renders the
+        // current screen so the new top-bar/DSP names land. isLoadingPreset clear lives in main.js.
+        emit('objectinfo:received', { key: main.key });
       } else {
         // Store child sub-menu data if it's a child of the current menu
         const isChild = appState.currentSubs.some(s => s.key === main.key && s.parent === appState.currentKey);
         if (isChild) {
-          appState.childSubs[main.key] = subs;
+          setState({ childSubs: { ...appState.childSubs, [main.key]: subs } }, 'parser:child-subs-store');
           log(`Stored child subs for key ${main.key} under parent ${appState.currentKey}`, 'debug', 'parsedDump');
-          debouncedRenderScreen(appState.currentSubs, appState.lastAscii, log); // Re-render to include child data
+          emit('objectinfo:received', { key: main.key });
         }
       }
       // Fix for Favorites re-ordering after preset load
@@ -258,10 +101,10 @@ export function parseResponse(data, log) {
               const currentIndex = parseInt(currentProgramValue.split(' ')[0], 10);
               if (newIndex !== -1 && newIndex !== currentIndex) {
                 log(`Correcting selection after Favorites re-order: setting to index ${newIndex} for "${targetName}"`, 'info', 'general');
-                sendValuePut(programSub.key, newIndex.toString(), log);
+                sendValuePut(programSub.key, newIndex.toString());
                 const newDesc = programSub.options[newIndex].desc;
-                appState.currentValues[programSub.key] = `${newIndex} ${newDesc}`;
-                setTimeout(() => sendValueDump(programSub.key, log), 200);
+                setState({ currentValues: { ...appState.currentValues, [programSub.key]: `${newIndex} ${newDesc}` } }, 'parser:favorites-fix-optimistic');
+                setTimeout(() => sendValueDump(programSub.key), 200);
               }
             }
           }
@@ -270,9 +113,10 @@ export function parseResponse(data, log) {
     } else if (data[3] === appState.deviceId && data[4] === 0x2e) { // VALUE_DUMP
       const parts = splitLine(ascii);
       const key = parts[0];
+      notifyResponse('valuedump', key);
       const value = parts.slice(1).join(' ');
       const oldValue = appState.currentValues[key];
-      appState.currentValues[key] = value;
+      setState({ currentValues: { ...appState.currentValues, [key]: value } }, 'parser:value-cache');
       log(`Parsed VALUE_DUMP for key ${key}: ${value}`, 'info', 'parsedDump');
       if (oldValue && oldValue !== value) {
         log(`Value changed from ${oldValue} to ${value}`, 'info', 'valueChange');
@@ -290,21 +134,14 @@ export function parseResponse(data, log) {
         return childSubs.some(cs => cs.key === key);
       });
       if (sub && sub.type === 'CON') {
-        debouncedRenderScreen(appState.currentSubs, null, log); // Immediate re-render for live meter update
+        emit('value:received', { key, immediate: true });
         log(`Immediate re-rendered screen for CON value change on key ${key}`, 'debug', 'renderScreen');
       } else if (key.endsWith('0002') || isChildParam) { // Fallback for meter keys or child params
         log(`Fallback triggered for meter or child key ${key}`, 'debug', 'general');
-        debouncedRenderScreen(appState.currentSubs, null, log);
+        emit('value:received', { key, immediate: true });
         log(`Immediate re-rendered screen for VALUE_DUMP on key ${key}`, 'debug', 'renderScreen');
       } else {
-        if (renderTimeout) clearTimeout(renderTimeout);
-        renderTimeout = setTimeout(() => {
-          debouncedRenderScreen(null, appState.lastAscii, log);
-          if (!appState.isLoadingPreset) {
-            hideLoading();
-          }
-          renderTimeout = null;
-        }, 200);
+        emit('value:received', { key, immediate: false });
       }
     } else if (data[3] === appState.deviceId && data[4] === 0x17) { // Screen dump response
       const nibbles = data.slice(5, data.length - 1);
@@ -314,7 +151,7 @@ export function parseResponse(data, log) {
       }
       const rawBytes = denibble(nibbles);
       if (appState.logCategories['bitmap']) log(`[LOG] Denibbled screen data to ${rawBytes.length} bytes`, 'debug', 'bitmap');
-      renderBitmap('lcd-canvas', rawBytes, log);
+      emit('screen:received', { rawBytes });
     }
   } catch (err) {
     log(`Parse response error: ${err.message}`, 'error', 'error');

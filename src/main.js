@@ -10,6 +10,7 @@ import { setState } from './store.js';
 import { denibble, renderBitmap } from './bitmap.js';
 import { log } from './logger.js';
 import { registerEventBridge } from './event-bridge.js';
+import { extractNibblesFromHex } from './hex-extract.js';
 
 const lcdEl = document.getElementById('lcd');
 const logArea = document.getElementById('log-area');
@@ -219,14 +220,8 @@ processDebugFileBtn.addEventListener('click', () => {
   if (file) {
     const reader = new FileReader();
     reader.onload = function(e) {
-      const content = e.target.result.toLowerCase();
-      const hexPattern = /[0-9a-f]{1,2}/g;
-      const hexMatches = content.match(hexPattern);
-      if (hexMatches) {
-        const startIdx = hexMatches.indexOf('17') + 1;
-        const endIdx = hexMatches.indexOf('f7', startIdx) || hexMatches.length;
-        const nibblesStr = hexMatches.slice(startIdx, endIdx);
-        const nibbles = nibblesStr.map(h => parseInt(h, 16));
+      const nibbles = extractNibblesFromHex(e.target.result);
+      if (nibbles) {
         log(`[LOG] Extracted ${nibbles.length} nibbles from uploaded file`, 'debug', 'general');
         const rawBytes = denibble(nibbles);
         log(`[LOG] Denibbled to ${rawBytes.length} bytes`, 'debug', 'general');

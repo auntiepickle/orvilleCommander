@@ -94,17 +94,12 @@ Polling (e.g., meters) runs intervals in main.js.
 
 ## Known Issues and Refactoring Opportunities
 
-* Tight coupling: Many modules import each other; refactor to more events/pub-sub.
+Active work is tracked in [GitHub Issues](https://github.com/auntiepickle/orvilleCommander/issues).
 
-* Performance: Frequent renders on VALUE_DUMP; debounce more aggressively.
-
-* Error Handling: Add try/catch in parsers; validate MIDI responses.
-
-* Testing: No unit tests yet; add for MIDI/parsing logic.
-
-* Bitmap: Optional feature; make toggling more seamless.
-
-* Refactor Goals: Modularize further (e.g., separate UI components), add types (TypeScript?), optimize state updates.
+The eight-step decoupling refactor that resolved the original tight-coupling,
+testing, and render-pipeline items is documented in [`docs/refactor/`](docs/refactor/) —
+see [`05-status.md`](docs/refactor/05-status.md) for the exit state and
+[`future-work.md`](docs/refactor/future-work.md) for deferred ideas.
 
 ## Contributing
 

@@ -87,9 +87,11 @@ Eight steps. Each step = one commit, one shippable change, one rollback plan. Gr
 
 **Change.** Create `src/navigation.js` owning `toggleDspKey`, `keyStack` push/pop, `currentKey` transitions, and the autoload logic currently at `renderer.js:733-748`. `controls.js` and `renderer.js` both call into it. Delete the duplicate `toggleDspKey` in `controls.js:63`. Then split `renderer.js` into `renderer/screen.js` (renderScreen orchestration), `renderer/format.js` (formatValue + NUM/SET/CON/TRG/INF cell builders), `renderer/softkeys.js` (all softkey-row logic), `renderer/handlers.js` (handleLcdClick, handleSelectChange, handleParamClick). Public API of the folder is re-exported from `renderer/index.js`.
 
-**Why now.** Kills cycle 4 (controls↔renderer) and cycle 5 (the toggleDspKey duplicate). Must come last — file splits churn every import line, and doing this before the event bus exists would force redundant rewiring.
+**Why now.** Kills cycle 5 (controls↔renderer); the toggleDspKey duplicate is the concrete symptom removed. Must come last — file splits churn every import line, and doing this before the event bus exists would force redundant rewiring.
 
 **Rollback.** `git revert`. File moves are the riskiest-to-merge kind of change, so this step belongs on its own branch and lands only after tests for every handler pass.
+
+**Status as of f38111e:** Partial — navigation extraction landed. Renderer folder-split deferred per L101 exit ramp; see docs/refactor/05-status.md for details.
 
 ---
 

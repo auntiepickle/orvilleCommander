@@ -1,11 +1,52 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`renderScreen golden snapshots SET param with hex index >= 10 selects the right option 1`] = `
+"<div id="lcd"><div class="top-docked"></div><div class="main-content">Routing
+Type <select data-key="10010021" class="param-select"><option value="0">Off</option><option value="9">Flange</option><option value="10" selected="">Chorus</option><option value="11">Phaser</option></select>
+</div><div class="bottom-docked"><span class="softkey" data-key="10020000" data-idx="0">program   </span><span class="softkey" data-key="10010000" data-idx="1">setup     </span><span class="softkey" data-key="10030000" data-idx="2">levels    </span><span class="softkey" data-key="10030500" data-idx="3">bypass    </span></div></div>"
+`;
+
+exports[`renderScreen golden snapshots embedded childSubs are expanded inline under the parent menu 1`] = `
+"<div id="lcd"><div class="top-docked"></div><div class="main-content"><span class="back-link" data-key="10010000">[setup]</span> Wrap
+<br>
+Inner
+Depth <span class="param-value" data-key="10010711">  7</span>
+
+<span class="softkey" data-key="10010007" data-idx="0">[wrap]                                  </span>
+</div><div class="bottom-docked"><span class="softkey" data-key="10020000" data-idx="0">program   </span><span class="softkey" data-key="10010000" data-idx="1">setup     </span><span class="softkey" data-key="10030000" data-idx="2">levels    </span><span class="softkey" data-key="10030500" data-idx="3">bypass    </span></div></div>"
+`;
+
+exports[`renderScreen golden snapshots graphic-EQ position-a NUMs grouped onto one line 1`] = `
+"<div id="lcd"><div class="top-docked"></div><div class="main-content">EQ
+v1: <span class="param-value" data-key="100100a1">  3</span> v2: <span class="param-value" data-key="100100a2"> -2</span> v3: <span class="param-value" data-key="100100a3">  0</span>
+</div><div class="bottom-docked"><span class="softkey" data-key="10020000" data-idx="0">program   </span><span class="softkey" data-key="10010000" data-idx="1">setup     </span><span class="softkey" data-key="10030000" data-idx="2">levels    </span><span class="softkey" data-key="10030500" data-idx="3">bypass    </span></div></div>"
+`;
+
+exports[`renderScreen golden snapshots keyStack depth 3 renders grandparent softkey row 1`] = `
+"<div id="lcd"><div class="top-docked"></div><div class="main-content"><span class="back-link" data-key="10010005">[gain]</span> Fine
+Amt <span class="param-value" data-key="10010511"> 10</span>
+
+<span class="softkey" data-key="10010055" data-idx="0">extra                                   </span>
+<span class="softkey" data-key="10010051" data-idx="0">[fine]              </span><span class="softkey" data-key="10010052" data-idx="1">coarse              </span>
+
+<span class="softkey" data-key="10010005" data-idx="0">[gain]              </span><span class="softkey" data-key="10010006" data-idx="1">pan                 </span>
+</div><div class="bottom-docked"><span class="softkey" data-key="10020000" data-idx="0">program   </span><span class="softkey" data-key="10010000" data-idx="1">setup     </span><span class="softkey" data-key="10030000" data-idx="2">levels    </span><span class="softkey" data-key="10030500" data-idx="3">bypass    </span></div></div>"
+`;
+
 exports[`renderScreen golden snapshots leaf menu with CON meter subs (bar rendering branch) 1`] = `
 "<div id="lcd"><div class="top-docked"></div><div class="main-content"><span class="back-link" data-key="10030000">[levels]</span> Meters
 <span class="param-label">L</span> <span class="meter-bar">███████████████████░░░░░░░░░░░░░░░░░░░</span>
 <span class="param-label">R</span> <span class="meter-bar">█████████████████████████████░░░░░░░░░</span>
 
 <span class="softkey" data-key="10030001" data-idx="0">[meters]                                </span>
+</div><div class="bottom-docked"><span class="softkey" data-key="10020000" data-idx="0">program   </span><span class="softkey" data-key="10010000" data-idx="1">setup     </span><span class="softkey" data-key="10030000" data-idx="2">levels    </span><span class="softkey" data-key="10030500" data-idx="3">bypass    </span></div></div>"
+`;
+
+exports[`renderScreen golden snapshots leaf menu with INF param and formatValue width / percent branches 1`] = `
+"<div id="lcd"><div class="top-docked"></div><div class="main-content">Audio
+Gain <span class="param-value" data-key="10010011">  5</span> dB
+Mode: active    
+Level  50%
 </div><div class="bottom-docked"><span class="softkey" data-key="10020000" data-idx="0">program   </span><span class="softkey" data-key="10010000" data-idx="1">setup     </span><span class="softkey" data-key="10030000" data-idx="2">levels    </span><span class="softkey" data-key="10030500" data-idx="3">bypass    </span></div></div>"
 `;
 

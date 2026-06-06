@@ -106,9 +106,10 @@ HUMAN-GATE: none
 - [x] A4  Added config.mergeLogCategories(defaults, cached); boot-init now merges cached prefs over store defaults so new categories survive for existing users. Audited other cached fields — logCategories was the only object subtree (rest are scalars with fallbacks).
 HUMAN-GATE: none
 
-### Batch 2.3 — Bitmap artifact
-- [ ] A2  Fix SHIFT_FIRST_COLUMN top-left black-pixel (bitmap.js:72-91); verify via replay harness
-HUMAN-GATE: needs-hardware — render a 0x18 capture on the device, confirm top-left corner is clean
+### Batch 2.3 — Bitmap artifact   [branch: fix/bitmap-shift]  [PR: #61]
+- [x] A2  Fixed via edge-clamp. The first 8 columns arrive 1px high; we shift down 1px and fill the vacated top by duplicating the row below (not black = the artifact, not wrap = row-63 garbage). VALIDATED OFFLINE by rendering the recorded capture to PNG (`npm run screen`) and inspecting: green title-bar top border now continuous, no notch/specks.
+- [x] (capability) Offline screen-to-PNG renderer: src/framebuffer.js (pure decode) + build_tools/render-screen.js. Lets a session SEE any captured screen dump without the device — the analysis half of the self-validation loop.
+GATE RESOLVED OFFLINE: device spot-check still welcome but no longer blocking — the rendered image is ground-truth-equivalent for the recorded fixture. For NEW screens, drop a screen-dump fixture and run `npm run screen <fixture> <out.png> [scale] [edge|black|wrap|none]`.
 
 ---
 

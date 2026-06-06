@@ -62,11 +62,17 @@ HUMAN-GATE: none
 
 ## Phase 1 — Cleanup (no behavior change)
 
-### Batch 1.1 — Dead-code prune
-- [ ] B1  Remove dead exports: `extractNibbles` (bitmap.js:16), `getState`/`subscribe` (store.js:62,72)
-- [ ] B3  Remove stray `console.log` (renderer.js:99,113,115)
-- [ ] B4  Remove commented-out code (renderer.js:102, midi.js:141)
-- [ ] B2  Resolve `SAVE_MONO_BMP`/`exportBMP` (bitmap.js:7,94,97) — keep as commented dev hatch OR remove flag+call+fn
+### Batch 1.1 — Dead-code prune   [branch: chore/prune-dead-code]  [PR: #56]
+- [x] B1  Removed dead exports: extractNibbles (bitmap.js), getState/subscribe + store subscriber Set/notify loop (store.js)
+- [x] B3  Routed renderer select-change console.logs through gated log()
+- [x] B4  Removed commented-out code (renderer assignment, midi SysEx log + unused category local)
+- [x] B2  Removed SAVE_MONO_BMP flag + gated call + unreachable exportBMP (bitmap.js)
+- [x] (bonus) Removed unused isPreset local + unused test imports
+NOTE: ESLint warnings 26 -> 19. Remaining deferred to end-of-Phase-1 lint-zeroing: main.js unused DOM consts (~11),
+      midi notifyResponse type/key params (intentional 7d API — will _-prefix or document), parser/renderer no-useless-assignment (~5).
+FINDING (investigate later, possible bug): main.js grabs button refs that are never wired
+      (backBtn, exportConfigBtn, importConfigInput, importConfigBtn, sendRequestBtn, getValueBtn, setValueInput, setValueBtn,
+      applyLogCategoriesBtn, keyInput, logCategoriesJson). Either dead lookups or buttons in index.html missing handlers.
 HUMAN-GATE: none
 
 ### Batch 1.2 — Magic-constant extraction

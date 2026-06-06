@@ -97,9 +97,9 @@ HUMAN-GATE: none
 
 ## Phase 2 — Correctness bugs
 
-### Batch 2.1 — Parser correctness
-- [ ] A5  Stop swallowing mid-parse errors (parser.js:156-159): preserve stack, roll back same-call setStates
-- [ ] A3  Optimistic write (parser.js:119-120): roll back currentValues[key] if PUT not confirmed
+### Batch 2.1 — Parser correctness   [branch: fix/parser-correctness]  [PR: #59]
+- [x] A5  parseResponse is now atomic: snapshots appState on entry, reverts (incl. deleting added keys) on any throw; error log includes the stack
+- [x] A3  Removed the optimistic currentValues write in the Favorites re-order fix; the Orville does not ack PUTs, so the existing re-dump is the single source of truth (PUT + re-dump retained)
 HUMAN-GATE: none
 
 ### Batch 2.2 — Config correctness

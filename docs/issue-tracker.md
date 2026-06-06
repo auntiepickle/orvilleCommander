@@ -31,7 +31,7 @@ be green; `npm test` green before marking `[x]`. Keep all written output factual
 ## Phase 0 — Foundation & safety net
 
 ### Batch 0.1 — Ledger + method   [branch: docs/issue-tracker]
-- [x] Create this ledger + document resume/human-gate protocol   (this PR)
+- [x] Create this ledger + document resume/human-gate protocol   PR #52
 HUMAN-GATE: none
 
 ### Batch 0.2 — CI + tooling

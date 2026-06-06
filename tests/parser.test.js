@@ -206,12 +206,30 @@ describe('parseResponse', () => {
     const asciiData = asciiString.split('').map((c) => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
     parseResponse(data);
+    // A3: no optimistic cache write — the value is not set synchronously.
+    expect(appState.currentValues['10020011']).toBeUndefined();
     jest.advanceTimersByTime(500); // Advance for setTimeout in fix
     expect(sendValuePut).toHaveBeenCalledWith('10020011', '1'); // Correct index (desc match)
     expect(mockLog).toHaveBeenCalledWith(
       expect.stringContaining('Correcting selection after Favorites re-order'),
       'info',
       'general'
+    );
+    // A3: the re-dump is the single source of truth that reconciles the value.
+    expect(sendValueDump).toHaveBeenCalledWith('10020011');
+  });
+
+  test('A5: a throw mid-parse reverts all state writes from that call', () => {
+    appState.deviceId = 0; // will be detected/written before the throw
+    // Well-framed OBJECTINFO for device 5 but with empty ASCII payload, so
+    // subs is [] and main.key access throws after deviceId was written.
+    const data = [0xf0, 0x1c, 0x70, 0x05, 0x32, 0x20, 0xf7];
+    parseResponse(data);
+    expect(appState.deviceId).toBe(0); // rolled back, not left at 5
+    expect(mockLog).toHaveBeenCalledWith(
+      expect.stringContaining('Parse response error'),
+      'error',
+      'error'
     );
   });
 

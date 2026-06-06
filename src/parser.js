@@ -9,6 +9,9 @@ import { emit } from './events.js';
 import { splitLine } from './sysex-split.js';
 
 export function parseResponse(data) {
+  // Atomic parse (A5): snapshot state so a throw mid-parse reverts cleanly
+  // instead of leaving appState half-applied from a malformed dump.
+  const snapshot = { ...appState };
   try {
     if (appState.deviceId === 0 && data.length > 3) {
       setState({ deviceId: data[3] }, 'parser:device-id-detect');
@@ -120,16 +123,10 @@ export function parseResponse(data) {
                   'general'
                 );
                 sendValuePut(programSub.key, newIndex.toString());
-                const newDesc = programSub.options[newIndex].desc;
-                setState(
-                  {
-                    currentValues: {
-                      ...appState.currentValues,
-                      [programSub.key]: `${newIndex} ${newDesc}`,
-                    },
-                  },
-                  'parser:favorites-fix-optimistic'
-                );
+                // No optimistic cache write (A3): the Orville does not
+                // acknowledge a PUT, so the re-dump below is the single source
+                // of truth and avoids a divergent cached value if the PUT does
+                // not take.
                 setTimeout(() => sendValueDump(programSub.key), 200);
               }
             }
@@ -199,8 +196,13 @@ export function parseResponse(data) {
       emit('screen:received', { rawBytes });
     }
   } catch (err) {
-    log(`Parse response error: ${err.message}`, 'error', 'error');
-    // Optional: Fallback to root or error screen
+    // Revert any partial writes from this call (A5). Delete keys added during
+    // the failed parse, then restore the snapshot's values.
+    for (const k of Object.keys(appState)) {
+      if (!(k in snapshot)) delete appState[k];
+    }
+    Object.assign(appState, snapshot);
+    log(`Parse response error: ${err.stack || err.message}`, 'error', 'error');
   }
 }
 

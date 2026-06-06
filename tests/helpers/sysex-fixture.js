@@ -5,6 +5,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { splitLine } from '../../src/sysex-split.js';
 
 const FIXTURES_DIR = path.join(process.cwd(), 'tests', 'fixtures');
 
@@ -25,35 +26,9 @@ export function hexRequest(key, cmd, deviceId = 1) {
 }
 
 // ----- fixture decoders (Option B) ------------------------------------
-// splitLine/decodeSubs mirror parser.js:splitLine and parseSubObject.
-// Duplicated here rather than imported because importing parser.js would
-// drag in its mocked module graph at helper-load time.
-
-function splitLine(line) {
-  const parts = [];
-  let current = '';
-  let inQuote = false;
-  let quoteChar = '';
-  for (const ch of line) {
-    if ((ch === "'" || ch === '"') && !inQuote) {
-      inQuote = true;
-      quoteChar = ch;
-      if (current.trim()) parts.push(current.trim());
-      current = '';
-    } else if (ch === quoteChar && inQuote) {
-      inQuote = false;
-      parts.push(current.trim());
-      current = '';
-    } else if (ch === ' ' && !inQuote) {
-      if (current.trim()) parts.push(current.trim());
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  if (current.trim()) parts.push(current.trim());
-  return parts;
-}
+// decodeSubs mirrors parser.js:parseSubObject. splitLine is imported from the
+// shared src/sysex-split.js leaf module (no module-graph drag), so the parser
+// and this decoder can no longer diverge.
 
 function decodeSubs(rawBytes) {
   const ascii = String.fromCharCode(...rawBytes.slice(5, -1))

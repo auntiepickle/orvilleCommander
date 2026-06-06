@@ -17,32 +17,35 @@ Open the dev URL in Chrome, Edge, or Opera (WebMIDI requirement — Firefox and 
 
 ```
 index.html
-  └─ main.js        entry point, DOM wiring, connectMidi, log()
+  └─ main.js          entry point, DOM wiring, connectMidi, registerEventBridge
       ├─ config.js          localStorage load/save/clear
       ├─ controls.js        keypress masks + button → SysEx mapping
-      ├─ midi.js            WebMIDI send, SysEx encoding, listener
-      ├─ parser.js          SysEx byte stream → structured subs & values
+      ├─ midi.js            WebMIDI send, SysEx encoding, inbound listener, dump counter
+      ├─ parser.js          SysEx byte stream → structured subs & values; emits events
+      ├─ event-bridge.js    subscribes to parser events, owns render timing
       ├─ renderer.js        subs → LCD HTML, event handlers
-      └─ state.js           appState singleton (shared mutable)
+      ├─ bitmap.js          screen-capture denibble + canvas render
+      ├─ navigation.js      toggleDspKey
+      ├─ events.js          tiny pub/sub bus (emit / on)
+      ├─ store.js           setState façade over appState (audited writes)
+      ├─ state.js           appState singleton (re-exported from store.js)
+      ├─ sysex-commands.js  CMD / KEY protocol constants
+      ├─ sysex-split.js     ASCII dump tokenizer (shared by parser + tests)
+      ├─ logger.js          gated log()
+      └─ hex-extract.js     debug-file hex parsing
 ```
 
-Data flow: user clicks → `controls.js` sends SysEx via `midi.js` → Orville responds → `midi.js` listener → `parser.js` mutates `appState` → `renderer.js` paints `#lcd`. Bitmap path: `0x17` SysEx → `parser.js` denibbles → canvas.
+Data flow: user clicks → `controls.js` sends SysEx via `midi.js` → Orville responds → `midi.js` listener → `parser.js` parses, writes state via `store.setState`, and emits events on `events.js` → `event-bridge.js` coalesces and calls `renderer.renderScreen` → paints `#lcd`. Bitmap path: `0x17` SysEx → `parser.js` denibbles (`bitmap.js`) → emits `screen:received` → `event-bridge.js` → `renderBitmap` on the canvas.
 
-## Known structural issues (refactor in flight)
+## Module structure (refactor complete)
 
-Five import cycles exist and must be dismantled in the order specified in `docs/refactor/04-roadmap.md`. They are currently load-tolerated by ES modules because everything across the cycles is accessed late (function calls, not top-level reads) — but that is not license to 'fix' them opportunistically. Order matters.
+The eight-step decoupling refactor is complete (merged via PR #23). Four of the five original import cycles were broken: parser↔renderer, parser↔main, and renderer↔main via the `events.js` pub/sub bus + `event-bridge.js` (Step 7), and controls↔renderer via the `navigation.js` extraction (Step 8).
 
-1. `midi.js` ↔ `parser.js`
-2. `parser.js` ↔ `renderer.js`
-3. `parser.js` ↔ `main.js`
-4. `renderer.js` ↔ `main.js`
-5. `controls.js` ↔ `renderer.js`
+Still open and not roadmapped: cycle 1 `midi.js` ↔ `parser.js`, and a residual 2-node `renderer.js` ↔ `main.js` coupling (`renderer` imports `showLoading`; `main` imports `updateScreen`). See `docs/refactor/05-status.md`.
 
-See `docs/refactor/` for the dependency graph, coupling analysis, and the eight-step roadmap. See `docs/refactor/future-work.md` for ideas explicitly deferred past the roadmap. **Check the roadmap before proposing structural changes** — work happens in a specific order to keep each commit shippable.
+State: `appState` (in `state.js`) is a shared mutable object re-exported from `store.js`. Prefer `store.setState(partial, origin)` for an audited write path over mutating `appState` directly. `toggleDspKey` has a single definition in `navigation.js`.
 
-`appState` (in `state.js`) is a shared mutable object every module writes to directly. Treat it as legacy; Step 4 of the roadmap introduces a `store.js` façade.
-
-`toggleDspKey` is defined twice (`controls.js:63` and `renderer.js:37`). Don't fix it in isolation — it dies in Step 8.
+See `docs/refactor/` for the dependency graph and refactor history, and `docs/issue-tracker.md` for the active production-readiness work.
 
 ## Testing
 

@@ -81,10 +81,17 @@ HUMAN-GATE: none
 NOTE: DSP preset keys 401000b/801000b left as store.js defaults + startsWith('4'/'8') checks — naming adds little, high churn. JSDoc @example literals left as-is.
 HUMAN-GATE: none
 
-### Batch 1.3 — Dedup + stale docs
-- [ ] B7  Collapse triplicated splitLine/request-byte builders (parser.js, build_tools/capture-fixtures.cjs, tests/helpers/sysex-fixture.js)
-- [ ] B8  Fix stale docs/comments (CLAUDE.md toggleDspKey claim; parser.js:79 isLoadingPreset comment)
+### Batch 1.3 — Dedup + stale docs   [branch: chore/dedup-and-docs]  [PR: #58]
+- [x] B7  Extracted canonical splitLine to src/sysex-split.js (leaf); parser + test helper import it. capture-fixtures.cjs (CJS build tool, not in test/runtime path) keeps a hand-synced copy with a pointer comment.
+- [x] B8  parser comment corrected (isLoadingPreset clear is in event-bridge.js); CLAUDE.md architecture + module-structure sections refreshed for the completed refactor; toggleDspKey single-definition note.
 HUMAN-GATE: none
+
+### Phase 1 closeout — deferred
+- [ ] Lint-zeroing: promote no-unused-vars / no-console / no-useless-assignment to error once 19 remaining warnings cleared.
+      Blocked on the main.js unwired-button finding (below) + ~5 no-useless-assignment in parser/renderer (some resolve naturally in Phase 3).
+- [ ] FINDING (possible UX bug): main.js grabs ~11 button/input refs never wired to handlers
+      (backBtn, exportConfigBtn, importConfigInput, importConfigBtn, sendRequestBtn, getValueBtn, setValueInput, setValueBtn,
+      applyLogCategoriesBtn, keyInput, logCategoriesJson). Determine: dead lookups (remove) vs buttons in index.html missing handlers (wire or remove from UI).
 
 ---
 

@@ -150,9 +150,10 @@ function sleep(ms) {
 // Decodes a captured root OBJECTINFO_DUMP and returns the first
 // short-tag COL sub the renderer autoload (renderer.js:733-748) will
 // land on, so the developer can confirm the planned fixture #4
-// filename (objectinfo-10010000.txt) matches reality. Mirrors the
-// filter at renderer.js:737 and parser.js:splitLine - duplicated here
-// because this script deliberately does not import from src/.
+// filename (objectinfo-10010000.txt) matches reality. The canonical
+// splitLine lives in src/sysex-split.js; this copy is kept in sync by hand
+// because this CommonJS build tool deliberately does not import from src/
+// (ESM) and is not part of the test/runtime path.
 
 function splitLine(line) {
   const parts = [];

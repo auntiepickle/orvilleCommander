@@ -6,32 +6,7 @@ import { sendValuePut, sendValueDump, sendObjectInfoDump, notifyResponse } from 
 import { log } from './logger.js';
 import { denibble } from './bitmap.js';
 import { emit } from './events.js';
-
-function splitLine(line) {
-  const parts = [];
-  let current = '';
-  let inQuote = false;
-  let quoteChar = '';
-  for (let char of line) {
-    if ((char === "'" || char === '"') && !inQuote) {
-      inQuote = true;
-      quoteChar = char;
-      if (current.trim()) parts.push(current.trim());
-      current = '';
-    } else if (char === quoteChar && inQuote) {
-      inQuote = false;
-      parts.push(current.trim()); // Strip extra spaces
-      current = '';
-    } else if (char === ' ' && !inQuote) {
-      if (current.trim()) parts.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  if (current.trim()) parts.push(current.trim());
-  return parts;
-}
+import { splitLine } from './sysex-split.js';
 
 export function parseResponse(data) {
   try {
@@ -102,7 +77,7 @@ export function parseResponse(data) {
         emit('objectinfo:received', { key: main.key, subs, ascii });
       } else if (main.key === '0' && appState.currentKey !== '0') {
         // Background root dump received (e.g., after preset load); subscriber re-renders the
-        // current screen so the new top-bar/DSP names land. isLoadingPreset clear lives in main.js.
+        // current screen so the new top-bar/DSP names land. isLoadingPreset clear lives in event-bridge.js.
         emit('objectinfo:received', { key: main.key });
       } else {
         // Store child sub-menu data if it's a child of the current menu

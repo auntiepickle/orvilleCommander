@@ -33,7 +33,16 @@ jest.mock('../src/parser.js', () => ({
   parseResponse: jest.fn(),
 }));
 
-import { sendObjectInfoDump, sendValueDump, notifyResponse, getDumpStats } from '../src/midi.js';
+import {
+  sendObjectInfoDump,
+  sendValueDump,
+  notifyResponse,
+  getDumpStats,
+  setMidiPorts,
+  sendSysEx,
+  sendValuePut,
+  sendKeypress,
+} from '../src/midi.js';
 import { on } from '../src/events.js';
 import { appState } from '../src/state.js';
 
@@ -114,5 +123,63 @@ describe('midi.js per-wave counter and watchdog (7c)', () => {
     after.all = 9999;
     const fresh = getDumpStats();
     expect(fresh.all).not.toBe(9999);
+  });
+});
+
+describe('midi.js SysEx byte contract', () => {
+  let output;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    output = { sendSysex: jest.fn() };
+    setMidiPorts(output, { addListener: jest.fn() }, 0);
+  });
+
+  afterEach(() => {
+    // Drain any open request wave so its watchdog timer does not leak.
+    jest.advanceTimersByTime(1500);
+    jest.useRealTimers();
+  });
+
+  test('sendSysEx frames the Eventide manufacturer id and device/cmd/data', () => {
+    sendSysEx(0x18, [0x01, 0x02]);
+    expect(output.sendSysex).toHaveBeenCalledWith([0x1c, 0x70], [0x00, 0x18, 0x01, 0x02]);
+  });
+
+  test('sendSysEx uses the configured device id', () => {
+    setMidiPorts(output, { addListener: jest.fn() }, 7);
+    sendSysEx(0x18, []);
+    expect(output.sendSysex).toHaveBeenCalledWith([0x1c, 0x70], [0x07, 0x18]);
+  });
+
+  test('sendObjectInfoDump emits cmd 0x31 with the key as ASCII bytes', () => {
+    sendObjectInfoDump('0');
+    expect(output.sendSysex).toHaveBeenCalledWith([0x1c, 0x70], [0x00, 0x31, 0x30]);
+  });
+
+  test('sendValueDump emits cmd 0x2d with the key as ASCII bytes', () => {
+    sendValueDump('1');
+    expect(output.sendSysex).toHaveBeenCalledWith([0x1c, 0x70], [0x00, 0x2d, 0x31]);
+  });
+
+  test('sendValuePut emits cmd 0x2d with key, 0x20 separator, then value bytes', () => {
+    sendValuePut('1c', '1');
+    expect(output.sendSysex).toHaveBeenCalledWith(
+      [0x1c, 0x70],
+      [0x00, 0x2d, 0x31, 0x63, 0x20, 0x31]
+    );
+  });
+
+  test('sendKeypress emits cmd 0x01 with the mask split into nibbles', () => {
+    sendKeypress([0xff, 0xff, 0xff, 0xef]);
+    expect(output.sendSysex).toHaveBeenCalledWith(
+      [0x1c, 0x70],
+      [0x00, 0x01, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0f, 0x0e, 0x0f]
+    );
+  });
+
+  test('sendSysEx with no output logs an error and does not throw', () => {
+    setMidiPorts(null, null, 0);
+    expect(() => sendSysEx(0x18, [])).not.toThrow();
   });
 });

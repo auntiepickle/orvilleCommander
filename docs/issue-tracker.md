@@ -44,11 +44,12 @@ HUMAN-GATE: none
 NOTE: ESLint warnings are the live Phase 1 prune worklist (`npm run lint`); promote no-* rules back to error at end of Phase 1.
 HUMAN-GATE: none
 
-### Batch 0.3 — Test-net widening   (gates all render/arch work)
-- [ ] E  Widen renderer snapshot: graphic-EQ pos-`a`, embedded childSubs, keyStack depth >2,
-        SET hex/dec idx >=10, INF type, formatValue `%3.0f`/`%-10s`/`%%`, handleLcdClick back-link + dsp-clickable
-- [ ] E  Characterize VALUE_DUMP 0x2e branch (CON immediate-render, meter heuristic, program/bank skip, child-param)
-- [ ] E  Add coverage for midi.js request-building, controls.js, config.js
+### Batch 0.3 — Test-net widening   [branch: test/widen-coverage]  [PR: #54]   (gates all render/arch work)
+- [x] E  Widened renderer snapshot: graphic-EQ pos-`a`, embedded childSubs, keyStack depth 3,
+        SET hex idx >=10, INF type, formatValue `%3.0f`/`%-10s`/`%%`; handleLcdClick back-link + dsp-clickable (renderer.test.js)
+- [x] E  Characterized VALUE_DUMP 0x2e branch (CON immediate-render, meter heuristic, program/bank skip, child-param, value-change logging)
+- [x] E  Added coverage for midi.js byte-contract (sendSysEx/ObjectInfo/ValueDump/ValuePut/Keypress), controls.js, config.js
+NOTE: test count 36 -> 64; snapshots 3 -> 8. Each new snapshot inspected for correctness, not just stability.
 HUMAN-GATE: none
 
 ### Batch 0.4 — Offline replay harness

@@ -203,4 +203,100 @@ describe('renderer.js', () => {
 
     jest.useRealTimers();
   });
+
+  test('lcd click on back-link pops keyStack and refreshes', () => {
+    appState.currentKey = '10010001';
+    appState.keyStack = [
+      {
+        key: '10010000',
+        tag: 'setup',
+        subs: [
+          {
+            type: 'COL',
+            position: '0',
+            key: '10010000',
+            parent: '0',
+            statement: 'Setup',
+            tag: 'setup',
+          },
+          {
+            type: 'COL',
+            position: '1',
+            key: '10010001',
+            parent: '10010000',
+            statement: 'Input',
+            tag: 'input',
+          },
+        ],
+      },
+    ];
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010001',
+        parent: '10010000',
+        statement: 'Input',
+        tag: 'input',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10010011',
+        parent: '10010001',
+        statement: 'Param %3.0f',
+        tag: 'prm',
+        value: '5',
+        options: [],
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    const back = document.querySelector('.back-link');
+    expect(back).toBeTruthy();
+    expect(back.dataset.key).toBe('10010000');
+
+    back.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(appState.currentKey).toBe('10010000');
+    expect(appState.keyStack.length).toBe(0);
+    expect(appState.autoLoad).toBe(true);
+    expect(appState.currentSoftkeys).toEqual([]);
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('10010000', null);
+    expect(sendValueDump).toHaveBeenCalledWith('10010000', null);
+  });
+
+  test('lcd click on dsp-clickable swaps active preset and pushes keyStack', () => {
+    appState.currentKey = '0';
+    appState.dspAName = 'Reverb';
+    appState.dspBName = 'Delay';
+    appState.dspAKey = '401000b';
+    appState.dspBKey = '801000b';
+    appState.presetKey = '401000b';
+    const subs = [
+      { type: 'COL', position: '0', key: '0', parent: '', statement: 'Root', tag: 'root' },
+      {
+        type: 'COL',
+        position: '1',
+        key: '10020000',
+        parent: '0',
+        statement: 'Program',
+        tag: 'program',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    const dspB = document.querySelector('.dsp-clickable[data-key="801000b"]');
+    expect(dspB).toBeTruthy();
+
+    dspB.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(appState.presetKey).toBe('801000b');
+    expect(appState.currentKey).toBe('801000b');
+    expect(appState.autoLoad).toBe(true);
+    expect(appState.childSubs).toEqual({});
+    expect(appState.keyStack.length).toBe(1);
+    expect(appState.keyStack[0].key).toBe('0');
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('801000b', null);
+  });
 });

@@ -1,0 +1,10 @@
+node_modules
+combine
+dist
+**/__snapshots__
+*.snap
+package-lock.json
+
+# Prose/reference docs are hand-authored; keep them out of the formatter to avoid noisy reflows.
+*.md
+docs

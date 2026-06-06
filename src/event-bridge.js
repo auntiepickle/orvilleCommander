@@ -39,48 +39,58 @@ export function registerEventBridge({ hideLoading }) {
   const debouncedRenderRequest = debounce(({ subs, ascii }) => {
     let subsToUse = subs;
     if (!subsToUse && ascii) {
-      subsToUse = ascii.split('\n').map(line => line.trim()).filter(line => line).map(parseSubObject);
+      subsToUse = ascii
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line)
+        .map(parseSubObject);
     }
     renderScreen(subsToUse, ascii, log);
   }, 200);
 
   unsubscribers.push(on('render:request', debouncedRenderRequest));
 
-  unsubscribers.push(on('objectinfo:received', ({ key, subs, ascii }) => {
-    if (key === appState.currentKey) {
-      if (renderTimeout) clearTimeout(renderTimeout);
-      renderTimeout = setTimeout(() => {
-        emit('render:request', { subs, ascii });
-        if (!appState.isLoadingPreset) hideLoading();
-        renderTimeout = null;
-      }, 200);
-    } else if (key === '0' && appState.currentKey !== '0') {
-      emit('render:request', { subs: appState.currentSubs, ascii: appState.lastAscii });
-      if (appState.isLoadingPreset) {
-        hideLoading();
-        setState({ isLoadingPreset: false }, 'main:objectinfo-loading-preset-clear');
+  unsubscribers.push(
+    on('objectinfo:received', ({ key, subs, ascii }) => {
+      if (key === appState.currentKey) {
+        if (renderTimeout) clearTimeout(renderTimeout);
+        renderTimeout = setTimeout(() => {
+          emit('render:request', { subs, ascii });
+          if (!appState.isLoadingPreset) hideLoading();
+          renderTimeout = null;
+        }, 200);
+      } else if (key === '0' && appState.currentKey !== '0') {
+        emit('render:request', { subs: appState.currentSubs, ascii: appState.lastAscii });
+        if (appState.isLoadingPreset) {
+          hideLoading();
+          setState({ isLoadingPreset: false }, 'main:objectinfo-loading-preset-clear');
+        }
+      } else {
+        emit('render:request', { subs: appState.currentSubs, ascii: appState.lastAscii });
       }
-    } else {
-      emit('render:request', { subs: appState.currentSubs, ascii: appState.lastAscii });
-    }
-  }));
+    })
+  );
 
-  unsubscribers.push(on('value:received', ({ immediate }) => {
-    if (immediate) {
-      emit('render:request', { subs: appState.currentSubs, ascii: null });
-    } else {
-      if (renderTimeout) clearTimeout(renderTimeout);
-      renderTimeout = setTimeout(() => {
-        emit('render:request', { subs: null, ascii: appState.lastAscii });
-        if (!appState.isLoadingPreset) hideLoading();
-        renderTimeout = null;
-      }, 200);
-    }
-  }));
+  unsubscribers.push(
+    on('value:received', ({ immediate }) => {
+      if (immediate) {
+        emit('render:request', { subs: appState.currentSubs, ascii: null });
+      } else {
+        if (renderTimeout) clearTimeout(renderTimeout);
+        renderTimeout = setTimeout(() => {
+          emit('render:request', { subs: null, ascii: appState.lastAscii });
+          if (!appState.isLoadingPreset) hideLoading();
+          renderTimeout = null;
+        }, 200);
+      }
+    })
+  );
 
-  unsubscribers.push(on('screen:received', ({ rawBytes }) => {
-    renderBitmap('lcd-canvas', rawBytes);
-  }));
+  unsubscribers.push(
+    on('screen:received', ({ rawBytes }) => {
+      renderBitmap('lcd-canvas', rawBytes);
+    })
+  );
 
   return function teardown() {
     for (const off of unsubscribers) off();

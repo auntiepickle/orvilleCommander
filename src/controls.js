@@ -10,47 +10,47 @@ import { toggleDspKey } from './navigation.js';
  * Mapping of key names to their corresponding MIDI keypress mask arrays.
  * These masks are used to simulate button presses on the Orville device via SysEx.
  * Each mask is a 4-byte array representing the bitmasks for key states.
- * 
+ *
  * @type {Object.<string, number[]>}
  * @example
  * // Usage in sendKeypress
  * const mask = keypressMasks['up']; // [0xFE, 0xFF, 0xFD, 0xFF]
  */
 export const keypressMasks = {
-  'up': [0xFE, 0xFF, 0xFD, 0xFF],
-  'down': [0xFF, 0xFE, 0xFD, 0xFF],
-  'left': [0xFF, 0xFE, 0xFF, 0xFF],
-  'right': [0xFE, 0xFF, 0xFF, 0xFF],
-  'enter': [0xFF, 0xFF, 0xFF, 0xEF],
-  'select': [0xFF, 0xFF, 0xFE, 0xFF],
-  'program': [0xF7, 0xFF, 0xFF, 0xFF],
-  'parameter': [0xFF, 0xF7, 0xFF, 0xFF],
-  'levels': [0xFF, 0xFF, 0xFF, 0xFD],
-  'setup': [0xFF, 0xFF, 0xF7, 0xFF],
-  'bypass': [0xFF, 0xFF, 0xFD, 0xFF],
-  'inc': [0xFF, 0xFF, 0xFF, 0x7F],
-  'dec': [0xFF, 0xFF, 0xFF, 0xBF],
-  'soft1': [0xFB, 0xFF, 0xFF, 0xFF],
-  'soft2': [0xFF, 0xFB, 0xFF, 0xFF],
-  'soft3': [0xFF, 0xFF, 0xFB, 0xFF],
-  'soft4': [0xFF, 0xFF, 0xFF, 0xFB],
-  'ab': [0xFD, 0xFF, 0xFD, 0xFF],
-  'program-hold': [0xF7, 0xFF, 0xFF, 0xFE],
-  'parameter-hold': [0xFF, 0xF7, 0xFF, 0xFE],
-  'select-hold': [0xFF, 0xFF, 0xFE, 0xFE],
-  '1': [0x7F, 0xFF, 0xFF, 0xFF],
-  '2': [0xFF, 0x7F, 0xFF, 0xFF],
-  '3': [0xFF, 0xFF, 0x7F, 0xFF],
-  '4': [0xBF, 0xFF, 0xFF, 0xFF],
-  '5': [0xFF, 0xBF, 0xFF, 0xFF],
-  '6': [0xFF, 0xFF, 0xBF, 0xFF],
-  '7': [0xDF, 0xFF, 0xFF, 0xFF],
-  '8': [0xFF, 0xDF, 0xFF, 0xFF],
-  '9': [0xFF, 0xFF, 0xDF, 0xFF],
-  '0': [0xFF, 0xEF, 0xFF, 0xFF],
-  'dot': [0xEF, 0xFF, 0xFF, 0xFF],
-  'minus': [0xFF, 0xFF, 0xEF, 0xFF],
-  'cxl': [0xFF, 0xFF, 0xFF, 0xDF],
+  up: [0xfe, 0xff, 0xfd, 0xff],
+  down: [0xff, 0xfe, 0xfd, 0xff],
+  left: [0xff, 0xfe, 0xff, 0xff],
+  right: [0xfe, 0xff, 0xff, 0xff],
+  enter: [0xff, 0xff, 0xff, 0xef],
+  select: [0xff, 0xff, 0xfe, 0xff],
+  program: [0xf7, 0xff, 0xff, 0xff],
+  parameter: [0xff, 0xf7, 0xff, 0xff],
+  levels: [0xff, 0xff, 0xff, 0xfd],
+  setup: [0xff, 0xff, 0xf7, 0xff],
+  bypass: [0xff, 0xff, 0xfd, 0xff],
+  inc: [0xff, 0xff, 0xff, 0x7f],
+  dec: [0xff, 0xff, 0xff, 0xbf],
+  soft1: [0xfb, 0xff, 0xff, 0xff],
+  soft2: [0xff, 0xfb, 0xff, 0xff],
+  soft3: [0xff, 0xff, 0xfb, 0xff],
+  soft4: [0xff, 0xff, 0xff, 0xfb],
+  ab: [0xfd, 0xff, 0xfd, 0xff],
+  'program-hold': [0xf7, 0xff, 0xff, 0xfe],
+  'parameter-hold': [0xff, 0xf7, 0xff, 0xfe],
+  'select-hold': [0xff, 0xff, 0xfe, 0xfe],
+  1: [0x7f, 0xff, 0xff, 0xff],
+  2: [0xff, 0x7f, 0xff, 0xff],
+  3: [0xff, 0xff, 0x7f, 0xff],
+  4: [0xbf, 0xff, 0xff, 0xff],
+  5: [0xff, 0xbf, 0xff, 0xff],
+  6: [0xff, 0xff, 0xbf, 0xff],
+  7: [0xdf, 0xff, 0xff, 0xff],
+  8: [0xff, 0xdf, 0xff, 0xff],
+  9: [0xff, 0xff, 0xdf, 0xff],
+  0: [0xff, 0xef, 0xff, 0xff],
+  dot: [0xef, 0xff, 0xff, 0xff],
+  minus: [0xff, 0xff, 0xef, 0xff],
+  cxl: [0xff, 0xff, 0xff, 0xdf],
 };
 
 /**
@@ -108,19 +108,29 @@ export function setupKeypressControls() {
         const mask = keypressMasks[key];
         if (mask) {
           sendKeypress(mask);
-          log(`Sent keypress for ${key}: ${mask.map(b => b.toString(16).padStart(2, '0')).join(' ')}`, 'debug', 'sysexSent');
+          log(
+            `Sent keypress for ${key}: ${mask.map((b) => b.toString(16).padStart(2, '0')).join(' ')}`,
+            'debug',
+            'sysexSent'
+          );
           setTimeout(() => {
             if (key === 'ab') {
               if (appState.currentKey === '0') {
-                setState({ presetKey: toggleDspKey(appState.presetKey) }, 'controls:keypress-ab-toggle');
+                setState(
+                  { presetKey: toggleDspKey(appState.presetKey) },
+                  'controls:keypress-ab-toggle'
+                );
               }
             } else if (key === 'parameter') {
               if (appState.currentKey === '0') {
-                setState({
-                  keyStack: [...appState.keyStack, appState.currentKey],
-                  currentKey: appState.presetKey,
-                  autoLoad: true,
-                }, 'controls:keypress-parameter-nav');
+                setState(
+                  {
+                    keyStack: [...appState.keyStack, appState.currentKey],
+                    currentKey: appState.presetKey,
+                    autoLoad: true,
+                  },
+                  'controls:keypress-parameter-nav'
+                );
               }
             }
             updateScreen();
@@ -153,7 +163,7 @@ export function testKeypress() {
   const mockKey = 'up';
   const mask = keypressMasks[mockKey];
   if (mask) {
-    const commandStr = `Sent keypress for ${mockKey}: ${mask.map(b => b.toString(16).padStart(2, '0')).join(' ')}`;
+    const commandStr = `Sent keypress for ${mockKey}: ${mask.map((b) => b.toString(16).padStart(2, '0')).join(' ')}`;
     // Simulate single send
     log(`Simulated command: ${commandStr}`, 'debug', 'sysexSent');
     // Check for duplicate by seeing if the same command is logged twice (in real flow, it should not)
@@ -162,5 +172,9 @@ export function testKeypress() {
   } else {
     log('Test failed: no mask found for mock key.', 'error', 'error');
   }
-  log('Duplicate command test complete. Check logs for any repeated commands during normal operation.', 'info', 'general');
+  log(
+    'Duplicate command test complete. Check logs for any repeated commands during normal operation.',
+    'info',
+    'general'
+  );
 }

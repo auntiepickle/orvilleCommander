@@ -49,15 +49,16 @@ try {
   const hunks = diffContent.match(/@@ -(\d+),\d+ \+(\d+),\d+ @@[\s\S]*?(?=(@@|$))/g) || [];
   let fileContent = fs.readFileSync(targetFile, 'utf8').replace(/\r\n/g, '\n').split('\n');
 
-  hunks.forEach(hunk => {
+  hunks.forEach((hunk) => {
     const match = hunk.match(/@@ -(\d+),\d+ \+(\d+),\d+ @@/);
     if (match) {
       const oldStart = parseInt(match[1], 10) - 1; // 0-index
       const lines = hunk.split('\n').slice(1, -1); // Hunk lines without @@
       let currentLine = oldStart;
-      lines.forEach(line => {
+      lines.forEach((line) => {
         if (line.startsWith('-')) {
-          if (fileContent[currentLine].trim() === line.slice(1).trim()) fileContent.splice(currentLine, 1);
+          if (fileContent[currentLine].trim() === line.slice(1).trim())
+            fileContent.splice(currentLine, 1);
         } else if (line.startsWith('+')) {
           fileContent.splice(currentLine, 0, line.slice(1));
           currentLine++;

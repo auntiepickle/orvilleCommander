@@ -32,25 +32,37 @@ const path = require('node:path');
 // guardrail.
 
 function buildObjectInfoRequest(key, deviceId) {
-  const keyBytes = key.split('').map(c => c.charCodeAt(0));
-  return [0xF0, 0x1C, 0x70, deviceId, 0x31, ...keyBytes, 0xF7];
+  const keyBytes = key.split('').map((c) => c.charCodeAt(0));
+  return [0xf0, 0x1c, 0x70, deviceId, 0x31, ...keyBytes, 0xf7];
 }
 
 function buildValueDumpRequest(key, deviceId) {
-  const keyBytes = key.split('').map(c => c.charCodeAt(0));
-  return [0xF0, 0x1C, 0x70, deviceId, 0x2D, ...keyBytes, 0xF7];
+  const keyBytes = key.split('').map((c) => c.charCodeAt(0));
+  return [0xf0, 0x1c, 0x70, deviceId, 0x2d, ...keyBytes, 0xf7];
 }
 
 // ----- fixture table --------------------------------------------------
 
 const FIXTURES = [
-  { name: 'objectinfo-root',     build: d => buildObjectInfoRequest('0', d),        expectCmd: 0x32 },
-  { name: 'objectinfo-401000b',  build: d => buildObjectInfoRequest('401000b', d),  expectCmd: 0x32 },
-  { name: 'objectinfo-801000b',  build: d => buildObjectInfoRequest('801000b', d),  expectCmd: 0x32 },
-  { name: 'objectinfo-10010000', build: d => buildObjectInfoRequest('10010000', d), expectCmd: 0x32 },
-  { name: 'valuedump-root',      build: d => buildValueDumpRequest('0', d),         expectCmd: 0x2e },
-  { name: 'valuedump-401000b',   build: d => buildValueDumpRequest('401000b', d),   expectCmd: 0x2e },
-  { name: 'valuedump-8060001',   build: d => buildValueDumpRequest('8060001', d),   expectCmd: 0x2e },
+  { name: 'objectinfo-root', build: (d) => buildObjectInfoRequest('0', d), expectCmd: 0x32 },
+  {
+    name: 'objectinfo-401000b',
+    build: (d) => buildObjectInfoRequest('401000b', d),
+    expectCmd: 0x32,
+  },
+  {
+    name: 'objectinfo-801000b',
+    build: (d) => buildObjectInfoRequest('801000b', d),
+    expectCmd: 0x32,
+  },
+  {
+    name: 'objectinfo-10010000',
+    build: (d) => buildObjectInfoRequest('10010000', d),
+    expectCmd: 0x32,
+  },
+  { name: 'valuedump-root', build: (d) => buildValueDumpRequest('0', d), expectCmd: 0x2e },
+  { name: 'valuedump-401000b', build: (d) => buildValueDumpRequest('401000b', d), expectCmd: 0x2e },
+  { name: 'valuedump-8060001', build: (d) => buildValueDumpRequest('8060001', d), expectCmd: 0x2e },
 ];
 
 const RESPONSE_TIMEOUT_MS = 1500;
@@ -71,7 +83,9 @@ function parseArgs(argv) {
     else if (argv[i] === '--device-id') out.deviceId = parseInt(argv[++i], 10);
     else if (argv[i] === '--only') out.only = argv[++i];
     else if (argv[i] === '--help' || argv[i] === '-h') {
-      console.log('Usage: node build_tools/capture-fixtures.cjs [--port-in <substring>] [--port-out <substring>] [--device-id <n>] [--only <name>]');
+      console.log(
+        'Usage: node build_tools/capture-fixtures.cjs [--port-in <substring>] [--port-out <substring>] [--device-id <n>] [--only <name>]'
+      );
       process.exit(0);
     }
   }
@@ -110,8 +124,8 @@ function waitForResponse(input, expectCmd, timeoutMs) {
       // Accept: F0 1C 70 <anyDevId> <expectCmd> ... F7
       if (
         message.length >= 6 &&
-        message[0] === 0xF0 &&
-        message[1] === 0x1C &&
+        message[0] === 0xf0 &&
+        message[1] === 0x1c &&
         message[2] === 0x70 &&
         message[4] === expectCmd
       ) {
@@ -125,11 +139,11 @@ function waitForResponse(input, expectCmd, timeoutMs) {
 }
 
 function hexFormat(bytes) {
-  return bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+  return bytes.map((b) => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
 }
 
 function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 // ----- root-dump self-verification ------------------------------------
@@ -170,9 +184,9 @@ function extractFirstShortTagCOL(rawBytes) {
   const ascii = String.fromCharCode(...rawBytes.slice(5, -1)).trim();
   const subs = ascii
     .split('\n')
-    .map(l => l.trim())
+    .map((l) => l.trim())
     .filter(Boolean)
-    .map(line => {
+    .map((line) => {
       const parts = splitLine(line);
       return {
         type: parts[0] || '',
@@ -182,7 +196,7 @@ function extractFirstShortTagCOL(rawBytes) {
     });
   const softSubs = subs
     .slice(1)
-    .filter(s => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim());
+    .filter((s) => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim());
   return softSubs[0] || null;
 }
 
@@ -193,7 +207,7 @@ async function main() {
 
   let fixtures = FIXTURES;
   if (only) {
-    fixtures = FIXTURES.filter(fx => fx.name === only);
+    fixtures = FIXTURES.filter((fx) => fx.name === only);
     if (fixtures.length === 0) {
       console.error(`ERROR: --only '${only}' did not match any FIXTURES entry`);
       console.error('Known names:');
@@ -232,7 +246,9 @@ async function main() {
     console.error('Available outputs:');
     enumeratePorts(output);
     console.error('');
-    console.error('Rerun with --port-in <substring> and/or --port-out <substring> to match your device.');
+    console.error(
+      'Rerun with --port-in <substring> and/or --port-out <substring> to match your device.'
+    );
     process.exit(1);
   }
 
@@ -277,7 +293,9 @@ async function main() {
   if (rootDumpBytes) {
     const first = extractFirstShortTagCOL(rootDumpBytes);
     if (first) {
-      console.log(`root dump first short-tag COL: ${first.key} (tag="${first.tag}") - confirm fixture #4 filename matches`);
+      console.log(
+        `root dump first short-tag COL: ${first.key} (tag="${first.tag}") - confirm fixture #4 filename matches`
+      );
     } else {
       console.log('root dump has no short-tag COLs - autoload will not fire on root');
     }
@@ -294,7 +312,7 @@ async function main() {
   console.log('done');
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('unexpected error:', err);
   process.exit(1);
 });

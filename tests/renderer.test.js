@@ -62,9 +62,16 @@ describe('renderer.js', () => {
 
   test('select change updates SET value and triggers auto-load for program select', () => {
     appState.currentKey = '10020000';
-    appState.presetKey = '401000b';  // → loadKey='1002001c'
+    appState.presetKey = '401000b'; // → loadKey='1002001c'
     const subs = [
-      { type: 'COL', position: '0', key: '10020000', parent: '', statement: 'Program', tag: 'program' },
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020000',
+        parent: '',
+        statement: 'Program',
+        tag: 'program',
+      },
       {
         type: 'SET',
         position: '1',
@@ -73,8 +80,8 @@ describe('renderer.js', () => {
         statement: '%-20s',
         tag: 'Program',
         options: Array.from({ length: 6 }, (_, i) => ({ index: `${i}`, desc: `Preset${i}` })),
-        value: '0 Preset0'
-      }
+        value: '0 Preset0',
+      },
     ];
     renderScreen(subs, '', mockLog);
     const select = document.querySelector('select[data-key="10020011"]');
@@ -96,13 +103,17 @@ describe('renderer.js', () => {
     // Nested timeout 300 (auto-load)
     jest.advanceTimersByTime(300);
     expect(sendValuePut).toHaveBeenCalledWith('1002001c', '1');
-    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Auto-triggered load'), 'info', 'general');
+    expect(mockLog).toHaveBeenCalledWith(
+      expect.stringContaining('Auto-triggered load'),
+      'info',
+      'general'
+    );
 
     // Nested timeout 500 (post-load)
     jest.advanceTimersByTime(500);
     expect(sendObjectInfoDump).toHaveBeenCalledWith('0');
     expect(mockLog).toHaveBeenCalledWith('Fetched root after preset load.', 'debug', 'general');
-    expect(sendSysEx).toHaveBeenCalledWith(0x18, []);  // 2nd bitmap
+    expect(sendSysEx).toHaveBeenCalledWith(0x18, []); // 2nd bitmap
 
     jest.useRealTimers();
   });
@@ -123,14 +134,14 @@ describe('renderer.js', () => {
         value: '50',
         min: '0',
         max: '100',
-        step: '1'
-      }
+        step: '1',
+      },
     ];
     renderScreen(subs, '', mockLog);
     const paramSpan = document.querySelector('.param-value[data-key="10010011"]');
     expect(paramSpan).toBeTruthy();
 
-    appState.currentSubs = subs;  // For handler sub lookup
+    appState.currentSubs = subs; // For handler sub lookup
     jest.useFakeTimers();
     paramSpan.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
@@ -151,14 +162,21 @@ describe('renderer.js', () => {
     appState.currentKey = '10020000';
     appState.presetKey = '401000b';
     const subs = [
-      { type: 'COL', position: '0', key: '10020000', parent: '', statement: 'Program', tag: 'program' },
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020000',
+        parent: '',
+        statement: 'Program',
+        tag: 'program',
+      },
       {
         type: 'TRG',
         position: '1',
         key: '1002001c',
         parent: '10020000',
-        statement: 'LOAD A'
-      }
+        statement: 'LOAD A',
+      },
     ];
     renderScreen(subs, '', mockLog);
     const paramSpan = document.querySelector('.param-value[data-key="1002001c"]');
@@ -171,7 +189,11 @@ describe('renderer.js', () => {
     // Immediate
     expect(showLoading).toHaveBeenCalled();
     expect(sendValuePut).toHaveBeenCalledWith('1002001c', '1');
-    expect(mockLog).toHaveBeenCalledWith(expect.stringContaining('Triggered TRG for key 1002001c'), 'info', 'general');
+    expect(mockLog).toHaveBeenCalledWith(
+      expect.stringContaining('Triggered TRG for key 1002001c'),
+      'info',
+      'general'
+    );
 
     // Timeout 500
     jest.advanceTimersByTime(500);

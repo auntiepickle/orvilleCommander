@@ -33,12 +33,7 @@ jest.mock('../src/parser.js', () => ({
   parseResponse: jest.fn(),
 }));
 
-import {
-  sendObjectInfoDump,
-  sendValueDump,
-  notifyResponse,
-  getDumpStats,
-} from '../src/midi.js';
+import { sendObjectInfoDump, sendValueDump, notifyResponse, getDumpStats } from '../src/midi.js';
 import { on } from '../src/events.js';
 import { appState } from '../src/state.js';
 

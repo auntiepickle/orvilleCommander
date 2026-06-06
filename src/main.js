@@ -1,7 +1,7 @@
 // main.js
 import { WebMidi } from 'webmidi';
 import { CMD, KEY } from './sysex-commands.js';
-import { loadConfig, saveConfig, clearConfig } from './config.js';
+import { loadConfig, saveConfig, clearConfig, mergeLogCategories } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
 import {
   setMidiPorts,
@@ -353,9 +353,11 @@ const cachedConfig = loadConfig(
 setState(
   {
     logLevel: logLevelSelect.value,
-    logCategories:
-      cachedConfig?.logCategories ||
-      Object.fromEntries(Object.keys(appState.logCategories).map((k) => [k, true])),
+    // Merge cached prefs over the store defaults so new categories are not lost
+    // for existing users (A4). With no cache at all, fresh users start all-on.
+    logCategories: cachedConfig
+      ? mergeLogCategories(appState.logCategories, cachedConfig.logCategories)
+      : Object.fromEntries(Object.keys(appState.logCategories).map((k) => [k, true])),
     fetchBitmap: fetchBitmapCheckbox.checked,
     updateBitmapOnChange: updateBitmapOnChangeCheckbox.checked,
     presetKey: cachedConfig?.presetKey || '401000b',

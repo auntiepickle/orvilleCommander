@@ -52,8 +52,10 @@ HUMAN-GATE: none
 NOTE: test count 36 -> 64; snapshots 3 -> 8. Each new snapshot inspected for correctness, not just stability.
 HUMAN-GATE: none
 
-### Batch 0.4 — Offline replay harness
-- [ ] H  Recorded-SysEx replay + bitmap screengrab-diff scaffolding (no device); subscribes to events.js bus
+### Batch 0.4 — Offline replay harness   [branch: test/replay-harness]  [PR: #55]
+- [x] H  Recorded-SysEx replay through the real parser/events/bridge/renderer (tests/helpers/replay.js + replay.test.js)
+- [x] H  Framebuffer screengrab decode to ASCII (headless canvas stub) — already surfaces the A2 artifact; this is the offline validator for Batch 2.3
+NOTE: test count 64 -> 66, 10 suites. Phase 0 (foundation) complete.
 HUMAN-GATE: none
 
 ---

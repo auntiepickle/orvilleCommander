@@ -107,6 +107,68 @@ describe('parseResponse', () => {
     expect(emit).toHaveBeenCalledWith('value:received', { key: '10030000', immediate: false });
   });
 
+  // Helper for the VALUE_DUMP (0x2e) branch characterization below.
+  const valueDump = (ascii) => {
+    const asciiData = ascii.split('').map((c) => c.charCodeAt(0));
+    return [0xf0, 0x1c, 0x70, 0x00, 0x2e, ...asciiData, 0xf7];
+  };
+
+  test('VALUE_DUMP for a CON sub emits an immediate render', () => {
+    appState.currentSubs = [{ key: '10030011', type: 'CON' }];
+    parseResponse(valueDump('10030011 0.5'));
+    expect(appState.currentValues['10030011']).toBe('0.5');
+    expect(emit).toHaveBeenCalledWith('value:received', { key: '10030011', immediate: true });
+    expect(mockLog).toHaveBeenCalledWith(
+      expect.stringContaining('Immediate re-rendered screen for CON value change on key 10030011'),
+      'debug',
+      'renderScreen'
+    );
+  });
+
+  test('VALUE_DUMP for a meter key (endsWith 0002) takes the immediate fallback', () => {
+    appState.currentSubs = []; // no matching sub
+    parseResponse(valueDump('10030002 0.8'));
+    expect(emit).toHaveBeenCalledWith('value:received', { key: '10030002', immediate: true });
+    expect(mockLog).toHaveBeenCalledWith(
+      expect.stringContaining('Fallback triggered for meter or child key 10030002'),
+      'debug',
+      'general'
+    );
+  });
+
+  test('VALUE_DUMP for a child param takes the immediate fallback', () => {
+    appState.currentSubs = [];
+    appState.childSubs = { 10010071: [{ key: '10010711', type: 'NUM' }] };
+    parseResponse(valueDump('10010711 7'));
+    expect(emit).toHaveBeenCalledWith('value:received', { key: '10010711', immediate: true });
+    expect(mockLog).toHaveBeenCalledWith(
+      expect.stringContaining('Fallback triggered for meter or child key 10010711'),
+      'debug',
+      'general'
+    );
+  });
+
+  test('VALUE_DUMP for program/bank keys updates cache but skips render', () => {
+    for (const key of ['10020011', '10020012']) {
+      emit.mockClear();
+      parseResponse(valueDump(`${key} 3 SomePreset`));
+      expect(appState.currentValues[key]).toBe('3 SomePreset');
+      expect(emit).not.toHaveBeenCalled();
+    }
+  });
+
+  test('VALUE_DUMP logs a value change and a no-change', () => {
+    appState.currentSubs = [{ key: '10030011', type: 'NUM' }];
+    appState.currentValues['10030011'] = 'old';
+    parseResponse(valueDump('10030011 new'));
+    expect(mockLog).toHaveBeenCalledWith('Value changed from old to new', 'info', 'valueChange');
+    expect(emit).toHaveBeenCalledWith('value:received', { key: '10030011', immediate: false });
+
+    mockLog.mockClear();
+    parseResponse(valueDump('10030011 new'));
+    expect(mockLog).toHaveBeenCalledWith('Value did not change, still new', 'debug', 'noChange');
+  });
+
   test('handles screen dump (bitmap) and calls renderBitmap', () => {
     // Mock SysEx: device 0, cmd 0x17 (screen dump), some nibbles
     const nibbles = [0x00, 0x01, 0x02, 0x03]; // Simplified even nibbles

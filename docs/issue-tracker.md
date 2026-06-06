@@ -93,6 +93,15 @@ HUMAN-GATE: none
       (backBtn, exportConfigBtn, importConfigInput, importConfigBtn, sendRequestBtn, getValueBtn, setValueInput, setValueBtn,
       applyLogCategoriesBtn, keyInput, logCategoriesJson). Determine: dead lookups (remove) vs buttons in index.html missing handlers (wire or remove from UI).
 
+### Batch 1.4 — Protocol constants & documentation (B10)  [requested]
+- [ ] B10  Residual MIDI/SysEx magic numbers beyond the CMD/KEY constants from 1.2: the framing bytes
+      (0xF0 start, 0xF7 stop, 0x1C Eventide ID, 0x70 product ID, device-id byte), the 0x20 VALUE_PUT
+      separator, screen geometry (240x64, 30 bytes/row, 1920, 12-byte header), and structural key
+      suffixes ('000b' preset, '0002' meter). Name them (extend sysex-commands.js / a protocol module).
+- [ ] B10b Document the reverse-engineered protocol. system_commands.txt only covers button presses;
+      the 0x17/0x18 screen format, 0x31/0x32 OBJECTINFO, and 0x2d/0x2e VALUE flows are undocumented.
+      Write a docs/protocol.md from the code + observed behavior so the framing isn't tribal knowledge.
+
 ---
 
 ## Phase 2 — Correctness bugs
@@ -109,7 +118,11 @@ HUMAN-GATE: none
 ### Batch 2.3 — Bitmap artifact   [branch: fix/bitmap-shift]  [PR: #61]
 - [x] A2  Fixed via edge-clamp. The first 8 columns arrive 1px high; we shift down 1px and fill the vacated top by duplicating the row below (not black = the artifact, not wrap = row-63 garbage). VALIDATED OFFLINE by rendering the recorded capture to PNG (`npm run screen`) and inspecting: green title-bar top border now continuous, no notch/specks.
 - [x] (capability) Offline screen-to-PNG renderer: src/framebuffer.js (pure decode) + build_tools/render-screen.js. Lets a session SEE any captured screen dump without the device — the analysis half of the self-validation loop.
-GATE RESOLVED OFFLINE: device spot-check still welcome but no longer blocking — the rendered image is ground-truth-equivalent for the recorded fixture. For NEW screens, drop a screen-dump fixture and run `npm run screen <fixture> <out.png> [scale] [edge|black|wrap|none]`.
+GATE RESOLVED OFFLINE: device spot-check still welcome but no longer blocking — the rendered image is ground-truth-equivalent for the recorded fixture. For NEW screens, drop a screen-dump fixture and run `npm run screen <fixture> <out.png> [scale] [header]`.
+
+### Batch 2.3b — Bitmap decoder root-cause   [branch: fix/screen-header]  [PR: #62]
+- [x] A2-root  Found the real cause of the artifact: the decoder skipped a 13-byte header when the 0x17 dump is 12 header + 1920 data + 1 trailing. The extra byte forced the ROTATE_COLUMNS + SHIFT_FIRST_COLUMN heuristics (and my edge-clamp was a third patch). Corrected header to 12 and DELETED all three heuristics — straight row-major MSB-left decode. Verified clean via `npm run screen` (full screen pixel-perfect) + framebuffer unit tests + replay snapshot.
+NOTE: screen format is NOT in system_commands.txt (only button SysEx is) — the decoder is fully reverse-engineered. See [[B10]] below.
 
 ---
 

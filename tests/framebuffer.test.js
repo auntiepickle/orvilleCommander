@@ -25,16 +25,26 @@ describe('computePixels', () => {
 
   test('lit pixels are green with full alpha', () => {
     const px = computePixels(allOn);
-    // Sample a pixel away from the shifted first 8 columns.
     const idx = (10 * 240 + 100) * 4;
     expect([px[idx], px[idx + 1], px[idx + 2], px[idx + 3]]).toEqual([0, 255, 0, 255]);
   });
 
-  test('shiftMode controls the vacated top pixel of the first 8 columns', () => {
-    // Header all 0, data all lit, so row 0 of the first columns is lit pre-shift.
-    const bytes = new Array(13).fill(0).concat(new Array(1920).fill(0xff));
-    const topGreen = (px) => px[(0 * 240 + 0) * 4 + 1]; // col 0, row 0 green channel
-    expect(topGreen(computePixels(bytes, { shiftMode: 'black' }))).toBe(0); // zeroed
-    expect(topGreen(computePixels(bytes, { shiftMode: 'edge' }))).toBe(255); // clamped to lit row below
+  test('row-major MSB-left decode with the default 12-byte header', () => {
+    // header(12) zeros, then row 0's first byte = 0x80 (only the top-left pixel lit).
+    const bytes = new Array(12).fill(0);
+    bytes.push(0x80); // row 0, byte 0
+    while (bytes.length < 12 + 1920) bytes.push(0);
+    const px = computePixels(bytes);
+    expect(px[(0 * 240 + 0) * 4 + 1]).toBe(255); // (0,0) lit
+    expect(px[(0 * 240 + 1) * 4 + 1]).toBe(0); // (1,0) off
+  });
+
+  test('header offset shifts where pixel data starts', () => {
+    // Same byte placed for a 13-byte header should NOT light (0,0).
+    const bytes = new Array(13).fill(0);
+    bytes.push(0x80);
+    while (bytes.length < 13 + 1920) bytes.push(0);
+    expect(computePixels(bytes, { header: 12 })[(0 * 240 + 0) * 4 + 1]).toBe(0);
+    expect(computePixels(bytes, { header: 13 })[(0 * 240 + 0) * 4 + 1]).toBe(255);
   });
 });

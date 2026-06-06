@@ -93,14 +93,20 @@ HUMAN-GATE: none
       (backBtn, exportConfigBtn, importConfigInput, importConfigBtn, sendRequestBtn, getValueBtn, setValueInput, setValueBtn,
       applyLogCategoriesBtn, keyInput, logCategoriesJson). Determine: dead lookups (remove) vs buttons in index.html missing handlers (wire or remove from UI).
 
-### Batch 1.4 — Protocol constants & documentation (B10)  [requested]
-- [ ] B10  Residual MIDI/SysEx magic numbers beyond the CMD/KEY constants from 1.2: the framing bytes
-      (0xF0 start, 0xF7 stop, 0x1C Eventide ID, 0x70 product ID, device-id byte), the 0x20 VALUE_PUT
-      separator, screen geometry (240x64, 30 bytes/row, 1920, 12-byte header), and structural key
-      suffixes ('000b' preset, '0002' meter). Name them (extend sysex-commands.js / a protocol module).
-- [ ] B10b Document the reverse-engineered protocol. system_commands.txt only covers button presses;
-      the 0x17/0x18 screen format, 0x31/0x32 OBJECTINFO, and 0x2d/0x2e VALUE flows are undocumented.
-      Write a docs/protocol.md from the code + observed behavior so the framing isn't tribal knowledge.
+### Batch 1.4 — No magic numbers: audit + document (B10)  [requested]
+Principle (now a CLAUDE.md convention): no unexplained literal constants anywhere — name and justify
+them. The MIDI/SysEx protocol is the flagship offender but this is a codebase-wide audit.
+- [ ] B10a Protocol/MIDI literals beyond the CMD/KEY constants from 1.2: framing bytes (0xF0 start,
+      0xF7 stop, 0x1C Eventide ID, 0x70 product ID, device-id byte), the 0x20 VALUE_PUT separator,
+      screen geometry (240x64, 30 bytes/row, 1920, 12-byte header), structural key suffixes
+      ('000b' preset, '0002' meter). Name them in sysex-commands.js / a protocol module.
+- [ ] B10b Non-protocol literals across the codebase: render/poll timing (200/300/500ms — several
+      collapse in Phase 3.1 dumpComplete), itemsPerLine=4 and column widths (renderer), keypress mask
+      bytes vs system_commands.txt, debounce windows. Sweep every src/ file; name or comment each
+      semantic literal, delete any with no reason.
+- [ ] B10c Document the reverse-engineered protocol. system_commands.txt only covers button presses;
+      the 0x17/0x18 screen format (now: 12-byte header + 1920 1bpp + 1 trailing), 0x31/0x32 OBJECTINFO,
+      and 0x2d/0x2e VALUE flows are undocumented. Write docs/protocol.md so framing isn't tribal knowledge.
 
 ---
 

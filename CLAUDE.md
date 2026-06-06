@@ -62,7 +62,7 @@ When writing new tests:
 
 ## Protocol quick reference
 
-All SysEx is framed `F0 1C 70 <deviceId> <cmd> ... F7`. Commands seen in code:
+Full details in [`docs/protocol.md`](docs/protocol.md). All SysEx is framed `F0 1C 70 <deviceId> <cmd> ... F7`. Commands seen in code:
 
 | Cmd | Direction | Meaning |
 |---|---|---|

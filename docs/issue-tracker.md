@@ -106,9 +106,12 @@ reviewer agents swept all of src/; findings consolidated below.
       DEFAULT_LOG_LEVEL. Wired through midi/parser/renderer/controls/event-bridge/main/config/bitmap/framebuffer.
       Deliberately left as self-evident (per the principle — naming would hurt readability): nibble math
       (0x0f/>>4), RGBA stride (4), bit positions (7/8/255), quote/space chars, position '0', `|| 10` min-width guard.
-- [ ] B10c Document the reverse-engineered protocol. system_commands.txt only covers button presses;
-      the 0x17/0x18 screen format (now: 12-byte header + 1920 1bpp + 1 trailing), 0x31/0x32 OBJECTINFO,
-      and 0x2d/0x2e VALUE flows are undocumented. Write docs/protocol.md so framing isn't tribal knowledge.
+- [x] B10c Wrote docs/protocol.md: framing, device-id, full command table, keypress nibbling, screen
+      bitmap (nibbled; 12-byte header + 1920 1bpp + 1 trailing; row-major MSB-left), OBJECTINFO
+      sub-object field order per type, VALUE request/put/dump (no PUT ack), key conventions. CLAUDE.md
+      protocol table now links to it.
+
+NOTE: Batch 1.4 (B10) complete.
 
 ---
 

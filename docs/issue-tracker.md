@@ -102,8 +102,8 @@ HUMAN-GATE: none
 - [x] A3  Removed the optimistic currentValues write in the Favorites re-order fix; the Orville does not ack PUTs, so the existing re-dump is the single source of truth (PUT + re-dump retained)
 HUMAN-GATE: none
 
-### Batch 2.2 — Config correctness
-- [ ] A4  Merge cached config OVER defaults instead of replacing subtrees (config.js, main.js:324); audit all cached subtrees
+### Batch 2.2 — Config correctness   [branch: fix/config-merge]  [PR: #60]
+- [x] A4  Added config.mergeLogCategories(defaults, cached); boot-init now merges cached prefs over store defaults so new categories survive for existing users. Audited other cached fields — logCategories was the only object subtree (rest are scalars with fallbacks).
 HUMAN-GATE: none
 
 ### Batch 2.3 — Bitmap artifact

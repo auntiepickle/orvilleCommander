@@ -82,6 +82,22 @@ export function saveConfig(
 }
 
 /**
+ * Merges a user's cached log-category preferences over the current defaults.
+ *
+ * Defaults supply the full key set; cached values override per category. This
+ * is a merge, not a replace (A4): a category added to the defaults later is
+ * present (at its default) for users with a pre-existing cache, instead of
+ * being silently absent and treated as off by the logger.
+ *
+ * @param {Object} defaults - The default category map (store.js source of truth).
+ * @param {Object} [cached] - The cached category map from localStorage, if any.
+ * @returns {Object} The merged category map.
+ */
+export function mergeLogCategories(defaults, cached) {
+  return { ...defaults, ...(cached || {}) };
+}
+
+/**
  * Clears the MIDI configuration from localStorage.
  *
  * @example

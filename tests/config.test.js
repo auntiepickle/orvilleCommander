@@ -5,7 +5,7 @@ jest.mock('../src/logger.js', () => ({
   log: jest.fn(),
 }));
 
-import { loadConfig, saveConfig, clearConfig } from '../src/config.js';
+import { loadConfig, saveConfig, clearConfig, mergeLogCategories } from '../src/config.js';
 
 // Minimal stand-ins for the DOM elements loadConfig writes into.
 const makeUi = () => ({
@@ -72,6 +72,21 @@ describe('config', () => {
     // Absent flags default to checked (only an explicit false unchecks them).
     expect(ui.fetchBitmapCheckbox.checked).toBe(true);
     expect(ui.updateBitmapOnChangeCheckbox.checked).toBe(true);
+  });
+
+  describe('mergeLogCategories (A4)', () => {
+    const defaults = { a: true, b: false, c: true };
+
+    test('cached prefs override defaults but new default keys survive', () => {
+      // Existing user cached before key c existed and turned b on.
+      const cached = { a: false, b: true };
+      expect(mergeLogCategories(defaults, cached)).toEqual({ a: false, b: true, c: true });
+    });
+
+    test('missing cached map falls back to the full defaults', () => {
+      expect(mergeLogCategories(defaults, undefined)).toEqual(defaults);
+      expect(mergeLogCategories(defaults, undefined)).not.toBe(defaults); // new object
+    });
   });
 
   test('clearConfig removes the stored config', () => {

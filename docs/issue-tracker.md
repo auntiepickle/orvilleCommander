@@ -106,9 +106,9 @@ HUMAN-GATE: none
 - [x] A4  Added config.mergeLogCategories(defaults, cached); boot-init now merges cached prefs over store defaults so new categories survive for existing users. Audited other cached fields — logCategories was the only object subtree (rest are scalars with fallbacks).
 HUMAN-GATE: none
 
-### Batch 2.3 — Bitmap artifact
-- [ ] A2  Fix SHIFT_FIRST_COLUMN top-left black-pixel (bitmap.js:72-91); verify via replay harness
-HUMAN-GATE: needs-hardware — render a 0x18 capture on the device, confirm top-left corner is clean
+### Batch 2.3 — Bitmap artifact   [branch: fix/bitmap-shift]  [PR: #61]
+- [~] A2  Fixed: SHIFT_FIRST_COLUMN now wraps the bottom pixel to the top instead of blacking it. Offline replay snapshot confirms the forced-blank top-left is gone (first 8 cols now carry wrapped content). NEXT: device confirmation.
+HUMAN-GATE: needs-hardware — PR #61 open, NOT merged. Run the app, render a 0x18 screen capture, confirm the top-left corner is clean (no stray black row) and the first 8 columns align with the rest. If wrong, fallback is option (b) preserve-source-top.
 
 ---
 

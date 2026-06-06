@@ -56,10 +56,21 @@ export function renderBitmap(canvasId, rawBytes) {
       data[idx + 3] = 255; // Alpha
     }
   }
-  // Post-processing: Non-wrapping shift for first 8 columns if enabled
+  // Post-processing: wrapping vertical rotate of the first 8 columns to
+  // correct a 1px offset in the Orville framebuffer's wrapped column group.
+  // This wraps the pixel shifted off the bottom back to the top, rather than
+  // blacking out the top pixel (A2) — consistent with the horizontal
+  // ROTATE_COLUMNS above. A2 is hardware-gated: confirm on the device.
   if (SHIFT_FIRST_COLUMN) {
     const shiftAmount = 1; // Down by 1px
     for (let x = 0; x < 8; x++) {
+      // Save the bottom rows that will wrap around to the top.
+      const wrapped = [];
+      for (let s = 0; s < shiftAmount; s++) {
+        const srcIdx = ((height - shiftAmount + s) * width + x) * 4;
+        wrapped.push(data.slice(srcIdx, srcIdx + 4));
+      }
+      // Shift the column down (bottom-up so reads precede their overwrite).
       for (let y = height - 1; y >= shiftAmount; y--) {
         const fromIdx = ((y - shiftAmount) * width + x) * 4;
         const idx = (y * width + x) * 4;
@@ -68,12 +79,13 @@ export function renderBitmap(canvasId, rawBytes) {
         data[idx + 2] = data[fromIdx + 2];
         data[idx + 3] = data[fromIdx + 3];
       }
-      for (let y = 0; y < shiftAmount; y++) {
-        const idx = (y * width + x) * 4;
-        data[idx] = 0;
-        data[idx + 1] = 0;
-        data[idx + 2] = 0;
-        data[idx + 3] = 255;
+      // Wrap the saved bottom rows into the vacated top rows.
+      for (let s = 0; s < shiftAmount; s++) {
+        const idx = (s * width + x) * 4;
+        data[idx] = wrapped[s][0];
+        data[idx + 1] = wrapped[s][1];
+        data[idx + 2] = wrapped[s][2];
+        data[idx + 3] = wrapped[s][3];
       }
     }
   }

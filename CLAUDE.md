@@ -67,7 +67,7 @@ All SysEx is framed `F0 1C 70 <deviceId> <cmd> ... F7`. Commands seen in code:
 | Cmd | Direction | Meaning |
 |---|---|---|
 | `0x01` | out | Keypress (4-byte mask nibbled to 8 bytes) |
-| `0x17` | in | Screen bitmap (nibbled 13-byte header + 1920 bytes of 240×64 1bpp) |
+| `0x17` | in | Screen bitmap (nibbled 12-byte header + 1920 bytes of 240×64 1bpp + 1 trailing byte) |
 | `0x18` | out | Request screen bitmap |
 | `0x2d` | out | VALUE_DUMP request / VALUE_PUT (with `0x20` separator + value) |
 | `0x2e` | in | VALUE_DUMP response |
@@ -84,13 +84,14 @@ Sub-object types in the ASCII dump: `COL` (column/menu), `NUM`, `SET`, `CON` (co
 - No TypeScript. No JSX. No React.
 - `lodash.debounce` and `webmidi` are the only runtime deps — don't add more without discussion.
 - No emoji in code or logs.
+- No magic numbers. A literal with semantic meaning gets a named constant (and a comment when its origin is non-obvious) — never a bare number/string scattered at call sites. Protocol values live in `src/sysex-commands.js`; the reverse-engineered SysEx framing is the cautionary example this rule exists for.
 - Prefer editing existing files; this repo is small enough that splitting should be deliberate (roadmap Step 6+).
 - Keep comments minimal — the JSDoc on existing exports is fine; don't narrate new code unless the *why* is non-obvious.
 - When touching render logic, add a renderer snapshot test first (see `03-test-coverage-gap.md`).
 - Before claiming a task complete, run `npm test` and report the output. Do not declare success based on reading the diff.
 - Commit messages follow conventional commits (`fix:`, `refactor:`, `test:`, `docs:`, `chore:`). Reference the roadmap step in the body when relevant.
 - If a task grows beyond its stated scope mid-session, stop and ask rather than expanding. Mechanically necessary follow-throughs (e.g., updating a test mock after an import change) are in-scope and do not require asking.
-- Refactor work happens on the `refactor_main` branch. Never commit directly to `main`. If `git branch --show-current` shows `main`, stop and ask.
+- All work happens on a feature branch merged via PR; never commit directly to `main`. If `git branch --show-current` shows `main`, branch first.
 
 ## Build tools (repo root, not src/)
 

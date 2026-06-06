@@ -9,6 +9,7 @@
     "push": "git push && npm run zip",
     "combine": "node build_tools/combine.cjs",
     "capture:fixtures": "node build_tools/capture-fixtures.cjs",
+    "screen": "node build_tools/render-screen.js",
     "test": "jest",
     "lint": "eslint .",
     "format": "prettier --write .",

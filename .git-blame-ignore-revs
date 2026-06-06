@@ -1,0 +1,6 @@
+# Revisions to skip in `git blame` (bulk, mechanical changes only).
+# Enable locally with:  git config blame.ignoreRevsFile .git-blame-ignore-revs
+# GitHub honors this file automatically.
+
+# style: apply Prettier across the code
+ecae0bb473ca567c29baab98fb765b0ad4f6d6ad

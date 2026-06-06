@@ -1,5 +1,6 @@
 // parser.js
 import { appState } from './state.js';
+import { CMD, KEY } from './sysex-commands.js';
 import { setState } from './store.js';
 import { sendValuePut, sendValueDump, sendObjectInfoDump, notifyResponse } from './midi.js';
 import { log } from './logger.js';
@@ -41,7 +42,7 @@ export function parseResponse(data) {
     const ascii = String.fromCharCode(...data.slice(5, data.length - 1))
       .replace(/\0+$/, '')
       .trim();
-    if (data[3] === appState.deviceId && data[4] === 0x32) {
+    if (data[3] === appState.deviceId && data[4] === CMD.OBJECTINFO) {
       // OBJECTINFO_DUMP
       const subs = ascii
         .split('\n')
@@ -123,12 +124,12 @@ export function parseResponse(data) {
       }
       // Fix for Favorites re-ordering after preset load
       if (main.key === '10020010' && appState.isLoadingPreset && appState.loadingPresetName) {
-        const bankSub = subs.find((s) => s.key === '10020012');
+        const bankSub = subs.find((s) => s.key === KEY.BANK_SELECT);
         if (bankSub) {
           const bankValue = appState.currentValues[bankSub.key] || bankSub.value;
           if (bankValue.startsWith('0 ')) {
             // Favorites bank
-            const programSub = subs.find((s) => s.key === '10020011');
+            const programSub = subs.find((s) => s.key === KEY.PROGRAM_SELECT);
             if (programSub && programSub.options) {
               const targetName = appState.loadingPresetName;
               const newIndex = programSub.options.findIndex(
@@ -160,7 +161,7 @@ export function parseResponse(data) {
           }
         }
       }
-    } else if (data[3] === appState.deviceId && data[4] === 0x2e) {
+    } else if (data[3] === appState.deviceId && data[4] === CMD.VALUE_DUMP) {
       // VALUE_DUMP
       const parts = splitLine(ascii);
       const key = parts[0];
@@ -177,7 +178,7 @@ export function parseResponse(data) {
       } else if (oldValue) {
         log(`Value did not change, still ${value}`, 'debug', 'noChange');
       }
-      if (key === '10020011' || key === '10020012') {
+      if (key === KEY.PROGRAM_SELECT || key === KEY.BANK_SELECT) {
         return; // Skip render for program/bank VALUE_DUMP to avoid brief wrong state
       }
       log(
@@ -210,7 +211,7 @@ export function parseResponse(data) {
       } else {
         emit('value:received', { key, immediate: false });
       }
-    } else if (data[3] === appState.deviceId && data[4] === 0x17) {
+    } else if (data[3] === appState.deviceId && data[4] === CMD.SCREEN_BITMAP) {
       // Screen dump response
       const nibbles = data.slice(5, data.length - 1);
       if (nibbles.length % 2 !== 0) {

@@ -1,5 +1,6 @@
 // renderer.js
 import { appState } from './state.js';
+import { CMD, KEY } from './sysex-commands.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { showLoading } from './main.js';
@@ -139,7 +140,7 @@ const handleSelectChange = (e) => {
   setTimeout(() => {
     updateScreen();
     if (appState.updateBitmapOnChange) {
-      sendSysEx(0x18, []);
+      sendSysEx(CMD.GET_SCREEN, []);
       log('Triggered bitmap update after value change.', 'debug', 'bitmap');
     }
     setTimeout(() => {
@@ -155,9 +156,11 @@ const handleSelectChange = (e) => {
       }
     }, 500); // Wait for VALUE_DUMP to arrive
     // Auto-load preset if changing the program select in load menu
-    if (key === '10020011') {
+    if (key === KEY.PROGRAM_SELECT) {
       setTimeout(() => {
-        const loadKey = appState.presetKey.startsWith('4') ? '1002001c' : '1002001d';
+        const loadKey = appState.presetKey.startsWith('4')
+          ? KEY.LOAD_TRIGGER_A
+          : KEY.LOAD_TRIGGER_B;
         setState({ isLoadingPreset: true }, 'renderer:select-change-load-preset');
         sendValuePut(loadKey, '1');
         log(`Auto-triggered load for ${loadKey} after program change`, 'info', 'general');
@@ -166,7 +169,7 @@ const handleSelectChange = (e) => {
           sendObjectInfoDump('0');
           log('Fetched root after preset load.', 'debug', 'general');
           if (appState.updateBitmapOnChange) {
-            sendSysEx(0x18, []);
+            sendSysEx(CMD.GET_SCREEN, []);
             log('Triggered bitmap update after TRG.', 'debug', 'bitmap');
           }
         }, 500); // Delay for device to process load and fetch root
@@ -210,7 +213,7 @@ const handleParamClick = (e) => {
             setTimeout(() => {
               updateScreen();
               if (appState.updateBitmapOnChange) {
-                sendSysEx(0x18, []);
+                sendSysEx(CMD.GET_SCREEN, []);
                 log('Triggered bitmap update after value change.', 'debug', 'bitmap');
               }
             }, 200);
@@ -220,7 +223,7 @@ const handleParamClick = (e) => {
         }
       } else if (sub.type === 'TRG') {
         showLoading();
-        if (key === '1002001c' || key === '1002001d') {
+        if (key === KEY.LOAD_TRIGGER_A || key === KEY.LOAD_TRIGGER_B) {
           setState({ isLoadingPreset: true }, 'renderer:param-click-trg-load-preset');
           log('Started loading preset.', 'info', 'general');
         }
@@ -229,13 +232,13 @@ const handleParamClick = (e) => {
         renderScreen(appState.currentSubs, appState.lastAscii); // Immediate local update
         setTimeout(() => {
           updateScreen();
-          if (key === '1002001c' || key === '1002001d') {
+          if (key === KEY.LOAD_TRIGGER_A || key === KEY.LOAD_TRIGGER_B) {
             // Fetch root to update preset names after loading a new program
             sendObjectInfoDump('0');
             log('Fetched root after preset load.', 'debug', 'general');
           }
           if (appState.updateBitmapOnChange) {
-            sendSysEx(0x18, []);
+            sendSysEx(CMD.GET_SCREEN, []);
             log('Triggered bitmap update after TRG.', 'debug', 'bitmap');
           }
         }, 500); // Increased delay for device to process load

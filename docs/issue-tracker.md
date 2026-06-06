@@ -75,9 +75,10 @@ FINDING (investigate later, possible bug): main.js grabs button refs that are ne
       applyLogCategoriesBtn, keyInput, logCategoriesJson). Either dead lookups or buttons in index.html missing handlers.
 HUMAN-GATE: none
 
-### Batch 1.2 — Magic-constant extraction
-- [ ] B5  New `src/sysex-commands.js` for command bytes (0x01,0x17,0x18,0x2d,0x2e,0x31,0x32) per system_commands.txt
-- [ ] B6  Name application-logic param keys (T_RATE_KEY 8060001; program/bank 10020011/10020012; 1002001c; PRESET_LOAD_TRIGGER_KEY 401000b)
+### Batch 1.2 — Magic-constant extraction   [branch: chore/sysex-constants]  [PR: #57]
+- [x] B5  New src/sysex-commands.js CMD constants for command bytes; wired into midi/parser/renderer/controls/main
+- [x] B6  KEY constants for app-logic param keys (T_RATE, PROGRAM_SELECT, BANK_SELECT, LOAD_TRIGGER_A/B)
+NOTE: DSP preset keys 401000b/801000b left as store.js defaults + startsWith('4'/'8') checks — naming adds little, high churn. JSDoc @example literals left as-is.
 HUMAN-GATE: none
 
 ### Batch 1.3 — Dedup + stale docs

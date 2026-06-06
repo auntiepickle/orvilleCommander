@@ -1,5 +1,6 @@
 // main.js
 import { WebMidi } from 'webmidi';
+import { CMD, KEY } from './sysex-commands.js';
 import { loadConfig, saveConfig, clearConfig } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
 import {
@@ -168,7 +169,7 @@ function selectPorts() {
     updateScreen(log);
     sendObjectInfoDump(toggleDspKey(appState.presetKey));
     if (appState.fetchBitmap) {
-      sendSysEx(0x18, []);
+      sendSysEx(CMD.GET_SCREEN, []);
       log('Fetched initial preset screen.', 'info', 'general');
     } else {
       log('Bitmap fetch disabled; skipped initial preset screen dump.', 'info', 'bitmap');
@@ -232,7 +233,7 @@ syncBtn.addEventListener('click', () => {
 
 getScreenBtn.addEventListener('click', () => {
   if (appState.fetchBitmap) {
-    sendSysEx(0x18, []);
+    sendSysEx(CMD.GET_SCREEN, []);
     log('Sent Get Screen request (0x18)', 'info', 'general');
   } else {
     log('Bitmap fetch disabled; skipped Get Screen request.', 'info', 'bitmap');
@@ -299,7 +300,7 @@ if (testTRateBtn) {
     log('Navigated to delay parameters', 'info', 'general');
 
     // Get the SET sub for t_rate
-    const setSub = appState.currentSubs.find((s) => s.type === 'SET' && s.key === '8060001');
+    const setSub = appState.currentSubs.find((s) => s.type === 'SET' && s.key === KEY.T_RATE);
     if (!setSub) {
       log('Test failed: t_rate SET not found', 'error', 'error');
       return;
@@ -308,11 +309,11 @@ if (testTRateBtn) {
     for (let opt of setSub.options) {
       // Test all, but can limit if too long
       log(`Testing option: ${opt.index} ${opt.desc}`, 'info', 'general');
-      sendValuePut('8060001', opt.index);
+      sendValuePut(KEY.T_RATE, opt.index);
       await new Promise((r) => setTimeout(r, 500));
-      sendValueDump('8060001');
+      sendValueDump(KEY.T_RATE);
       await new Promise((r) => setTimeout(r, 500));
-      const currentValue = appState.currentValues['8060001'];
+      const currentValue = appState.currentValues[KEY.T_RATE];
       const expected = `${opt.index} ${opt.desc}`;
       if (currentValue === expected) {
         log('Value match', 'info', 'general');

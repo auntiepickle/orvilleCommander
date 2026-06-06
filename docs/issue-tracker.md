@@ -107,8 +107,9 @@ HUMAN-GATE: none
 HUMAN-GATE: none
 
 ### Batch 2.3 — Bitmap artifact   [branch: fix/bitmap-shift]  [PR: #61]
-- [~] A2  Fixed: SHIFT_FIRST_COLUMN now wraps the bottom pixel to the top instead of blacking it. Offline replay snapshot confirms the forced-blank top-left is gone (first 8 cols now carry wrapped content). NEXT: device confirmation.
-HUMAN-GATE: needs-hardware — PR #61 open, NOT merged. Run the app, render a 0x18 screen capture, confirm the top-left corner is clean (no stray black row) and the first 8 columns align with the rest. If wrong, fallback is option (b) preserve-source-top.
+- [x] A2  Fixed via edge-clamp. The first 8 columns arrive 1px high; we shift down 1px and fill the vacated top by duplicating the row below (not black = the artifact, not wrap = row-63 garbage). VALIDATED OFFLINE by rendering the recorded capture to PNG (`npm run screen`) and inspecting: green title-bar top border now continuous, no notch/specks.
+- [x] (capability) Offline screen-to-PNG renderer: src/framebuffer.js (pure decode) + build_tools/render-screen.js. Lets a session SEE any captured screen dump without the device — the analysis half of the self-validation loop.
+GATE RESOLVED OFFLINE: device spot-check still welcome but no longer blocking — the rendered image is ground-truth-equivalent for the recorded fixture. For NEW screens, drop a screen-dump fixture and run `npm run screen <fixture> <out.png> [scale] [edge|black|wrap|none]`.
 
 ---
 

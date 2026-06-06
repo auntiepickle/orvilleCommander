@@ -125,10 +125,13 @@ const handleSelectChange = (e) => {
   const key = e.target.dataset.key;
   const selectedIndex = e.target.value;
   const selectedDesc = e.target.options[e.target.selectedIndex].text;
-  console.log(`Selected option for key ${key}: index ${selectedIndex}, desc ${selectedDesc}`);
+  log(
+    `Selected option for key ${key}: index ${selectedIndex}, desc ${selectedDesc}`,
+    'debug',
+    'valueChange'
+  );
   showLoading();
   sendValuePut(key, selectedIndex);
-  //appState.currentValues[key] = `${parseInt(selectedIndex, 10).toString(16)} ${selectedDesc}`;
   setState(
     { currentValues: { ...appState.currentValues, [key]: `${selectedIndex} ${selectedDesc}` } },
     'renderer:select-change-value-cache'
@@ -142,10 +145,12 @@ const handleSelectChange = (e) => {
     setTimeout(() => {
       const newValue = appState.currentValues[key];
       if (newValue && newValue.includes(selectedDesc)) {
-        console.log(`Value update successful for key ${key}: ${newValue}`);
+        log(`Value update successful for key ${key}: ${newValue}`, 'debug', 'valueChange');
       } else {
-        console.log(
-          `Value update failed for key ${key}. Expected desc: ${selectedDesc}, got: ${newValue}`
+        log(
+          `Value update failed for key ${key}. Expected desc: ${selectedDesc}, got: ${newValue}`,
+          'debug',
+          'valueChange'
         );
       }
     }, 500); // Wait for VALUE_DUMP to arrive
@@ -314,7 +319,6 @@ export function renderScreen(subs, ascii, logParam) {
   let topHtml = '';
   let softSubs = [];
   let localSoftSubs = [];
-  const isPreset = appState.currentKey.startsWith('4') || appState.currentKey.startsWith('8');
   if (appState.dspAName && appState.dspBName) {
     const isAActive = appState.presetKey.startsWith('4');
     const aPart = isAActive ? `[A: ${appState.dspAName}]` : `A: ${appState.dspAName}`;

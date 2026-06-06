@@ -137,8 +137,6 @@ export function addSysexListener() {
     return;
   }
   selectedInput.addListener('sysex', (e) => {
-    const category = e.data.length > 4 && e.data[4] === 0x17 ? 'screenDump' : 'sysexReceived';
-    //log(`Received SysEx: ${e.data.map(b => b.toString(16).padStart(2, '0')).join(' ')}`, 'debug', category);
     parseResponse(e.data);
   });
 }

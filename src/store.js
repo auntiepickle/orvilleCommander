@@ -4,10 +4,9 @@
  * Façade over the legacy appState singleton.
  *
  * Step 4 of the refactor roadmap: introduces an auditable write path
- * (setState) and a subscription hook without forcing any caller to
- * migrate. state.js re-exports appState from here so direct
- * `appState.x = y` writes keep working — they hit the same object that
- * getState() returns and that subscribers see.
+ * (setState) without forcing any caller to migrate. state.js re-exports
+ * appState from here so direct `appState.x = y` writes keep working —
+ * they hit the same mutated object every reader holds.
  *
  * TRIPWIRE: setState uses Object.assign to mutate appState in place.
  * Callers in parser.js (and elsewhere) read appState.x after calling
@@ -57,19 +56,7 @@ export const appState = {
   lastDumpComplete: null, // 7c shadow-fire breadcrumb; written by midi:dump-complete
 };
 
-const subscribers = new Set();
-
-export function getState() {
-  return appState;
-}
-
 export function setState(partial, origin) {
   Object.assign(appState, partial);
   log(`[stateWrite] ${origin}: ${Object.keys(partial).join(', ')}`, 'debug', 'stateWrite');
-  for (const fn of subscribers) fn(appState);
-}
-
-export function subscribe(fn) {
-  subscribers.add(fn);
-  return () => subscribers.delete(fn);
 }

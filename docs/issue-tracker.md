@@ -35,12 +35,13 @@ be green; `npm test` green before marking `[x]`. Keep all written output factual
 HUMAN-GATE: none
 
 ### Batch 0.2 — CI + tooling
-- [ ] F1  Add GitHub Actions CI running `npm test` on push/PR to main
-- [ ] F2  Add ESLint flat config (no-unused-vars; no-console warn)
-- [ ] F2  Add Prettier + one project-wide format pass (fixes bitmap.js mixed indent)
-- [ ] F3  Dependency upgrades — patch-safe now (babel, webmidi, nodemon, babel-jest, jsdom)
-- [ ] F3  Major upgrades each on own branch, tested (Vite 8, Jest 30, archiver 8)
-- [ ] B9  Move `jest-environment-jsdom` to devDependencies; clear baseline-browser-mapping warning
+- [x] F1  GitHub Actions CI running `npm ci` + `npm test` on push/PR to main
+- [x] F2  ESLint flat config (no-unused-vars / no-console / no-useless-assignment warn) + `npm run lint`
+- [x] F2  Prettier config + project-wide format pass over code (markdown excluded); `format`/`format:check` scripts; .git-blame-ignore-revs
+- [x] F3  In-range dependency refresh (npm update) — cleared baseline-browser-mapping warning + all vulnerabilities
+- [ ] F3  Major upgrades each on own branch, tested (Vite 8, Jest 30, archiver 8)   -> Batches 0.2a/0.2b/0.2c
+- [x] B9  Moved `jest-environment-jsdom` to devDependencies
+NOTE: ESLint warnings are the live Phase 1 prune worklist (`npm run lint`); promote no-* rules back to error at end of Phase 1.
 HUMAN-GATE: none
 
 ### Batch 0.3 — Test-net widening   (gates all render/arch work)

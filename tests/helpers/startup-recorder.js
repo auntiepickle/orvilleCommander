@@ -24,7 +24,10 @@ export function recordLog(msg, level, category) {
     const match = /^\[stateWrite\] (\S+): (.*)$/.exec(msg);
     if (match) {
       const [, origin, keysStr] = match;
-      const keys = keysStr.split(',').map(s => s.trim()).filter(Boolean);
+      const keys = keysStr
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
       push({ kind: 'stateWrite', origin, keys });
       return;
     }
@@ -93,11 +96,7 @@ export function drainAndSort(rawEvents) {
   const out = [];
   for (const e of rawEvents) {
     const last = out[out.length - 1];
-    if (
-      e.kind === 'stateWrite' &&
-      last?.kind === 'stateWrite' &&
-      last.origin === e.origin
-    ) {
+    if (e.kind === 'stateWrite' && last?.kind === 'stateWrite' && last.origin === e.origin) {
       const merged = new Set([...last.keys, ...e.keys]);
       last.keys = [...merged].sort();
     } else if (e.kind === 'stateWrite') {

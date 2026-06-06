@@ -27,6 +27,6 @@ archive.pipe(output);
 // Glob all files, ignoring .git, node_modules, and zips
 archive.glob('**/*', {
   cwd: __dirname,
-  ignore: ['.git/**', 'node_modules/**', '**/*.zip']
+  ignore: ['.git/**', 'node_modules/**', '**/*.zip'],
 });
 archive.finalize();

@@ -10,15 +10,18 @@ const FIXTURES_DIR = path.join(process.cwd(), 'tests', 'fixtures');
 
 export function loadFixture(filename) {
   const raw = fs.readFileSync(path.join(FIXTURES_DIR, filename), 'utf8');
-  return raw.trim().split(/\s+/).map(h => parseInt(h, 16));
+  return raw
+    .trim()
+    .split(/\s+/)
+    .map((h) => parseInt(h, 16));
 }
 
 // Non-load-bearing reference: the bytes the capture script sends to request
 // a given dump. Exposed for inline documentation only — the test does not
 // assert against these.
 export function hexRequest(key, cmd, deviceId = 1) {
-  const keyBytes = key.split('').map(c => c.charCodeAt(0));
-  return [0xF0, 0x1C, 0x70, deviceId, cmd, ...keyBytes, 0xF7];
+  const keyBytes = key.split('').map((c) => c.charCodeAt(0));
+  return [0xf0, 0x1c, 0x70, deviceId, cmd, ...keyBytes, 0xf7];
 }
 
 // ----- fixture decoders (Option B) ------------------------------------
@@ -53,12 +56,14 @@ function splitLine(line) {
 }
 
 function decodeSubs(rawBytes) {
-  const ascii = String.fromCharCode(...rawBytes.slice(5, -1)).replace(/\0+$/, '').trim();
+  const ascii = String.fromCharCode(...rawBytes.slice(5, -1))
+    .replace(/\0+$/, '')
+    .trim();
   return ascii
     .split('\n')
-    .map(l => l.trim())
+    .map((l) => l.trim())
     .filter(Boolean)
-    .map(line => {
+    .map((line) => {
       const parts = splitLine(line);
       return {
         type: parts[0] || '',
@@ -74,10 +79,10 @@ function decodeSubs(rawBytes) {
 export function extractExpectedFromRoot(rootBytes) {
   const subs = decodeSubs(rootBytes);
   const children = subs.slice(1);
-  const dspASub = children.find(s => s.key.startsWith('4'));
-  const dspBSub = children.find(s => s.key.startsWith('8'));
+  const dspASub = children.find((s) => s.key.startsWith('4'));
+  const dspBSub = children.find((s) => s.key.startsWith('8'));
   const shortTagCols = children.filter(
-    s => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim()
+    (s) => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim()
   );
   return {
     dspAKey: dspASub?.key,
@@ -85,7 +90,7 @@ export function extractExpectedFromRoot(rootBytes) {
     dspAName: dspASub?.statement,
     dspBName: dspBSub?.statement,
     firstShortTagCOLKey: shortTagCols[0]?.key,
-    rootShortTagKeys: shortTagCols.map(s => s.key),
+    rootShortTagKeys: shortTagCols.map((s) => s.key),
     // Full subs array length including main and any non-COL entries (e.g.,
     // the type=8 sub in the current Black Hole/MetallicChamber capture).
     // This is what parser.js passes to renderScreen, so it matches the
@@ -97,15 +102,15 @@ export function extractExpectedFromRoot(rootBytes) {
 export function extractExpectedFromPreset(presetBytes) {
   const subs = decodeSubs(presetBytes);
   const children = subs.slice(1);
-  const menusCols = children.filter(s => s.type === 'COL');
+  const menusCols = children.filter((s) => s.type === 'COL');
   const shortTagCols = children.filter(
-    s => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim()
+    (s) => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim()
   );
   return {
     mainKey: subs[0]?.key,
     mainStatement: subs[0]?.statement,
     menusCount: menusCols.length,
-    shortTagKeys: shortTagCols.map(s => s.key),
+    shortTagKeys: shortTagCols.map((s) => s.key),
     // Full subs array length including main and any non-COL entries. Differs
     // from menusCount, which filters to COL type and excludes the main.
     subsCount: subs.length,

@@ -26,7 +26,9 @@ describe('events.js emit/on (7c)', () => {
     const off3 = on('multi', () => order.push('c'));
     emit('multi', null);
     expect(order).toEqual(['a', 'b', 'c']);
-    off1(); off2(); off3();
+    off1();
+    off2();
+    off3();
   });
 
   test('unsubscribe stops delivery to that subscriber', () => {

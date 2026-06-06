@@ -19,5 +19,5 @@ export function extractNibblesFromHex(content) {
   const f7Idx = hexMatches.indexOf('f7', startIdx);
   const endIdx = f7Idx !== -1 ? f7Idx : hexMatches.length;
   const nibblesStr = hexMatches.slice(startIdx, endIdx);
-  return nibblesStr.map(h => parseInt(h, 16));
+  return nibblesStr.map((h) => parseInt(h, 16));
 }

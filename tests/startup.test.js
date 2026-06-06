@@ -42,7 +42,9 @@ jest.mock('../src/midi.js', () => {
     sendValueDump: jest.fn((key) => recorder.recordMidiSend('valuedump', key)),
     sendValuePut: jest.fn((key, value) => recorder.recordMidiSend('valueput', `${key}=${value}`)),
     notifyResponse: jest.fn(),
-    sendSysEx: jest.fn((cmd, bytes) => recorder.recordMidiSend('sysex', `cmd=0x${cmd.toString(16)},len=${bytes?.length ?? 0}`)),
+    sendSysEx: jest.fn((cmd, bytes) =>
+      recorder.recordMidiSend('sysex', `cmd=0x${cmd.toString(16)},len=${bytes?.length ?? 0}`)
+    ),
     setMidiPorts: jest.fn(),
     addSysexListener: jest.fn(),
   };
@@ -163,7 +165,7 @@ function normalize(e) {
     case 'showLoading':
       return 'showLoading';
     case 'log': {
-      const topic = WHITELISTED_LOG_TOPICS.find(t => e.msg.includes(t));
+      const topic = WHITELISTED_LOG_TOPICS.find((t) => e.msg.includes(t));
       return topic ? `log:${e.category}:${e.level}:${topic}` : null;
     }
     default:
@@ -219,9 +221,16 @@ describe('startup characterization (roadmap step 5.5)', () => {
       deviceId: 0,
       logLevel: 'info',
       logCategories: {
-        sysexReceived: true, sysexSent: true, parsedDump: true,
-        valueChange: true, noChange: true, renderScreen: true,
-        bitmap: true, screenDump: true, error: true, general: true,
+        sysexReceived: true,
+        sysexSent: true,
+        parsedDump: true,
+        valueChange: true,
+        noChange: true,
+        renderScreen: true,
+        bitmap: true,
+        screenDump: true,
+        error: true,
+        general: true,
         stateWrite: false,
       },
       fetchBitmap: true,
@@ -263,11 +272,14 @@ describe('startup characterization (roadmap step 5.5)', () => {
     // (d) inline main.js:142-154 — BEFORE advance, sets autoLoad=true.
     //     Mirrors main:select-ports-init's combined-per-cluster setState
     //     so this simulation tracks the production module.
-    setState({
-      keyStack: [...appState.keyStack, appState.currentKey],
-      currentKey: appState.presetKey,
-      autoLoad: true,
-    }, 'main:select-ports-init');
+    setState(
+      {
+        keyStack: [...appState.keyStack, appState.currentKey],
+        currentKey: appState.presetKey,
+        autoLoad: true,
+      },
+      'main:select-ports-init'
+    );
     updateScreen();
     sendObjectInfoDump(toggleDspKey(appState.presetKey));
     if (appState.fetchBitmap) sendSysEx(0x18, []);
@@ -349,7 +361,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
     // Bitmap raw-byte length sanity: 13-byte header + 1920 pixel bytes per
     // parser.js:174. A drastically smaller value means denibble returned
     // junk or the bitmap fixture is malformed.
-    const bitmapEvent = getEvents().find(e => e.kind === 'bitmap');
+    const bitmapEvent = getEvents().find((e) => e.kind === 'bitmap');
     expect(bitmapEvent).toBeDefined();
     expect(bitmapEvent.rawByteLen).toBeGreaterThan(1900);
   });
@@ -384,7 +396,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
 
       // Root fan-out (4 short-tag COLs × 2 MIDI calls each). Order follows
       // fixture order; derived from rootShortTagKeys for Option B robustness.
-      ...expectedRoot.rootShortTagKeys.flatMap(k => [
+      ...expectedRoot.rootShortTagKeys.flatMap((k) => [
         `midi:objectinfo:${k}`,
         `midi:valuedump:${k}`,
       ]),
@@ -450,7 +462,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
       // processing fires: 14 short-tag COL fan-outs, then split lastAscii
       // and currentSubs (same mechanism as in step (c)).
       'log:parsedDump:info:Parsed OBJECTINFO_DUMP',
-      ...expected10010000.shortTagKeys.flatMap(k => [
+      ...expected10010000.shortTagKeys.flatMap((k) => [
         `midi:objectinfo:${k}`,
         `midi:valuedump:${k}`,
       ]),

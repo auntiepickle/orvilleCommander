@@ -2,7 +2,14 @@
 import { WebMidi } from 'webmidi';
 import { loadConfig, saveConfig, clearConfig } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
-import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut, sendObjectInfoDump } from './midi.js';
+import {
+  setMidiPorts,
+  addSysexListener,
+  sendSysEx,
+  sendValueDump,
+  sendValuePut,
+  sendObjectInfoDump,
+} from './midi.js';
 import { updateScreen } from './renderer.js';
 import { toggleDspKey } from './navigation.js';
 import { appState } from './state.js';
@@ -59,8 +66,8 @@ let pollingInterval = null;
 function startPolling() {
   if (pollingInterval) clearInterval(pollingInterval);
   pollingInterval = setInterval(() => {
-    const conSubs = appState.currentSubs.filter(s => s.type === 'CON');
-    conSubs.forEach(sub => {
+    const conSubs = appState.currentSubs.filter((s) => s.type === 'CON');
+    conSubs.forEach((sub) => {
       const key = sub.key;
       sendValueDump(key);
     });
@@ -89,15 +96,17 @@ if (toggleMeterPollingBtn) {
 }
 
 copyLogBtn.addEventListener('click', () => {
-  navigator.clipboard.writeText(logArea.value).then(() => log('Log copied to clipboard.', 'info', 'general'));
+  navigator.clipboard
+    .writeText(logArea.value)
+    .then(() => log('Log copied to clipboard.', 'info', 'general'));
 });
 
 /**
  * Enables WebMIDI, populates input/output select options, and auto-selects ports if cached.
  * If cached ports are available, calls selectPorts automatically.
- * 
+ *
  * @param {Object} [cachedConfig=null] - Cached config from localStorage.
- * 
+ *
  * @example
  * connectMidi(cachedConfig);
  */
@@ -106,7 +115,7 @@ async function connectMidi(cachedConfig = null) {
     await WebMidi.enable({ sysex: true });
     log('WebMidi enabled.', 'info', 'general');
     outputSelect.innerHTML = '';
-    WebMidi.outputs.forEach(output => {
+    WebMidi.outputs.forEach((output) => {
       const option = document.createElement('option');
       option.value = output.id;
       option.textContent = output.name;
@@ -114,14 +123,18 @@ async function connectMidi(cachedConfig = null) {
       outputSelect.appendChild(option);
     });
     inputSelect.innerHTML = '';
-    WebMidi.inputs.forEach(input => {
+    WebMidi.inputs.forEach((input) => {
       const option = document.createElement('option');
       option.value = input.id;
       option.textContent = input.name;
       if (cachedConfig && input.id === cachedConfig.inputId) option.selected = true;
       inputSelect.appendChild(option);
     });
-    log('Ports populated. Choose and click "Select Ports". If cached, already pre-selected.', 'info', 'general');
+    log(
+      'Ports populated. Choose and click "Select Ports". If cached, already pre-selected.',
+      'info',
+      'general'
+    );
     if (cachedConfig && cachedConfig.outputId && cachedConfig.inputId) {
       selectPorts();
     }
@@ -144,11 +157,14 @@ function selectPorts() {
   lcdEl.innerText = 'Connected. Fetching root screen...';
   updateScreen(log);
   setTimeout(() => {
-    setState({
-      keyStack: [...appState.keyStack, appState.currentKey],
-      currentKey: appState.presetKey,
-      autoLoad: true,
-    }, 'main:select-ports-init');
+    setState(
+      {
+        keyStack: [...appState.keyStack, appState.currentKey],
+        currentKey: appState.presetKey,
+        autoLoad: true,
+      },
+      'main:select-ports-init'
+    );
     updateScreen(log);
     sendObjectInfoDump(toggleDspKey(appState.presetKey));
     if (appState.fetchBitmap) {
@@ -165,7 +181,16 @@ connectBtn.addEventListener('click', () => connectMidi());
 selectPortsBtn.addEventListener('click', selectPorts);
 
 saveConfigBtn.addEventListener('click', () => {
-  saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, appState.presetKey);
+  saveConfig(
+    outputSelect.value,
+    inputSelect.value,
+    parseInt(deviceIdInput.value, 10),
+    logLevelSelect.value,
+    appState.logCategories,
+    fetchBitmapCheckbox.checked,
+    updateBitmapOnChangeCheckbox.checked,
+    appState.presetKey
+  );
   setState({ logLevel: logLevelSelect.value }, 'main:save-config-log-level');
 });
 
@@ -219,7 +244,7 @@ processDebugFileBtn.addEventListener('click', () => {
   const file = uploadDebugFile.files[0];
   if (file) {
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = function (e) {
       const nibbles = extractNibblesFromHex(e.target.result);
       if (nibbles) {
         log(`[LOG] Extracted ${nibbles.length} nibbles from uploaded file`, 'debug', 'general');
@@ -265,27 +290,28 @@ if (testTRateBtn) {
     // Navigate to Auto Tape Flanger
     setState({ currentKey: '801000b' }, 'main:test-trate-nav');
     updateScreen(log);
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, 1000));
     log('Navigated to Auto Tape Flanger', 'info', 'general');
     // Navigate to delay parameters
     setState({ currentKey: '8040001' }, 'main:test-trate-nav');
     updateScreen(log);
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, 1000));
     log('Navigated to delay parameters', 'info', 'general');
 
     // Get the SET sub for t_rate
-    const setSub = appState.currentSubs.find(s => s.type === 'SET' && s.key === '8060001');
+    const setSub = appState.currentSubs.find((s) => s.type === 'SET' && s.key === '8060001');
     if (!setSub) {
       log('Test failed: t_rate SET not found', 'error', 'error');
       return;
     }
     log('Found t_rate with options: ' + setSub.options.length, 'info', 'general');
-    for (let opt of setSub.options) { // Test all, but can limit if too long
+    for (let opt of setSub.options) {
+      // Test all, but can limit if too long
       log(`Testing option: ${opt.index} ${opt.desc}`, 'info', 'general');
       sendValuePut('8060001', opt.index);
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 500));
       sendValueDump('8060001');
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 500));
       const currentValue = appState.currentValues['8060001'];
       const expected = `${opt.index} ${opt.desc}`;
       if (currentValue === expected) {
@@ -301,7 +327,11 @@ if (testTRateBtn) {
         if (selectedValue === opt.index && selectedText === opt.desc) {
           log('UI match', 'info', 'general');
         } else {
-          log(`UI mismatch: selected value ${selectedValue}, text ${selectedText}, expected ${opt.index} ${opt.desc}`, 'error', 'error');
+          log(
+            `UI mismatch: selected value ${selectedValue}, text ${selectedText}, expected ${opt.index} ${opt.desc}`,
+            'error',
+            'error'
+          );
         }
       } else {
         log('Select not found in UI', 'error', 'error');
@@ -313,12 +343,22 @@ if (testTRateBtn) {
 
 setupKeypressControls();
 
-const cachedConfig = loadConfig(deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox);
-setState({
-  logLevel: logLevelSelect.value,
-  logCategories: cachedConfig?.logCategories || Object.fromEntries(Object.keys(appState.logCategories).map(k => [k, true])),
-  fetchBitmap: fetchBitmapCheckbox.checked,
-  updateBitmapOnChange: updateBitmapOnChangeCheckbox.checked,
-  presetKey: cachedConfig?.presetKey || '401000b',
-}, 'main:boot-init');
+const cachedConfig = loadConfig(
+  deviceIdInput,
+  logLevelSelect,
+  fetchBitmapCheckbox,
+  updateBitmapOnChangeCheckbox
+);
+setState(
+  {
+    logLevel: logLevelSelect.value,
+    logCategories:
+      cachedConfig?.logCategories ||
+      Object.fromEntries(Object.keys(appState.logCategories).map((k) => [k, true])),
+    fetchBitmap: fetchBitmapCheckbox.checked,
+    updateBitmapOnChange: updateBitmapOnChangeCheckbox.checked,
+    presetKey: cachedConfig?.presetKey || '401000b',
+  },
+  'main:boot-init'
+);
 connectMidi(cachedConfig);

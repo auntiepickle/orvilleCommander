@@ -46,7 +46,7 @@ export const appState = {
     screenDump: true,
     error: true,
     general: true,
-    stateWrite: false
+    stateWrite: false,
   },
   fetchBitmap: true,
   updateBitmapOnChange: true,
@@ -54,7 +54,7 @@ export const appState = {
   pollingEnabled: false,
   isLoadingPreset: false,
   childSubs: {}, // Added for child sub-menu storage
-  lastDumpComplete: null // 7c shadow-fire breadcrumb; written by midi:dump-complete
+  lastDumpComplete: null, // 7c shadow-fire breadcrumb; written by midi:dump-complete
 };
 
 const subscribers = new Set();

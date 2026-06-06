@@ -15,8 +15,9 @@ let outputPath = path.join(outputDir, `orvilleCommander_combined_part${partNumbe
 let output = fs.createWriteStream(outputPath, { encoding: 'utf8' });
 
 function combineFiles() {
-  const files = fs.readdirSync(srcDir)
-    .filter(file => {
+  const files = fs
+    .readdirSync(srcDir)
+    .filter((file) => {
       const fullPath = path.join(srcDir, file);
       return fs.statSync(fullPath).isFile() && !file.endsWith('.css');
     })

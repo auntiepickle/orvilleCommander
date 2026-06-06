@@ -137,7 +137,7 @@ export function addSysexListener() {
     return;
   }
   selectedInput.addListener('sysex', (e) => {
-    const category = (e.data.length > 4 && e.data[4] === 0x17) ? 'screenDump' : 'sysexReceived';
+    const category = e.data.length > 4 && e.data[4] === 0x17 ? 'screenDump' : 'sysexReceived';
     //log(`Received SysEx: ${e.data.map(b => b.toString(16).padStart(2, '0')).join(' ')}`, 'debug', category);
     parseResponse(e.data);
   });
@@ -161,7 +161,7 @@ export function sendSysEx(cmd, dataBytes = []) {
   try {
     const sysex = [appState.deviceId, cmd, ...dataBytes];
     selectedOutput.sendSysex([0x1c, 0x70], sysex);
-    const sentMsg = `Sent SysEx: F0 1C 70 ${sysex.map(b => b.toString(16).padStart(2, '0')).join(' ')} F7`;
+    const sentMsg = `Sent SysEx: F0 1C 70 ${sysex.map((b) => b.toString(16).padStart(2, '0')).join(' ')} F7`;
     log(sentMsg, 'debug', 'sysexSent');
   } catch (err) {
     log(`SysEx send error: ${err.message}`, 'error', 'error');
@@ -181,7 +181,7 @@ export function sendSysEx(cmd, dataBytes = []) {
  */
 export function sendObjectInfoDump(key) {
   recordRequest(key);
-  const keyBytes = key.split('').map(c => c.charCodeAt(0));
+  const keyBytes = key.split('').map((c) => c.charCodeAt(0));
   sendSysEx(0x31, keyBytes);
 }
 
@@ -198,7 +198,7 @@ export function sendObjectInfoDump(key) {
  */
 export function sendValueDump(key) {
   recordRequest(key);
-  const keyBytes = key.split('').map(c => c.charCodeAt(0));
+  const keyBytes = key.split('').map((c) => c.charCodeAt(0));
   sendSysEx(0x2d, keyBytes);
 }
 
@@ -215,8 +215,8 @@ export function sendValueDump(key) {
  * sendValuePut('1002001c', '1'); // Trigger preset load
  */
 export function sendValuePut(key, value) {
-  const keyBytes = key.split('').map(c => c.charCodeAt(0));
-  const valueBytes = value.split('').map(c => c.charCodeAt(0));
+  const keyBytes = key.split('').map((c) => c.charCodeAt(0));
+  const valueBytes = value.split('').map((c) => c.charCodeAt(0));
   sendSysEx(0x2d, [...keyBytes, 0x20, ...valueBytes]);
   log(`Sent VALUE_PUT for key ${key}: ${value}`, 'info', 'general');
 }
@@ -229,7 +229,7 @@ export function sendValuePut(key, value) {
  * @returns {number[]} The nibbled array (8 bytes).
  */
 function nibble(mask) {
-  return mask.flatMap(b => [(b >> 4) & 0x0F, b & 0x0F]);
+  return mask.flatMap((b) => [(b >> 4) & 0x0f, b & 0x0f]);
 }
 
 /**

@@ -4,6 +4,7 @@ import { appState } from './state.js';
 import { setState } from './store.js';
 import { log } from './logger.js';
 import { emit } from './events.js';
+import { CMD } from './sysex-commands.js';
 
 let selectedOutput = null;
 let selectedInput = null;
@@ -180,7 +181,7 @@ export function sendSysEx(cmd, dataBytes = []) {
 export function sendObjectInfoDump(key) {
   recordRequest(key);
   const keyBytes = key.split('').map((c) => c.charCodeAt(0));
-  sendSysEx(0x31, keyBytes);
+  sendSysEx(CMD.OBJECTINFO_DUMP, keyBytes);
 }
 
 /**
@@ -197,7 +198,7 @@ export function sendObjectInfoDump(key) {
 export function sendValueDump(key) {
   recordRequest(key);
   const keyBytes = key.split('').map((c) => c.charCodeAt(0));
-  sendSysEx(0x2d, keyBytes);
+  sendSysEx(CMD.VALUE, keyBytes);
 }
 
 /**
@@ -215,7 +216,7 @@ export function sendValueDump(key) {
 export function sendValuePut(key, value) {
   const keyBytes = key.split('').map((c) => c.charCodeAt(0));
   const valueBytes = value.split('').map((c) => c.charCodeAt(0));
-  sendSysEx(0x2d, [...keyBytes, 0x20, ...valueBytes]);
+  sendSysEx(CMD.VALUE, [...keyBytes, 0x20, ...valueBytes]);
   log(`Sent VALUE_PUT for key ${key}: ${value}`, 'info', 'general');
 }
 
@@ -240,5 +241,5 @@ function nibble(mask) {
  */
 export function sendKeypress(mask) {
   const nibbled = nibble(mask);
-  sendSysEx(0x01, nibbled);
+  sendSysEx(CMD.KEYPRESS, nibbled);
 }

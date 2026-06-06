@@ -1,5 +1,6 @@
 // controls.js
 import { sendKeypress, sendSysEx } from './midi.js';
+import { CMD } from './sysex-commands.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
@@ -136,7 +137,7 @@ export function setupKeypressControls() {
             updateScreen();
             // Fetch screen after button press if enabled
             if (appState.fetchBitmap) {
-              sendSysEx(0x18, []);
+              sendSysEx(CMD.GET_SCREEN, []);
               log('Fetched screen after button press.', 'debug', 'bitmap');
             } else {
               log('Bitmap fetch disabled; skipped screen after button press.', 'debug', 'bitmap');

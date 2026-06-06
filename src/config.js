@@ -1,5 +1,6 @@
 // config.js
 import { log } from './logger.js';
+import { STORAGE_KEY, DEFAULT_LOG_LEVEL } from './constants.js';
 
 /**
  * Loads cached MIDI configuration from localStorage and applies it to UI elements.
@@ -24,11 +25,11 @@ export function loadConfig(
   fetchBitmapCheckbox,
   updateBitmapOnChangeCheckbox
 ) {
-  const config = localStorage.getItem('midiConfig');
+  const config = localStorage.getItem(STORAGE_KEY);
   if (config) {
     const parsed = JSON.parse(config);
     deviceIdInput.value = parsed.deviceId || 0;
-    logLevelSelect.value = parsed.logLevel || 'info';
+    logLevelSelect.value = parsed.logLevel || DEFAULT_LOG_LEVEL;
     fetchBitmapCheckbox.checked = parsed.fetchBitmap !== false;
     updateBitmapOnChangeCheckbox.checked = parsed.updateBitmapOnChange !== false;
     log(
@@ -77,7 +78,7 @@ export function saveConfig(
     updateBitmapOnChange,
     presetKey,
   };
-  localStorage.setItem('midiConfig', JSON.stringify(config));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   log('Config saved to localStorage.', 'info', 'general');
 }
 
@@ -105,6 +106,6 @@ export function mergeLogCategories(defaults, cached) {
  * clearConfig();
  */
 export function clearConfig() {
-  localStorage.removeItem('midiConfig');
+  localStorage.removeItem(STORAGE_KEY);
   log('Config cleared from localStorage.', 'info', 'general');
 }

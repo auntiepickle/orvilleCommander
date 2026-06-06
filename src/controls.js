@@ -1,6 +1,7 @@
 // controls.js
 import { sendKeypress, sendSysEx } from './midi.js';
-import { CMD } from './sysex-commands.js';
+import { CMD, KEY } from './sysex-commands.js';
+import { TIMING } from './constants.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
@@ -116,14 +117,14 @@ export function setupKeypressControls() {
           );
           setTimeout(() => {
             if (key === 'ab') {
-              if (appState.currentKey === '0') {
+              if (appState.currentKey === KEY.ROOT) {
                 setState(
                   { presetKey: toggleDspKey(appState.presetKey) },
                   'controls:keypress-ab-toggle'
                 );
               }
             } else if (key === 'parameter') {
-              if (appState.currentKey === '0') {
+              if (appState.currentKey === KEY.ROOT) {
                 setState(
                   {
                     keyStack: [...appState.keyStack, appState.currentKey],
@@ -142,7 +143,7 @@ export function setupKeypressControls() {
             } else {
               log('Bitmap fetch disabled; skipped screen after button press.', 'debug', 'bitmap');
             }
-          }, 200);
+          }, TIMING.MIDI_SETTLE_MS);
         }
       });
     }

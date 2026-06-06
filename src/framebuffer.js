@@ -10,6 +10,8 @@
 // the resulting 1-byte misalignment with a column rotate + a 1px shift of the
 // first 8 columns; both are unnecessary once the header is counted correctly.
 
+import { SCREEN } from './sysex-commands.js';
+
 const NO_FLIP = true; // bit order is MSB-left as-is; flip path kept for safety
 
 // Bit reverse table (used only if NO_FLIP is ever set false).
@@ -41,7 +43,10 @@ export function denibble(nibbles) {
  *   Exposed for diagnosing future captures; 12 is correct for the 0x17 dump.
  * @returns {Uint8ClampedArray} width*height*4 RGBA bytes.
  */
-export function computePixels(rawBytes, { width = 240, height = 64, header = 12 } = {}) {
+export function computePixels(
+  rawBytes,
+  { width = SCREEN.WIDTH, height = SCREEN.HEIGHT, header = SCREEN.HEADER_BYTES } = {}
+) {
   const data = new Uint8ClampedArray(width * height * 4);
   const bytesPerRow = width / 8;
   const bitmap = rawBytes.slice(header, header + bytesPerRow * height);

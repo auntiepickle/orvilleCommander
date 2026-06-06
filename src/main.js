@@ -1,6 +1,7 @@
 // main.js
 import { WebMidi } from 'webmidi';
 import { CMD, KEY } from './sysex-commands.js';
+import { TIMING } from './constants.js';
 import { loadConfig, saveConfig, clearConfig, mergeLogCategories } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
 import {
@@ -72,7 +73,7 @@ function startPolling() {
       const key = sub.key;
       sendValueDump(key);
     });
-  }, 100);
+  }, TIMING.METER_POLL_MS);
 }
 
 /**
@@ -174,7 +175,7 @@ function selectPorts() {
     } else {
       log('Bitmap fetch disabled; skipped initial preset screen dump.', 'info', 'bitmap');
     }
-  }, 500);
+  }, TIMING.PORT_INIT_MS);
 }
 
 connectBtn.addEventListener('click', () => connectMidi());
@@ -202,7 +203,7 @@ clearConfigBtn.addEventListener('click', () => {
 pollToggle.addEventListener('click', () => {
   isPolling = !isPolling;
   if (isPolling) {
-    pollInterval = setInterval(() => updateScreen(log), 500);
+    pollInterval = setInterval(() => updateScreen(log), TIMING.POLL_INTERVAL_MS);
     log('Polling started.', 'info', 'general');
     pollToggle.innerText = 'Stop Polling';
   } else {
@@ -226,7 +227,7 @@ testKeypressBtn.addEventListener('click', () => {
 });
 
 syncBtn.addEventListener('click', () => {
-  setState({ currentKey: '0' }, 'main:sync-root');
+  setState({ currentKey: KEY.ROOT }, 'main:sync-root');
   updateScreen(log);
   log('Synced to root', 'info', 'general');
 });
@@ -289,14 +290,14 @@ if (testTRateBtn) {
   testTRateBtn.addEventListener('click', async () => {
     log('Starting t_rate test...', 'info', 'general');
     // Navigate to Auto Tape Flanger
-    setState({ currentKey: '801000b' }, 'main:test-trate-nav');
+    setState({ currentKey: KEY.DSP_B_PRESET }, 'main:test-trate-nav');
     updateScreen(log);
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, TIMING.SYNC_STEP_MS));
     log('Navigated to Auto Tape Flanger', 'info', 'general');
     // Navigate to delay parameters
-    setState({ currentKey: '8040001' }, 'main:test-trate-nav');
+    setState({ currentKey: KEY.DELAY_PARAMS }, 'main:test-trate-nav');
     updateScreen(log);
-    await new Promise((r) => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, TIMING.SYNC_STEP_MS));
     log('Navigated to delay parameters', 'info', 'general');
 
     // Get the SET sub for t_rate
@@ -310,9 +311,9 @@ if (testTRateBtn) {
       // Test all, but can limit if too long
       log(`Testing option: ${opt.index} ${opt.desc}`, 'info', 'general');
       sendValuePut(KEY.T_RATE, opt.index);
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, TIMING.DEVICE_LOAD_MS));
       sendValueDump(KEY.T_RATE);
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, TIMING.DEVICE_LOAD_MS));
       const currentValue = appState.currentValues[KEY.T_RATE];
       const expected = `${opt.index} ${opt.desc}`;
       if (currentValue === expected) {
@@ -321,7 +322,7 @@ if (testTRateBtn) {
         log(`Value mismatch: expected ${expected}, got ${currentValue}`, 'error', 'error');
       }
       // Check UI
-      const select = document.querySelector(`select[data-key="8060001"]`);
+      const select = document.querySelector(`select[data-key="${KEY.T_RATE}"]`);
       if (select) {
         const selectedValue = select.value;
         const selectedText = select.options[select.selectedIndex].text;
@@ -360,7 +361,7 @@ setState(
       : Object.fromEntries(Object.keys(appState.logCategories).map((k) => [k, true])),
     fetchBitmap: fetchBitmapCheckbox.checked,
     updateBitmapOnChange: updateBitmapOnChangeCheckbox.checked,
-    presetKey: cachedConfig?.presetKey || '401000b',
+    presetKey: cachedConfig?.presetKey || KEY.DSP_A_PRESET,
   },
   'main:boot-init'
 );

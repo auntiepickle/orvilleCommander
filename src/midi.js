@@ -4,7 +4,8 @@ import { appState } from './state.js';
 import { setState } from './store.js';
 import { log } from './logger.js';
 import { emit } from './events.js';
-import { CMD } from './sysex-commands.js';
+import { CMD, SYSEX } from './sysex-commands.js';
+import { TIMING } from './constants.js';
 
 let selectedOutput = null;
 let selectedInput = null;
@@ -17,7 +18,6 @@ let selectedInput = null;
 // (reason='all-received') or when the watchdog fires
 // (reason='watchdog'). Existing 200ms parser timers remain in place;
 // consumer migration is 7d.
-const WATCHDOG_MS = 1500;
 let outstanding = 0;
 let waveSends = 0;
 let waveReceives = 0;
@@ -32,7 +32,7 @@ function recordRequest(key) {
     waveSends = 0;
     waveReceives = 0;
     waveLastKey = null;
-    watchdogHandle = setTimeout(forceComplete, WATCHDOG_MS);
+    watchdogHandle = setTimeout(forceComplete, TIMING.WATCHDOG_MS);
   }
   outstanding++;
   waveSends++;
@@ -159,7 +159,7 @@ export function sendSysEx(cmd, dataBytes = []) {
   }
   try {
     const sysex = [appState.deviceId, cmd, ...dataBytes];
-    selectedOutput.sendSysex([0x1c, 0x70], sysex);
+    selectedOutput.sendSysex(SYSEX.MANUFACTURER, sysex);
     const sentMsg = `Sent SysEx: F0 1C 70 ${sysex.map((b) => b.toString(16).padStart(2, '0')).join(' ')} F7`;
     log(sentMsg, 'debug', 'sysexSent');
   } catch (err) {
@@ -216,7 +216,7 @@ export function sendValueDump(key) {
 export function sendValuePut(key, value) {
   const keyBytes = key.split('').map((c) => c.charCodeAt(0));
   const valueBytes = value.split('').map((c) => c.charCodeAt(0));
-  sendSysEx(CMD.VALUE, [...keyBytes, 0x20, ...valueBytes]);
+  sendSysEx(CMD.VALUE, [...keyBytes, SYSEX.VALUE_SEPARATOR, ...valueBytes]);
   log(`Sent VALUE_PUT for key ${key}: ${value}`, 'info', 'general');
 }
 

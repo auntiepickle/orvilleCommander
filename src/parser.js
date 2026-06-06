@@ -1,6 +1,7 @@
 // parser.js
 import { appState } from './state.js';
-import { CMD, KEY } from './sysex-commands.js';
+import { CMD, KEY, KEY_PREFIX, KEY_SUFFIX, SYSEX } from './sysex-commands.js';
+import { TIMING, LAYOUT } from './constants.js';
 import { setState } from './store.js';
 import { sendValuePut, sendValueDump, sendObjectInfoDump, notifyResponse } from './midi.js';
 import { log } from './logger.js';
@@ -17,7 +18,7 @@ export function parseResponse(data) {
       setState({ deviceId: data[3] }, 'parser:device-id-detect');
       log(`Detected device ID: ${appState.deviceId}`, 'info', 'general');
     }
-    const ascii = String.fromCharCode(...data.slice(5, data.length - 1))
+    const ascii = String.fromCharCode(...data.slice(SYSEX.FRAME_PREFIX_LEN, data.length - 1))
       .replace(/\0+$/, '')
       .trim();
     if (data[3] === appState.deviceId && data[4] === CMD.OBJECTINFO) {
@@ -33,13 +34,13 @@ export function parseResponse(data) {
         'parsedDump'
       );
       const main = subs[0];
-      if (main.key === '0') {
-        const dspASub = subs.find((s) => s.key.startsWith('4'));
-        const dspBSub = subs.find((s) => s.key.startsWith('8'));
+      if (main.key === KEY.ROOT) {
+        const dspASub = subs.find((s) => s.key.startsWith(KEY_PREFIX.DSP_A));
+        const dspBSub = subs.find((s) => s.key.startsWith(KEY_PREFIX.DSP_B));
         setState(
           {
-            dspAKey: dspASub?.key || '401000b',
-            dspBKey: dspBSub?.key || '801000b',
+            dspAKey: dspASub?.key || KEY.DSP_A_PRESET,
+            dspBKey: dspBSub?.key || KEY.DSP_B_PRESET,
             dspAName: dspASub?.statement || '',
             dspBName: dspBSub?.statement || '',
           },
@@ -47,8 +48,8 @@ export function parseResponse(data) {
         );
       }
       notifyResponse('objectinfo', main.key);
-      if (main.key.endsWith('000b')) {
-        const dsp = main.key[0] === '4' ? 'A' : 'B';
+      if (main.key.endsWith(KEY_SUFFIX.PRESET)) {
+        const dsp = main.key[0] === KEY_PREFIX.DSP_A ? 'A' : 'B';
         setState(
           {
             [`menus${dsp}`]: subs.slice(1).filter((s) => s.type === 'COL'),
@@ -67,7 +68,7 @@ export function parseResponse(data) {
           .filter(
             (s) =>
               s.type === 'COL' &&
-              s.tag.trim().length <= 10 &&
+              s.tag.trim().length <= LAYOUT.SHORT_TAG_MAX &&
               s.tag.trim() &&
               !appState.childSubs[s.key]
           );
@@ -78,7 +79,7 @@ export function parseResponse(data) {
         setState({ lastAscii: ascii }, 'parser:current-key-ascii');
         setState({ currentSubs: subs }, 'parser:current-subs');
         emit('objectinfo:received', { key: main.key, subs, ascii });
-      } else if (main.key === '0' && appState.currentKey !== '0') {
+      } else if (main.key === KEY.ROOT && appState.currentKey !== KEY.ROOT) {
         // Background root dump received (e.g., after preset load); subscriber re-renders the
         // current screen so the new top-bar/DSP names land. isLoadingPreset clear lives in event-bridge.js.
         emit('objectinfo:received', { key: main.key });
@@ -101,7 +102,7 @@ export function parseResponse(data) {
         }
       }
       // Fix for Favorites re-ordering after preset load
-      if (main.key === '10020010' && appState.isLoadingPreset && appState.loadingPresetName) {
+      if (main.key === KEY.FAVORITES && appState.isLoadingPreset && appState.loadingPresetName) {
         const bankSub = subs.find((s) => s.key === KEY.BANK_SELECT);
         if (bankSub) {
           const bankValue = appState.currentValues[bankSub.key] || bankSub.value;
@@ -127,7 +128,7 @@ export function parseResponse(data) {
                 // acknowledge a PUT, so the re-dump below is the single source
                 // of truth and avoids a divergent cached value if the PUT does
                 // not take.
-                setTimeout(() => sendValueDump(programSub.key), 200);
+                setTimeout(() => sendValueDump(programSub.key), TIMING.REDUMP_MS);
               }
             }
           }
@@ -175,7 +176,7 @@ export function parseResponse(data) {
           'debug',
           'renderScreen'
         );
-      } else if (key.endsWith('0002') || isChildParam) {
+      } else if (key.endsWith(KEY_SUFFIX.METER) || isChildParam) {
         // Fallback for meter keys or child params
         log(`Fallback triggered for meter or child key ${key}`, 'debug', 'general');
         emit('value:received', { key, immediate: true });
@@ -185,7 +186,7 @@ export function parseResponse(data) {
       }
     } else if (data[3] === appState.deviceId && data[4] === CMD.SCREEN_BITMAP) {
       // Screen dump response
-      const nibbles = data.slice(5, data.length - 1);
+      const nibbles = data.slice(SYSEX.FRAME_PREFIX_LEN, data.length - 1);
       if (nibbles.length % 2 !== 0) {
         log('[ERROR] Odd number of nibbles in screen dump', 'error', 'error');
         return;

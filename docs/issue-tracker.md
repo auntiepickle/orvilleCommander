@@ -93,17 +93,19 @@ HUMAN-GATE: none
       (backBtn, exportConfigBtn, importConfigInput, importConfigBtn, sendRequestBtn, getValueBtn, setValueInput, setValueBtn,
       applyLogCategoriesBtn, keyInput, logCategoriesJson). Determine: dead lookups (remove) vs buttons in index.html missing handlers (wire or remove from UI).
 
-### Batch 1.4 — No magic numbers: audit + document (B10)  [requested]
+### Batch 1.4 — No magic numbers: audit + document (B10)  [requested]   [branch: chore/extract-constants]  [PR: #64]
 Principle (now a CLAUDE.md convention): no unexplained literal constants anywhere — name and justify
-them. The MIDI/SysEx protocol is the flagship offender but this is a codebase-wide audit.
-- [ ] B10a Protocol/MIDI literals beyond the CMD/KEY constants from 1.2: framing bytes (0xF0 start,
-      0xF7 stop, 0x1C Eventide ID, 0x70 product ID, device-id byte), the 0x20 VALUE_PUT separator,
-      screen geometry (240x64, 30 bytes/row, 1920, 12-byte header), structural key suffixes
-      ('000b' preset, '0002' meter). Name them in sysex-commands.js / a protocol module.
-- [ ] B10b Non-protocol literals across the codebase: render/poll timing (200/300/500ms — several
-      collapse in Phase 3.1 dumpComplete), itemsPerLine=4 and column widths (renderer), keypress mask
-      bytes vs system_commands.txt, debounce windows. Sweep every src/ file; name or comment each
-      semantic literal, delete any with no reason.
+them. The MIDI/SysEx protocol is the flagship offender but this is a codebase-wide audit. Three
+reviewer agents swept all of src/; findings consolidated below.
+- [x] B10a Protocol/MIDI literals extended in sysex-commands.js: SYSEX framing (END, MANUFACTURER,
+      VALUE_SEPARATOR, FRAME_PREFIX_LEN), SCREEN geometry (WIDTH/HEIGHT/HEADER_BYTES), KEY additions
+      (ROOT, SETUP, PROGRAM, LEVELS, BYPASS, FAVORITES, ROOT_META, DSP_A/B_PRESET, DELAY_PARAMS),
+      KEY_PREFIX (DSP_A/B), KEY_SUFFIX (PRESET/METER), ROOT_SOFTKEYS. Wired through all callers.
+- [x] B10b Non-protocol literals in new src/constants.js: TIMING (all render/poll/watchdog ms),
+      LAYOUT (LCD_COLUMNS, SOFTKEYS_PER_LINE, SHORT_TAG_MAX), CANVAS (css), STORAGE_KEY,
+      DEFAULT_LOG_LEVEL. Wired through midi/parser/renderer/controls/event-bridge/main/config/bitmap/framebuffer.
+      Deliberately left as self-evident (per the principle — naming would hurt readability): nibble math
+      (0x0f/>>4), RGBA stride (4), bit positions (7/8/255), quote/space chars, position '0', `|| 10` min-width guard.
 - [ ] B10c Document the reverse-engineered protocol. system_commands.txt only covers button presses;
       the 0x17/0x18 screen format (now: 12-byte header + 1920 1bpp + 1 trailing), 0x31/0x32 OBJECTINFO,
       and 0x2d/0x2e VALUE flows are undocumented. Write docs/protocol.md so framing isn't tribal knowledge.

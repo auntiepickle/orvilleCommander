@@ -1,6 +1,7 @@
 // renderer.js
 import { appState } from './state.js';
-import { CMD, KEY } from './sysex-commands.js';
+import { CMD, KEY, KEY_PREFIX, ROOT_SOFTKEYS } from './sysex-commands.js';
+import { TIMING, LAYOUT } from './constants.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { showLoading } from './main.js';
@@ -18,8 +19,8 @@ import { log } from './logger.js';
 export function updateScreen(logParam = null) {
   const patch = { childSubs: {}, currentValues: {} };
   if (
-    appState.currentKey === '0' ||
-    ['10010000', '10020000', '10030000', '10030500'].includes(appState.currentKey)
+    appState.currentKey === KEY.ROOT ||
+    [KEY.SETUP, KEY.PROGRAM, KEY.LEVELS, KEY.BYPASS].includes(appState.currentKey)
   ) {
     patch.currentSoftkeys = []; // Clear at root or top-level non-preset menu roots to prevent leakage
   }
@@ -44,7 +45,10 @@ const handleLcdClick = (e) => {
       currentSoftkeys: [], // Clear softkeys on DSP switch
       childSubs: {}, // Clear child subs on DSP switch
     };
-    if (!appState.currentKey.startsWith('4') && !appState.currentKey.startsWith('8')) {
+    if (
+      !appState.currentKey.startsWith(KEY_PREFIX.DSP_A) &&
+      !appState.currentKey.startsWith(KEY_PREFIX.DSP_B)
+    ) {
       const parentMain = appState.currentSubs[0];
       const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
       patch.keyStack = [
@@ -154,11 +158,11 @@ const handleSelectChange = (e) => {
           'valueChange'
         );
       }
-    }, 500); // Wait for VALUE_DUMP to arrive
+    }, TIMING.VALUE_DUMP_WAIT_MS); // Wait for VALUE_DUMP to arrive
     // Auto-load preset if changing the program select in load menu
     if (key === KEY.PROGRAM_SELECT) {
       setTimeout(() => {
-        const loadKey = appState.presetKey.startsWith('4')
+        const loadKey = appState.presetKey.startsWith(KEY_PREFIX.DSP_A)
           ? KEY.LOAD_TRIGGER_A
           : KEY.LOAD_TRIGGER_B;
         setState({ isLoadingPreset: true }, 'renderer:select-change-load-preset');
@@ -166,16 +170,16 @@ const handleSelectChange = (e) => {
         log(`Auto-triggered load for ${loadKey} after program change`, 'info', 'general');
         setTimeout(() => {
           updateScreen();
-          sendObjectInfoDump('0');
+          sendObjectInfoDump(KEY.ROOT);
           log('Fetched root after preset load.', 'debug', 'general');
           if (appState.updateBitmapOnChange) {
             sendSysEx(CMD.GET_SCREEN, []);
             log('Triggered bitmap update after TRG.', 'debug', 'bitmap');
           }
-        }, 500); // Delay for device to process load and fetch root
-      }, 300); // Additional delay to ensure program value is set
+        }, TIMING.DEVICE_LOAD_MS); // Delay for device to process load and fetch root
+      }, TIMING.PROGRAM_SET_MS); // Additional delay to ensure program value is set
     }
-  }, 200); // Delay to allow MIDI update
+  }, TIMING.MIDI_SETTLE_MS); // Delay to allow MIDI update
 };
 
 /**
@@ -216,7 +220,7 @@ const handleParamClick = (e) => {
                 sendSysEx(CMD.GET_SCREEN, []);
                 log('Triggered bitmap update after value change.', 'debug', 'bitmap');
               }
-            }, 200);
+            }, TIMING.MIDI_SETTLE_MS);
           } else {
             alert(`Invalid value. Must be a number between ${min} and ${max}.`);
           }
@@ -234,14 +238,14 @@ const handleParamClick = (e) => {
           updateScreen();
           if (key === KEY.LOAD_TRIGGER_A || key === KEY.LOAD_TRIGGER_B) {
             // Fetch root to update preset names after loading a new program
-            sendObjectInfoDump('0');
+            sendObjectInfoDump(KEY.ROOT);
             log('Fetched root after preset load.', 'debug', 'general');
           }
           if (appState.updateBitmapOnChange) {
             sendSysEx(CMD.GET_SCREEN, []);
             log('Triggered bitmap update after TRG.', 'debug', 'bitmap');
           }
-        }, 500); // Increased delay for device to process load
+        }, TIMING.DEVICE_LOAD_MS); // Increased delay for device to process load
       }
     }
   }
@@ -323,14 +327,14 @@ export function renderScreen(subs, ascii, logParam) {
   let softSubs = [];
   let localSoftSubs = [];
   if (appState.dspAName && appState.dspBName) {
-    const isAActive = appState.presetKey.startsWith('4');
+    const isAActive = appState.presetKey.startsWith(KEY_PREFIX.DSP_A);
     const aPart = isAActive ? `[A: ${appState.dspAName}]` : `A: ${appState.dspAName}`;
     const bPart = !isAActive ? `[B: ${appState.dspBName}]` : `B: ${appState.dspBName}`;
     topHtml = ` <span class="${isAActive ? 'dsp-clickable current' : 'dsp-clickable'}" data-key="${appState.dspAKey}">${aPart}</span> <span class="${!isAActive ? 'dsp-clickable current' : 'dsp-clickable'}" data-key="${appState.dspBKey}">${bPart}</span>`;
     if (
-      appState.currentKey === '0' ||
-      appState.currentKey.startsWith('4') ||
-      appState.currentKey.startsWith('8')
+      appState.currentKey === KEY.ROOT ||
+      appState.currentKey.startsWith(KEY_PREFIX.DSP_A) ||
+      appState.currentKey.startsWith(KEY_PREFIX.DSP_B)
     ) {
       displayLines.push(` ${aPart} ${bPart}`);
       isTabLineAdded = true;
@@ -339,23 +343,23 @@ export function renderScreen(subs, ascii, logParam) {
   let titleText;
   let titleHtml;
   let mainHtmlLines = [];
-  if (appState.currentKey === '0') {
+  if (appState.currentKey === KEY.ROOT) {
     displayLines.push('');
     displayLines.push('');
     const softSubsUsed = subs.filter(
       (s) =>
         s.type === 'COL' &&
         s.tag.trim() &&
-        s.key !== '401000b' &&
-        s.key !== '801000b' &&
-        s.key !== '10040000' &&
-        s.key !== '0'
+        s.key !== KEY.DSP_A_PRESET &&
+        s.key !== KEY.DSP_B_PRESET &&
+        s.key !== KEY.ROOT_META &&
+        s.key !== KEY.ROOT
     );
-    const itemsPerLine = 4;
+    const itemsPerLine = LAYOUT.SOFTKEYS_PER_LINE;
     let softTextLines = [];
     for (let i = 0; i < softSubsUsed.length; i += itemsPerLine) {
       const slice = softSubsUsed.slice(i, i + itemsPerLine);
-      const columnWidth = Math.floor(40 / slice.length);
+      const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length);
       const softTags = slice.map((s) => {
         const t = s.tag.trim();
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
@@ -369,7 +373,7 @@ export function renderScreen(subs, ascii, logParam) {
     for (let i = 0; i < softSubsUsed.length; i += itemsPerLine) {
       let softHtml = '';
       const slice = softSubsUsed.slice(i, i + itemsPerLine);
-      const columnWidth = Math.floor(40 / slice.length);
+      const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length);
       slice.forEach((s, idx) => {
         const t = s.tag.trim();
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
@@ -460,7 +464,7 @@ export function renderScreen(subs, ascii, logParam) {
           fullHtml = fullText;
         } else {
           const tagLength = s.tag.length;
-          const barSpace = 40 - tagLength - 1;
+          const barSpace = LAYOUT.LCD_COLUMNS - tagLength - 1;
           let barLength = Math.round(meterValue * barSpace);
           barLength = Math.max(0, Math.min(barSpace, barLength)); // Clamp to prevent invalid repeat counts
           const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
@@ -487,7 +491,9 @@ export function renderScreen(subs, ascii, logParam) {
       .some((s) => ['NUM', 'SET', 'CON', 'TRG', 'INF'].includes(s.type));
     localSoftSubs = subs
       .slice(1)
-      .filter((s) => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim());
+      .filter(
+        (s) => s.type === 'COL' && s.tag.trim().length <= LAYOUT.SHORT_TAG_MAX && s.tag.trim()
+      );
     if (hasNonColParams) {
       localSoftSubs = localSoftSubs.filter((s) => s.position !== '0');
     }
@@ -563,7 +569,7 @@ export function renderScreen(subs, ascii, logParam) {
               childFullHtml = childFullText;
             } else {
               const tagLength = cs.tag.length;
-              const barSpace = 40 - tagLength - 1;
+              const barSpace = LAYOUT.LCD_COLUMNS - tagLength - 1;
               let barLength = Math.round(meterValue * barSpace);
               barLength = Math.max(0, Math.min(barSpace, barLength)); // Clamp to prevent invalid repeat counts
               const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
@@ -604,11 +610,11 @@ export function renderScreen(subs, ascii, logParam) {
       setState({ currentSoftkeys: softSubs }, 'renderer:render-pin');
     }
     // Build current/sibling soft text lines (lower level first)
-    const itemsPerLine = 4;
+    const itemsPerLine = LAYOUT.SOFTKEYS_PER_LINE;
     let softTextLines = [];
     for (let i = 0; i < softSubs.length; i += itemsPerLine) {
       const slice = softSubs.slice(i, i + itemsPerLine);
-      const columnWidth = Math.floor(40 / slice.length) || 10;
+      const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
       const softTags = slice.map((s) => {
         const t = s.tag.trim();
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
@@ -626,7 +632,10 @@ export function renderScreen(subs, ascii, logParam) {
     // Render immediate parent softkeys only if local >0 (non-leaf)
     if (appState.keyStack.length > 1 && (localSoftSubs || []).length > 0) {
       const parentEntry = appState.keyStack[appState.keyStack.length - 1];
-      if (!parentEntry.key.startsWith('4') && !parentEntry.key.startsWith('8')) {
+      if (
+        !parentEntry.key.startsWith(KEY_PREFIX.DSP_A) &&
+        !parentEntry.key.startsWith(KEY_PREFIX.DSP_B)
+      ) {
         // Skip if parent is preset
         if (softTextLines.length > 0 && !ancestorSeparatorAdded) {
           displayLines.push('');
@@ -639,7 +648,7 @@ export function renderScreen(subs, ascii, logParam) {
         let parentSoftTextLines = [];
         for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
           const slice = parentSoftSubs.slice(i, i + itemsPerLine);
-          const columnWidth = Math.floor(40 / slice.length) || 10;
+          const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           const softTags = slice.map((s) => {
             const t = s.tag.trim();
             const text = (s.key === parentHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
@@ -662,7 +671,10 @@ export function renderScreen(subs, ascii, logParam) {
       }
       const upperEntryIndex = appState.keyStack.length - 2;
       const upperEntry = appState.keyStack[upperEntryIndex];
-      if (!upperEntry.key.startsWith('4') && !upperEntry.key.startsWith('8')) {
+      if (
+        !upperEntry.key.startsWith(KEY_PREFIX.DSP_A) &&
+        !upperEntry.key.startsWith(KEY_PREFIX.DSP_B)
+      ) {
         // Skip if grandparent is preset
         const upperSoftSubs = (upperEntry.subs || [])
           .slice(1)
@@ -671,7 +683,7 @@ export function renderScreen(subs, ascii, logParam) {
         let upperSoftTextLines = [];
         for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {
           const slice = upperSoftSubs.slice(i, i + itemsPerLine);
-          const columnWidth = Math.floor(40 / slice.length) || 10;
+          const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           const softTags = slice.map((s) => {
             const t = s.tag.trim();
             const text = (s.key === upperHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
@@ -685,13 +697,8 @@ export function renderScreen(subs, ascii, logParam) {
     if (displayLines.length > 0 && displayLines[displayLines.length - 1] !== '') {
       displayLines.push('');
     }
-    const staticRootSoftSubs = [
-      { key: '10020000', tag: 'program' },
-      { key: '10010000', tag: 'setup' },
-      { key: '10030000', tag: 'levels' },
-      { key: '10030500', tag: 'bypass' },
-    ];
-    const staticColumnWidth = Math.floor(40 / staticRootSoftSubs.length);
+    const staticRootSoftSubs = ROOT_SOFTKEYS;
+    const staticColumnWidth = Math.floor(LAYOUT.LCD_COLUMNS / staticRootSoftSubs.length);
     const staticTags = staticRootSoftSubs.map((s) => {
       const text = (s.key === appState.currentKey ? `[${s.tag}]` : s.tag).padEnd(staticColumnWidth);
       return text;
@@ -701,7 +708,7 @@ export function renderScreen(subs, ascii, logParam) {
   log(`Rendered screen text: ${displayLines.join('\n')}`, 'debug', 'renderScreen');
   let bottomHtml = '';
   const startIndex = isTabLineAdded ? 1 : 0;
-  if (appState.currentKey === '0') {
+  if (appState.currentKey === KEY.ROOT) {
     mainHtmlLines = displayLines.slice(startIndex);
   } else {
     // Explicitly build mainHtmlLines for clarity and multi-line softkeys
@@ -714,11 +721,11 @@ export function renderScreen(subs, ascii, logParam) {
     }
     // Build current/sibling soft HTML lines (lower level first)
     let softHtmlLines = [];
-    const itemsPerLine = 4;
+    const itemsPerLine = LAYOUT.SOFTKEYS_PER_LINE;
     for (let i = 0; i < softSubs.length; i += itemsPerLine) {
       let softHtml = '';
       const slice = softSubs.slice(i, i + itemsPerLine);
-      const columnWidth = Math.floor(40 / slice.length) || 10;
+      const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
       slice.forEach((s, idx) => {
         const t = (s.tag || '').trim();
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
@@ -730,7 +737,10 @@ export function renderScreen(subs, ascii, logParam) {
     // Render immediate parent softkeys only if local >0 (non-leaf)
     if (appState.keyStack.length > 1 && (localSoftSubs || []).length > 0) {
       const parentEntry = appState.keyStack[appState.keyStack.length - 1];
-      if (!parentEntry.key.startsWith('4') && !parentEntry.key.startsWith('8')) {
+      if (
+        !parentEntry.key.startsWith(KEY_PREFIX.DSP_A) &&
+        !parentEntry.key.startsWith(KEY_PREFIX.DSP_B)
+      ) {
         // Skip if parent is preset
         if (softHtmlLines.length > 0 && !ancestorSeparatorAdded) {
           mainHtmlLines.push('');
@@ -744,7 +754,7 @@ export function renderScreen(subs, ascii, logParam) {
         for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
           let softHtml = '';
           const slice = parentSoftSubs.slice(i, i + itemsPerLine);
-          const columnWidth = Math.floor(40 / slice.length) || 10;
+          const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           slice.forEach((s, idx) => {
             const t = s.tag.trim();
             const text = (s.key === parentHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
@@ -771,7 +781,10 @@ export function renderScreen(subs, ascii, logParam) {
       }
       const upperEntryIndex = appState.keyStack.length - 2;
       const upperEntry = appState.keyStack[upperEntryIndex];
-      if (!upperEntry.key.startsWith('4') && !upperEntry.key.startsWith('8')) {
+      if (
+        !upperEntry.key.startsWith(KEY_PREFIX.DSP_A) &&
+        !upperEntry.key.startsWith(KEY_PREFIX.DSP_B)
+      ) {
         // Skip if grandparent is preset
         const upperSoftSubs = (upperEntry.subs || [])
           .slice(1)
@@ -781,7 +794,7 @@ export function renderScreen(subs, ascii, logParam) {
         for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {
           let softHtml = '';
           const slice = upperSoftSubs.slice(i, i + itemsPerLine);
-          const columnWidth = Math.floor(40 / slice.length) || 10;
+          const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           slice.forEach((s, idx) => {
             const t = s.tag.trim();
             const text = (s.key === upperHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
@@ -797,14 +810,9 @@ export function renderScreen(subs, ascii, logParam) {
       mainHtmlLines.push(''); // Separator after softkeys
     }
     // Static as bottom
-    const staticRootSoftSubs = [
-      { key: '10020000', tag: 'program' },
-      { key: '10010000', tag: 'setup' },
-      { key: '10030000', tag: 'levels' },
-      { key: '10030500', tag: 'bypass' },
-    ];
+    const staticRootSoftSubs = ROOT_SOFTKEYS;
     let softHtml = '';
-    const staticColumnWidth = Math.floor(40 / staticRootSoftSubs.length);
+    const staticColumnWidth = Math.floor(LAYOUT.LCD_COLUMNS / staticRootSoftSubs.length);
     staticRootSoftSubs.forEach((s, idx) => {
       const text = (s.key === appState.currentKey ? `[${s.tag}]` : s.tag).padEnd(staticColumnWidth);
       softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
@@ -831,7 +839,9 @@ export function renderScreen(subs, ascii, logParam) {
     setState({ autoLoad: false }, 'renderer:autoload-clear');
     const softSubsLocal = subs
       .slice(1)
-      .filter((s) => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim());
+      .filter(
+        (s) => s.type === 'COL' && s.tag.trim().length <= LAYOUT.SHORT_TAG_MAX && s.tag.trim()
+      );
     if (softSubsLocal.length > 1) {
       log(
         `Auto-loading first menu: ${softSubsLocal[0].key} - ${softSubsLocal[0].tag}`,

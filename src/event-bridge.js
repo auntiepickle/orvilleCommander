@@ -31,6 +31,7 @@ import { appState } from './state.js';
 import { setState } from './store.js';
 import { log } from './logger.js';
 import debounce from 'lodash.debounce';
+import { TIMING } from './constants.js';
 
 export function registerEventBridge({ hideLoading }) {
   let renderTimeout = null;
@@ -46,7 +47,7 @@ export function registerEventBridge({ hideLoading }) {
         .map(parseSubObject);
     }
     renderScreen(subsToUse, ascii, log);
-  }, 200);
+  }, TIMING.RENDER_DEBOUNCE_MS);
 
   unsubscribers.push(on('render:request', debouncedRenderRequest));
 
@@ -58,7 +59,7 @@ export function registerEventBridge({ hideLoading }) {
           emit('render:request', { subs, ascii });
           if (!appState.isLoadingPreset) hideLoading();
           renderTimeout = null;
-        }, 200);
+        }, TIMING.RENDER_COALESCE_MS);
       } else if (key === '0' && appState.currentKey !== '0') {
         emit('render:request', { subs: appState.currentSubs, ascii: appState.lastAscii });
         if (appState.isLoadingPreset) {
@@ -81,7 +82,7 @@ export function registerEventBridge({ hideLoading }) {
           emit('render:request', { subs: null, ascii: appState.lastAscii });
           if (!appState.isLoadingPreset) hideLoading();
           renderTimeout = null;
-        }, 200);
+        }, TIMING.RENDER_COALESCE_MS);
       }
     })
   );

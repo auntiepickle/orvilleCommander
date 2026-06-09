@@ -31,24 +31,72 @@ export function denibble(nibbles) {
   return rawBytes;
 }
 
+// Read a big-endian u32 from a byte array at the given offset.
+function readU32BE(bytes, offset) {
+  return (
+    ((bytes[offset] << 24) |
+      (bytes[offset + 1] << 16) |
+      (bytes[offset + 2] << 8) |
+      bytes[offset + 3]) >>>
+    0
+  );
+}
+
+const dimsSane = (w, h) => w > 0 && h > 0 && w <= SCREEN.MAX_DIMENSION && h <= SCREEN.MAX_DIMENSION;
+
+/**
+ * Parse and integrity-check a denibbled 0x17 screen dump's 12-byte header.
+ *
+ * @param {number[]} rawBytes - Denibbled screen-dump bytes.
+ * @returns {{
+ *   width: number, height: number, size: number, bytesPerRow: number,
+ *   expectedLength: number, dimsValid: boolean, complete: boolean, checksumOk: boolean
+ * }} width/height/size as reported by the header; bytesPerRow = ceil(width/8);
+ *   expectedLength = header + size + checksum; dimsValid = dims within bounds;
+ *   complete = buffer holds the full expected length; checksumOk = the
+ *   size-field-through-checksum sum is 0 mod 256 (only meaningful when complete).
+ */
+export function parseScreenHeader(rawBytes) {
+  const width = readU32BE(rawBytes, SCREEN.WIDTH_OFFSET);
+  const height = readU32BE(rawBytes, SCREEN.HEIGHT_OFFSET);
+  const size = readU32BE(rawBytes, SCREEN.SIZE_OFFSET);
+  const dimsValid = dimsSane(width, height);
+  const bytesPerRow = Math.ceil(width / 8);
+  const expectedLength = SCREEN.HEADER_BYTES + size + SCREEN.CHECKSUM_BYTES;
+  const complete = rawBytes.length >= expectedLength;
+  let checksumOk = false;
+  if (complete) {
+    let sum = 0;
+    for (let i = SCREEN.CHECKSUM_SUM_OFFSET; i < expectedLength; i++) sum += rawBytes[i];
+    checksumOk = (sum & 0xff) === 0;
+  }
+  return { width, height, size, bytesPerRow, expectedLength, dimsValid, complete, checksumOk };
+}
+
 /**
  * Decode raw screen-dump bytes into an RGBA pixel buffer (green-on-black,
  * matching the device's LCD). Straight row-major 1bpp decode, no heuristics.
  *
  * @param {number[]} rawBytes - Denibbled screen-dump bytes (12-byte header + data).
  * @param {Object} [opts]
- * @param {number} [opts.width=240]
- * @param {number} [opts.height=64]
+ * @param {number} [opts.width] - Override width. Defaults to the header's width
+ *   when sane, else SCREEN.WIDTH.
+ * @param {number} [opts.height] - Override height. Defaults to the header's
+ *   height when sane, else SCREEN.HEIGHT.
  * @param {number} [opts.header=12] - Bytes to skip before the pixel data.
  *   Exposed for diagnosing future captures; 12 is correct for the 0x17 dump.
  * @returns {Uint8ClampedArray} width*height*4 RGBA bytes.
  */
-export function computePixels(
-  rawBytes,
-  { width = SCREEN.WIDTH, height = SCREEN.HEIGHT, header = SCREEN.HEADER_BYTES } = {}
-) {
+export function computePixels(rawBytes, opts = {}) {
+  const header = opts.header ?? SCREEN.HEADER_BYTES;
+  let { width, height } = opts;
+  if (width == null || height == null) {
+    const hdr = parseScreenHeader(rawBytes);
+    if (width == null) width = hdr.dimsValid ? hdr.width : SCREEN.WIDTH;
+    if (height == null) height = hdr.dimsValid ? hdr.height : SCREEN.HEIGHT;
+  }
   const data = new Uint8ClampedArray(width * height * 4);
-  const bytesPerRow = width / 8;
+  const bytesPerRow = Math.ceil(width / 8);
   const bitmap = rawBytes.slice(header, header + bytesPerRow * height);
   const processed = NO_FLIP ? bitmap : bitmap.map((b) => bit_reverse_table[b]);
   for (let y = 0; y < height; y++) {

@@ -3,6 +3,14 @@
 Canonical 240x64 (1bpp, 1x) renders of real Orville LCD states, captured live
 over MIDI from the physical unit on 2026-06-08 via `build_tools/hil-screenshot.cjs`.
 
+> **Known limitation (tracker FB5): these captures are TOP-PORTION-ONLY.** The
+> `@julusian/midi` CLI receive path truncates the `0x17` SysEx at 2048 message
+> bytes, so each `.txt` here denibbles to ~1021 of the expected 1933 bytes — only
+> the top ~34 of 64 rows. The bottom of each PNG is zero-filled (black), not blank
+> screen. They still regression-test the decoder for the captured rows; recapture
+> full screens once the CLI buffer is fixed (needs the device). A complete capture
+> looks like `tests/fixtures/screen-dump-black-hole.txt` (full 1933 bytes).
+
 Each `screen-<name>.png` here is the expected render of the raw `0x17` capture in
 `tests/fixtures/screen-<name>.txt`, decoded by `build_tools/render-screen.js`
 (which shares `computePixels` from `src/framebuffer.js`). They are the reference

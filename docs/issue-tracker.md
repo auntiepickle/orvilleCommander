@@ -131,6 +131,9 @@ reviewer agents swept all of src/; findings consolidated below.
 ### Device-research follow-ups (from Tech Note 34)
 - [ ] FB1 framebuffer.js robustness: READ width/height/size from the 0x17 header (per TN34) instead of
       hardcoding 240x64, and verify the trailing checksum. CODE change — pending (own PR). Low priority.
+- [ ] FB4 (NEW, from live capture) midi.js watchdog (WATCHDOG_MS 1500) is too SHORT: large enumerations
+      like the bank list (OBJECTINFO 10020012, ~70 names) take ~4-6s, so a wave would hit the watchdog
+      mid-response. Raise it / make adaptive before the Phase 3 eager loader relies on dumpComplete. CODE.
 - [x] FB2 RESOLVED via the Programming Manual: a sigfile (0x08/0x09) is the ASCII module netlist (the .sig
       design/transport form); loading it makes the unit compile+load a whole program and does NOT expose
       live menu-tree values. So it's NOT a shortcut for the eager loader — keep walking OBJECTINFO. (Only
@@ -148,6 +151,21 @@ reviewer agents swept all of src/; findings consolidated below.
       Many §4-§8 claims upgraded [V]->[D]. Manuals cited in Sources; PDFs kept local (gitignored, copyright).
 
 NOTE: Batch 1.4 (B10) complete.
+
+### Hardware capture session (B10g)  [branch: chore/hardware-capture]
+- [x] B10g Drove the live unit over MIDI (build_tools/orville-probe.cjs, U6MIDI Pro, dev 1) and resolved
+      multiple §12 unknowns:
+      * type 8 = EMPTY/nonexistent object (OBJECTINFO ffffffff -> "8 0 ffffffff ..."); root 10040000 is an empty slot.
+      * Bad reads return empty (type-8 obj / empty value), NOT SYSEXC_ERROR.
+      * Full factory bank taxonomy: 70 banks (0-80 with gaps), bank 0 = Favorites. Bank SET 10020012 / program
+        SET 10020011 enumerate names with slot numbers, reflecting the displayed DSP.
+      * NUM grammar confirmed live (space params: value/min/max/step in physical units, %3.0f/%3.1f).
+      * Latency: bank list takes ~4-6s -> FB4 (watchdog too short).
+      * OBJECTINFO confirmed context-free (load-menu keys answer un-navigated, just slow).
+      New fixtures: objectinfo-{10020012-banks,10020011-programs,10020000-program,4040001-spaceparams},
+      valuedump-4070001. New tool build_tools/orville-probe.cjs (interactive probe with --save).
+      STILL OPEN (quick, next time unit is on): active-DSP detection (toggle A/B, re-read 10020011);
+      bad-WRITE error behavior; CON value range; bank-change SysEx format.
 
 ---
 

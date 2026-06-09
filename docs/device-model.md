@@ -119,7 +119,7 @@ The object's **own** line ends with its **child count in hex**; child lines show
 | `CON` | continuous / meter   |
 | `TRG` | trigger / action     |
 | `INF` | info / read-only     |
-| `8`   | undocumented meta `[I]` — one seen at root (`10040000`), empty statement/tag; the app filters it |
+| `8`   | **empty / nonexistent object** `[V]` — returned for an unknown key and for empty slots (e.g. root's `10040000`); empty statement/tag. Probed live: `OBJECTINFO ffffffff` → `8 0 ffffffff ffffffff '' ''`. The app filters it. |
 
 ### POSITION `[V/I]`
 
@@ -265,8 +265,18 @@ indicator is a front-panel-only affordance `[D]` — so treat it as app-side sta
   routings. Bank changes use **MIDI Controller #0**, or a SysEx message (the
   User Manual defers its format to the Programming Manual — we have not captured
   it; see §12).
-- **Factory bank names/indices are not in the manuals** `[I]` — still to be
-  enumerated from the device (§12).
+- **Bank & program names are read from two SETs** `[V]` (live-probed): the
+  **bank SET `10020012`** (`'bank: %s'`) enumerates banks; the **program SET
+  `10020011`** (`'programs: %s'`) enumerates the presets in the *current* bank.
+  Each option is `'<slot> <name>'` with the slot number space-padded (e.g.
+  `' 12 Black Hole'` = slot 12). Querying these reflects the **currently
+  displayed DSP**.
+- **Factory bank taxonomy `[V]`** — captured live: **70 named banks**, numbered
+  **0–80 with gaps** (empty slots skipped, e.g. 25, 33–41, 60). Full list in
+  `tests/fixtures/objectinfo-10020012-banks.txt`; highlights: `0 Favorites`,
+  `5 Delays`, `8 Delays - Modulated`, `30 Phasers`, `31 Pitchtime`,
+  `43–50 Reverbs - …`, `54–57 Shifters - …`, `69 Eventide Users`,
+  `70 Programming`, `71–80 Px - …`. (User banks live in the same numbering.)
 
 The factory default **device ID is 1** `[D]`; multiple units share a chain via
 distinct ids; id 0 = broadcast (§1).
@@ -287,12 +297,19 @@ distinct ids; id 0 = broadcast (§1).
   not (see §1).
 - **Screen dump carries a checksum** `[D]` — the trailing byte is a sum-to-zero
   checksum (§7); the app currently doesn't verify it.
-- **Ack/error exist, but only for legacy commands** `[D/V]` — the protocol has
-  `SYSEXC_OK (0x00)` and `SYSEXC_ERROR (0x0D)`, but they're tied to the
-  documented commands (e.g. the remote sigfile load). The object commands
-  (`0x2d`/`0x31`) are undocumented and we see no `OK` after a `VALUE_PUT` — hence
-  the reconcile-by-re-dump rule. Whether a *bad* object request elicits
-  `SYSEXC_ERROR` is untested (§12).
+- **Bad reads degrade to empty, not error** `[V]` (live-probed) — `OBJECTINFO`
+  on an unknown key returns a **type-8 empty object**; `VALUE_DUMP` on an unknown
+  key returns the key with an **empty value**. No `SYSEXC_ERROR` for reads. So a
+  consumer should treat type-8 / empty-value as "absent," not retry. (Whether a
+  bad *write* errors is still untested.) `SYSEXC_OK`/`SYSEXC_ERROR` remain tied to
+  the legacy commands; no `OK` is seen after a `VALUE_PUT`, hence reconcile-by-redump.
+- **Large enumerations are slow** `[V]` (live-probed) — most dumps reply in well
+  under a second, but the bank list (`OBJECTINFO 10020012`, ~70 names) takes
+  **~4–6 s**. Implication: the per-wave watchdog in `midi.js` (1500 ms) is too
+  short and would fire mid-enumeration; raise it / make it adaptive before the
+  eager loader relies on it (tracked FB4). `OBJECTINFO` is otherwise context-free
+  — load-menu keys (`10020011`/`10020012`) answer without navigating there, just
+  slowly.
 - **Keypress table** `[D]` — verified `controls.js:keypressMasks` against Tech
   Note 34 Appendix A: every single-key mask matches exactly. Naming differs —
   our `up`/`down` are TN34's `CURSOR-UP`/`CURSOR-DOWN` (`FEFFFDFF`/`FFFEFDFF`),
@@ -341,22 +358,24 @@ whole program (Tech Note 34: "encode, compile, load … takes time"). It does
 a shortcut for the eager loader — keep walking the OBJECTINFO tree. (It would
 matter only for whole-preset backup/restore.)
 
+Resolved by the live hardware session (no longer open): the **`8` type** =
+empty/nonexistent object; **bad reads** return empty (no error); the full
+**factory bank taxonomy** (70 banks, captured); **OBJECTINFO is context-free**
+(load-menu keys answer without navigating, just slowly); large enumerations are
+**slow (~4–6 s)**.
+
 Still open — needs a hardware session or more captures:
 
-- Does any value key report the **active DSP**? (Would upgrade §8 from guess to
-  fact.)
-- The factory **bank names/indices** (structure is known; the names are not in
-  any manual). Enumerate from the device's program/bank SETs.
-- The meaning of the `8` meta type; any object types beyond COL/NUM/SET/CON/TRG/
-  INF; whether `TRG` has a documented module form.
+- Does any value key report the **active DSP**? (The program/bank SETs reflect
+  the *displayed* DSP — toggling A/B then re-reading `10020011` would confirm and
+  give a detection method. Quick to test next time the unit is on.)
 - **CON** absolute value range (monitors have min/max specifiers, but the wire
   value's range is unconfirmed).
-- Does a **bad object request** (`0x2d`/`0x31`) elicit `SYSEXC_ERROR (0x0D)`, or
-  silence? Does a `VALUE_PUT` ever return `SYSEXC_OK`?
-- The **bank-change SysEx** message (User Manual defers it to the Programming
-  Manual, which we have but it isn't spelled out there either) — capture it.
-- Is `OBJECTINFO`/`VALUE_DUMP` truly context-free for **every** key regardless of
-  front-panel position? (Assumed; spot-check edge menus.)
+- Does a **bad write** (out-of-range `VALUE_PUT`) elicit `SYSEXC_ERROR (0x0D)`,
+  or clamp/ignore silently? (Bad *reads* are answered above.)
+- The **bank-change SysEx** message format (deferred to the Programming Manual,
+  which doesn't spell it out) — capture by watching what the unit emits, or test
+  candidates.
 
 ## Sources
 

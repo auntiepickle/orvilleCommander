@@ -133,18 +133,52 @@ graphic-EQ band NUMs that the UI groups onto one line `[V]`; `'e'` appears on th
 `%-10s`, `%%`). `TAG` is a short label and may itself carry `label:format`
 (e.g. `v1:%3.0f` for a graphic-EQ band). Either may be empty (`''`).
 
-## 4. Sub-object field grammar `[V/I]`
+## 4. Sub-object field grammar `[V/D]`
 
 After the six common fields, trailing fields depend on TYPE:
 
 - **COL** — `childCount` (hex). `[V]`
-- **NUM** — `value min max step`. Units/semantics of min/max/step `[?]`. `[V order]`
+- **NUM** — `value min max step`. `[V order]` Per the Programming Manual `[D]`,
+  these are a `knob`'s lower/upper limits and **resolution** (the minimum change
+  per knob step), in the parameter's **own physical units** (e.g. a delay knob
+  ranges 0–10000 with resolution 0.1). So min/max/step are real units, not
+  normalized.
 - **SET** — `currentIndex "currentDesc" optionCount(hex) "opt0" "opt1" …`. The
-  options become the choice list; `currentIndex` is **hex**. `[V]`
-- **CON** — `value` (continuous; rendered as a bar; meter keys end `0002`). Range
-  ≈0..1 `[I]`.
-- **TRG** — no value field; fire by `VALUE_PUT <key> 1`. `[V]`
-- **INF** — `value` (read-only). `[V order]`
+  options become the choice list; `currentIndex` is **hex** and **0-based** —
+  the Programming Manual's `textknob`: "if the 1st selection is made the output
+  = 0, if the 3rd, = 2". `[V/D]`
+- **CON** — `value` (continuous; rendered as a bar; meter keys end `0002`).
+  Maps to the documented `monitor`/`hmonitor`/`vmonitor`/`meter` modules, which
+  have their own min/max display specifiers `[D]`; the absolute value range is
+  still `[?]` (we treat ≈0..1).
+- **TRG** — no value field; fire by `VALUE_PUT <key> 1`. `[V]` (no direct
+  documented module — a runtime momentary).
+- **INF** — `value` (read-only). Maps to `monitor`/`tmonitor`/`textblock`. `[V/D]`
+
+### Object types ↔ documented modules `[D]`
+
+The OBJECTINFO `0x32` **command** is undocumented, but the object *types* it
+returns are the runtime form of the sigfile **interface modules** documented in
+the Programming Manual — so their field semantics are authoritative, not guessed:
+
+| OBJECTINFO type | Documented module(s)                          |
+| --------------- | --------------------------------------------- |
+| `COL`           | `menupage` (parameter container) / `head` (defines the SOFT-KEY set & order) |
+| `NUM`           | `knob`, `tapknob`, `percentknob`, `rfader`/`hfader`/`vfader` |
+| `SET`           | `textknob`                                     |
+| `CON`           | `monitor`/`hmonitor`/`vmonitor`/`meter` (graphical control-signal monitors) |
+| `INF`           | `monitor`/`tmonitor`/`textblock`               |
+| `TRG`           | (not in the manual)                            |
+| `8`             | (not in the manual)                            |
+
+### Display formats `[D]`
+
+The `STATEMENT`/`TAG` format specifiers are documented (Programming Manual):
+a numeric field is `%Y.Xf` — `Y` = total display width, `X` = digits after the
+decimal (omit the `.` → 6 decimals); a `textknob`/string field uses `%s`. The
+**menu statement is ≤ 20 characters including the value.** Our renderer also
+handles `%-Ns` (left-justified) and `%%` (literal percent) — consistent with
+this family. (Updates the `[V]` in §3 STATEMENT/TAG to `[D]`.)
 
 ## 5. Keys & conventions `[V]`
 
@@ -202,14 +236,40 @@ checksum (logged as a robustness follow-up — see issue tracker). This is the
 physical LCD, independent of app navigation. Render any capture with
 `npm run screen <fixture> out.png`.
 
-## 8. Dual DSP & presets `[V]`
+## 8. Dual DSP & presets `[V/D]`
 
-Two independent engines, A and B, each running a preset that is its own object
-subtree (`preset root → category COLs → params`, e.g. `Black Hole` → `space`,
-`in eq`, `info`). The unit **boots into the last-used preset** per DSP, so the
-root dump is the authoritative current state at connect. The **active DSP** (the
-one the front-panel A/B button drives) is **not** reported anywhere observed
-`[V that root omits it]` — treat it as app-side state.
+Two independent engines, A and B, **both always running**; the front panel only
+*displays* one at a time (the A/B toggle) `[D]`. Each runs a preset that is its
+own object subtree (`preset root → category COLs → params`, e.g. `Black Hole` →
+`space`, `in eq`, `info`). The unit **boots into the last-used preset** per DSP,
+so the root dump is the authoritative current state at connect. The **active
+DSP** is **not** reported on the wire — the User Manual confirms the A/B display
+indicator is a front-panel-only affordance `[D]` — so treat it as app-side state.
+
+### Banks & program loading `[D]` (Orville User Manual)
+
+- **Banks & slots:** up to **100 internal banks**, each with **128 program
+  slots** (0–127). Banks are named "manila folders." Banks can also live on a
+  Memory Card (a unified namespace — scroll past internal banks, or `-` + number;
+  a `C` marks card banks).
+- **Bank 0 is the Favorites bank** `[D]` — auto-generated most-recently-used
+  links (default 8 shown), created by the unit, not user-editable. This is what
+  our `KEY.FAVORITES` (`10020010`) menu and the "favorites re-order" quirk (§9)
+  are about: loading from it shifts the MRU order.
+- **Each DSP tracks its own current bank** (the one shown in PROGRAM, usually the
+  last loaded). A MIDI **Program Change** loads that slot number from the
+  **current bank of the target DSP** (no bank in the message); if the slot is
+  empty, nothing loads.
+- **DSP targeting over MIDI:** with omni **on**, actions hit the current DSP;
+  with omni **off**, base channel = DSP A, **base+1** = DSP B, **base+2** =
+  routings. Bank changes use **MIDI Controller #0**, or a SysEx message (the
+  User Manual defers its format to the Programming Manual — we have not captured
+  it; see §12).
+- **Factory bank names/indices are not in the manuals** `[I]` — still to be
+  enumerated from the device (§12).
+
+The factory default **device ID is 1** `[D]`; multiple units share a chain via
+distinct ids; id 0 = broadcast (§1).
 
 ## 9. Behavioral contract & quirks
 
@@ -233,11 +293,14 @@ one the front-panel A/B button drives) is **not** reported anywhere observed
   (`0x2d`/`0x31`) are undocumented and we see no `OK` after a `VALUE_PUT` — hence
   the reconcile-by-re-dump rule. Whether a *bad* object request elicits
   `SYSEXC_ERROR` is untested (§12).
-- **Keypress table** `[D]` — Tech Note 34 Appendix A lists the DSP4000 key bits.
-  The Orville shares most (ENTER `FFFFFFEF`, SETUP `FFFFF7FF`, PROGRAM
-  `F7FFFFFF`, …) but differs for some (its UP/DOWN/AB are multi-bit combos not
-  in the DSP4000 table). `system_commands.txt` is the canonical Orville table
-  and is what `controls.js` must match.
+- **Keypress table** `[D]` — verified `controls.js:keypressMasks` against Tech
+  Note 34 Appendix A: every single-key mask matches exactly. Naming differs —
+  our `up`/`down` are TN34's `CURSOR-UP`/`CURSOR-DOWN` (`FEFFFDFF`/`FFFEFDFF`),
+  and our `inc`/`dec` are TN34's data-entry `UP`/`DOWN` (`FFFFFF7F`/`FFFFFFBF`).
+  The only non-single-key entry is `ab` (`FDFFFDFF`), an Orville-specific
+  **combo** (two bits cleared at once) with no single-key DSP4000 equivalent.
+  No discrepancies/bugs (FB3). `system_commands.txt` is the canonical Orville
+  table and matches Appendix A for the shared keys.
 
 ## 10. Reimplementing from scratch — checklist
 
@@ -266,23 +329,34 @@ Resolved by Tech Note 34 (no longer open): the `0x17` trailing byte (checksum);
 the 12-byte screen header (width/height/size); MSN-first nibbling; `id=0`
 semantics (broadcast).
 
+Also resolved by the manuals (no longer open): bank/program **structure**
+(100 banks × 128 slots, bank 0 = Favorites), NUM `min/max/step` semantics
+(physical units + knob resolution), SET index 0-based, the display format
+grammar (`%Y.Xf` / `%s`, ≤20 chars), and **FB2 (sigfile)** — see below.
+
+**FB2 resolved:** a sigfile (`0x08`/`0x09`) is the ASCII **module netlist** (the
+`.sig` design/transport form); loading one makes the unit *compile and load* a
+whole program (Tech Note 34: "encode, compile, load … takes time"). It does
+**not** expose the live menu-tree parameter *values* for display, so it is **not**
+a shortcut for the eager loader — keep walking the OBJECTINFO tree. (It would
+matter only for whole-preset backup/restore.)
+
 Still open — needs a hardware session or more captures:
 
 - Does any value key report the **active DSP**? (Would upgrade §8 from guess to
   fact.)
-- The full **bank/preset taxonomy** (~70 firmware banks) — names, indices,
-  how the program/bank SETs enumerate them.
-- Exhaustive **TYPE** list and the meaning of the `8` meta type; any types beyond
-  COL/NUM/SET/CON/TRG/INF. (Undocumented — not in Tech Note 34.)
-- **NUM** units and the exact role of `min/max/step`; **CON** value range.
+- The factory **bank names/indices** (structure is known; the names are not in
+  any manual). Enumerate from the device's program/bank SETs.
+- The meaning of the `8` meta type; any object types beyond COL/NUM/SET/CON/TRG/
+  INF; whether `TRG` has a documented module form.
+- **CON** absolute value range (monitors have min/max specifiers, but the wire
+  value's range is unconfirmed).
 - Does a **bad object request** (`0x2d`/`0x31`) elicit `SYSEXC_ERROR (0x0D)`, or
-  silence? Does a `VALUE_PUT` ever return `SYSEXC_OK`? (Affects how defensively
-  the eager loader / writes behave.)
+  silence? Does a `VALUE_PUT` ever return `SYSEXC_OK`?
+- The **bank-change SysEx** message (User Manual defers it to the Programming
+  Manual, which we have but it isn't spelled out there either) — capture it.
 - Is `OBJECTINFO`/`VALUE_DUMP` truly context-free for **every** key regardless of
   front-panel position? (Assumed; spot-check edge menus.)
-- The **sigfile** (`0x08`/`0x09`) representation vs the OBJECTINFO tree — could a
-  one-shot sigfile dump be a faster/complete way to load a preset's full state
-  than walking the object tree? Worth evaluating for the eager loader.
 
 ## Sources
 
@@ -291,10 +365,18 @@ Still open — needs a hardware session or more captures:
   protocol (framing, nibbling, keypress Appendix A, screen dump, program/setup/
   sigfile/info, OK/ERROR). PDF:
   `https://s3.amazonaws.com/com.eventide.downloads/Discontinued+products/Tech_Note_34_MIDISysex.pdf`
+- **Eventide Orville User Manual (v3.0)** — front-panel/operation reference;
+  source for the bank/program model (§8), device-id default, dual-DSP display,
+  and external-controller indirection. Index entry:
+  `https://www.eventideaudio.com/downloads/orville-user-manual`
+- **Eventide Programming Manual for Harmonizers** — the sigfile / module
+  (operator) reference; source for the §4 object↔module mapping, the `%Y.Xf`
+  format grammar, knob min/max/resolution semantics, and the sigfile definition
+  (FB2). PDF:
+  `https://s3.amazonaws.com/com.eventide.downloads/Product+Manuals/ProgrammingManual.pdf`
 - **Eventide Orville documentation index**:
   `https://www.eventideaudio.com/downloads/?product=Orville&download_type=documentation`
-  — also lists the Orville User Manual (v3.0), Presets Manual, Programming
-  Manual for Harmonizers (operators/sigfile reference), and the Pedal/Switch
+  — also lists the Presets Manual, Orville/R addendum, and the Pedal/Switch
   tutorial.
 - `system_commands.txt` (repo root) — the Orville keypress table this app uses.
 - `tests/fixtures/` — captured OBJECTINFO/VALUE/screen dumps the object-protocol

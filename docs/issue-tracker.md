@@ -130,11 +130,22 @@ reviewer agents swept all of src/; findings consolidated below.
 
 ### Device-research follow-ups (from Tech Note 34)
 - [ ] FB1 framebuffer.js robustness: READ width/height/size from the 0x17 header (per TN34) instead of
-      hardcoding 240x64, and verify the trailing checksum. Low priority; current hardcode works for this unit.
-- [ ] FB2 Evaluate the documented sigfile dump (0x08/0x09) as a one-shot full-preset load — possibly a
-      faster/more-complete alternative to walking the OBJECTINFO tree for the Phase 3 eager loader.
-- [ ] FB3 Cross-check controls.js keypressMasks vs TN34 Appendix A + system_commands.txt; document any
-      Orville-specific combo keys (UP/DOWN/AB) that diverge from the DSP4000 table.
+      hardcoding 240x64, and verify the trailing checksum. CODE change — pending (own PR). Low priority.
+- [x] FB2 RESOLVED via the Programming Manual: a sigfile (0x08/0x09) is the ASCII module netlist (the .sig
+      design/transport form); loading it makes the unit compile+load a whole program and does NOT expose
+      live menu-tree values. So it's NOT a shortcut for the eager loader — keep walking OBJECTINFO. (Only
+      useful for whole-preset backup/restore.) Documented in device-model.md §12.
+- [x] FB3 DONE: verified controls.js keypressMasks against TN34 Appendix A — every single-key mask matches
+      exactly (our up/down = CURSOR-UP/DOWN; inc/dec = data UP/DOWN). Only 'ab' is an Orville combo. No bug,
+      no fix needed. Documented in device-model.md §9.
+
+### Manual-deepening (B10f)
+- [x] B10f Mined the Orville User Manual (v3.0) + Programming Manual for Harmonizers via agents and folded
+      into device-model.md: object-types <-> documented interface modules (knob/textknob/menupage/monitor/
+      meter) mapping; %Y.Xf format grammar + 20-char statement; NUM min/max/step = physical units + knob
+      resolution; SET index 0-based; banks (100x128, bank 0 = Favorites/MRU); per-DSP current bank; MIDI
+      Program Change / omni / base+0/+1/+2 DSP targeting; device-id default 1; dual-DSP both-always-running.
+      Many §4-§8 claims upgraded [V]->[D]. Manuals cited in Sources; PDFs kept local (gitignored, copyright).
 
 NOTE: Batch 1.4 (B10) complete.
 

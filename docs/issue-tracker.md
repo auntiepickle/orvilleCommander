@@ -138,12 +138,15 @@ reviewer agents swept all of src/; findings consolidated below.
 - [x] FB5 RESOLVED (branch fix/hil-sysex-reassembly): HIL screen captures were truncated. ROOT CAUSE: the
       Orville drives the U6MIDI Pro over a 31250-baud DIN link, so a ~3872-byte 0x17 dump takes ~1.2s to
       transmit and @julusian/midi (WinMM) delivers it as multiple 2048-byte buffer chunks (first chunk starts
-      F0 1C 70 dev 17 with no F7; continuation chunks are raw bytes; the last ends F7). The old tool grabbed
-      only the first chunk within a 1.5s window -> 2048 bytes / 1021 denibbled / top ~34 rows. NOT a device or
+      F0 1C 70 dev 17 with no F7; continuation chunks are raw bytes; the last ends F7). The old tool resolved
+      on the first 0x17 message (the header chunk) and discarded the rest -> 2048 bytes / 1021 denibbled /
+      top ~34 rows. NOT a device or
       buffer-size bug (setBufferSize proved unreliable here). FIX: hil-screenshot.cjs now reassembles chunks
       from the header chunk until F7, waits a 4s window for the slow transmission, retries on incomplete, and
       validates completeness. The five golden captures were RECAPTURED full (3872 bytes each, 1933 denibbled,
-      complete && checksumOk) and re-rendered. Verified against the device.
+      complete && checksumOk) and re-rendered. Verified against the device. SCOPE: only hil-screenshot.cjs
+      (the golden-capture path) was fixed; orville-probe.cjs's diagnostic `screen` action still keeps only the
+      first chunk, which is fine for a quick diagnostic dump — fix it there too only if it ever needs full screens.
 - [x] FB4 RESOLVED (branch fix/dump-watchdog-idle-reset): the midi.js dump watchdog was a fixed 1500ms hard
       ceiling that fired mid-response on large enumerations like the bank list (OBJECTINFO 10020012, ~70 names,
       ~4-6s). Replaced with an idle/silence watchdog (WATCHDOG_IDLE_MS 1500, rearmed on every send and receive)

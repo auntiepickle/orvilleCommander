@@ -99,14 +99,30 @@ it (falling back to `SCREEN.WIDTH`/`HEIGHT` = 240×64 only when the header dims
 are missing or out of range), and `bitmap.js:renderBitmap` logs an integrity
 error — rather than silently painting a partial or corrupt screen — when a dump
 is truncated, has a bad checksum, or carries insane dimensions. (A truncated
-dump is exactly the FB5 capture failure mode: the `@julusian/midi` CLI receive
-path caps the screen SysEx at 2048 bytes; see the issue tracker.)
+dump is exactly the FB5 capture failure mode — the HIL tool used to keep only the
+first buffer of a multi-buffer SysEx; see **Capturing screens (HIL)** below and
+the issue tracker.)
 
 > Historical note: earlier code used a 13-byte header and compensated for the
 > resulting 1-byte misalignment with a column rotate + a 1px shift of the first
 > 8 columns. The header is 12; those heuristics were removed. See the tracker
 > (A2 / A2-root) and `build_tools/render-screen.js` (`npm run screen`) to render
 > a captured dump to PNG.
+
+#### Capturing screens (HIL) — multi-buffer reassembly
+
+Capturing a `0x17` dump from the real unit (`npm run screenshot` →
+`build_tools/hil-screenshot.cjs`) must reassemble the SysEx from several buffer
+chunks. The Orville drives the U6MIDI Pro over a **31250-baud DIN** link (the
+U6MIDI Pro is a USB↔DIN interface), so the ~3872-byte screen SysEx takes ~1.2 s
+to transmit, and `@julusian/midi` on WinMM delivers it as multiple **2048-byte**
+buffer chunks: the first chunk carries the `F0 1C 70 <dev> 17` header with **no**
+`F7`, continuation chunks are raw bytes, and only the last ends `F7`. The tool
+accumulates chunks from the header until it sees `F7` (a ~4 s window with retry),
+then validates completeness. An earlier version kept only the first chunk and so
+produced a 2048-byte / top-rows-only capture — this is FB5 in the issue tracker,
+and was a transmission-speed/chunking artifact, **not** a device or buffer-size
+limit. Anyone capturing screens over this MIDI path hits the same chunking.
 
 ### Object-info — request `0x31` (out), response `0x32` (in)
 

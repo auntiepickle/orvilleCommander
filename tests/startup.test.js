@@ -27,8 +27,8 @@
  *   - Fan-out response dumps (childSubs population); childSubs stays {}
  *   - Audit-tool cache-overwrite bug (test uses fresh defaults)
  *
- * Full rationale, seam design, and oddity-reporting protocol live at
- * docs/refactor/review-notes.md under the "Step 5.5" section.
+ * Full rationale and seam design are documented inline in this file (the
+ * header above and the Tier A/B comments below).
  */
 
 // Lodash debounce collapses to identity so render timing is deterministic

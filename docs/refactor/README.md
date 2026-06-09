@@ -1,17 +1,19 @@
-# Refactor docs — session 1 output
+# docs/refactor
 
-Read in order:
+The eight-step decoupling refactor that broke the original import cycles is
+**complete** (merged in PR #23). Its design notes — dependency graph, coupling
+analysis, the step-by-step roadmap, per-step review notes, and the session
+knowledge dump — have been removed from the tree; they remain in git history if
+needed.
 
-1. [`01-dependency-graph.md`](./01-dependency-graph.md) — who imports what, plus the five real cycles.
-2. [`02-top-couplings.md`](./02-top-couplings.md) — top 5 tightest couplings ranked by refactor payoff.
-3. [`03-test-coverage-gap.md`](./03-test-coverage-gap.md) — what's untested and the exact characterization tests to add first.
-4. [`04-roadmap.md`](./04-roadmap.md) — eight commits, each with a rollback plan.
-5. [`CLAUDE.md.draft`](./CLAUDE.md.draft) — draft `CLAUDE.md` for the repo root. Review, then move to `/CLAUDE.md` when ready.
+What lives here now:
 
-No code was changed in this session.
+- [`phase3-state-model.md`](./phase3-state-model.md) — the **active** Phase 3
+  state-model design (connect/eager-load flow, the three state domains, and the
+  "never render an unconfirmed value" invariant). Referenced by the live ledger.
 
-## Fastest next actions
+For everything current, see:
 
-- **Before anything else:** fix `tests/main.test.js` so `npm test` runs green (Step 1 of the roadmap).
-- Then add the `midi.js` byte-contract tests from `03-test-coverage-gap.md` — they lock the wire format before any parser refactor touches I/O.
-- Review and promote the draft `CLAUDE.md` to the repo root so the next session starts with shared context.
+- [`../issue-tracker.md`](../issue-tracker.md) — the production-readiness ledger (source of truth).
+- [`../protocol.md`](../protocol.md) and [`../device-model.md`](../device-model.md) — the device spec.
+- [`../../CLAUDE.md`](../../CLAUDE.md) — current architecture and conventions.

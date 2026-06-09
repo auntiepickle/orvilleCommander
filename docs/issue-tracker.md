@@ -119,7 +119,7 @@ reviewer agents swept all of src/; findings consolidated below.
       grammar (child-count-in-hex, variable-length keys, position codes), per-type field grammar, key
       conventions, value semantics, screen format, dual-DSP/presets, behavioral contract, a
       "reimplement from scratch" checklist, and a §12 open-questions hardware backlog. Confidence-marked
-      [V]/[I]/[?]. Grounded in all tests/fixtures + parser/framebuffer + session-knowledge-dump §13.
+      [V]/[I]/[?]. Grounded in all tests/fixtures + parser/framebuffer.
       Drives phase3-state-model.md. LIVING DOC — extend as hardware answers §12.
 - [x] B10e Reconciled the spec against the official Eventide Tech Note 34 ("MIDI Sysex Messages on the
       DSP4000", URL the user supplied). Confirmed/upgraded: id=0=broadcast, MSN-first nibbling, and the

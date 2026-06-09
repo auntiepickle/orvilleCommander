@@ -43,11 +43,11 @@ Inbound SysEx is not necessarily one WebMIDI event per message: a long dump (`0x
 
 The eight-step decoupling refactor is complete (merged via PR #23). Four of the five original import cycles were broken: parser↔renderer, parser↔main, and renderer↔main via the `events.js` pub/sub bus + `event-bridge.js` (Step 7), and controls↔renderer via the `navigation.js` extraction (Step 8).
 
-Still open and not roadmapped: cycle 1 `midi.js` ↔ `parser.js`, and a residual 2-node `renderer.js` ↔ `main.js` coupling (`renderer` imports `showLoading`; `main` imports `updateScreen`). See `docs/refactor/05-status.md`.
+Still open and not roadmapped: cycle 1 `midi.js` ↔ `parser.js`, and a residual 2-node `renderer.js` ↔ `main.js` coupling (`renderer` imports `showLoading`; `main` imports `updateScreen`). A later `store` ↔ `logger` ↔ `state` cycle (introduced when log config lived on `appState`) was collapsed in C6 — `logger.js` now owns its log config and no longer imports `state.js`.
 
 State: `appState` (in `state.js`) is a shared mutable object re-exported from `store.js`. Prefer `store.setState(partial, origin)` for an audited write path over mutating `appState` directly. `toggleDspKey` has a single definition in `navigation.js`.
 
-See `docs/refactor/` for the dependency graph and refactor history, and `docs/issue-tracker.md` for the active production-readiness work.
+The completed 8-step refactor's design notes were removed from the tree (they live in git history); the active Phase 3 state-model design is in `docs/refactor/phase3-state-model.md`, and `docs/issue-tracker.md` is the live production-readiness ledger.
 
 ## Testing
 
@@ -89,7 +89,7 @@ Sub-object types in the ASCII dump: `COL` (column/menu), `NUM`, `SET`, `CON` (co
 - No magic numbers. A literal with semantic meaning gets a named constant (and a comment when its origin is non-obvious) — never a bare number/string scattered at call sites. Protocol values live in `src/sysex-commands.js`; the reverse-engineered SysEx framing is the cautionary example this rule exists for.
 - Prefer editing existing files; this repo is small enough that splitting should be deliberate (roadmap Step 6+).
 - Keep comments minimal — the JSDoc on existing exports is fine; don't narrate new code unless the *why* is non-obvious.
-- When touching render logic, add a renderer snapshot test first (see `03-test-coverage-gap.md`).
+- When touching render logic, add a renderer snapshot test first (see `tests/renderer.snapshot.test.js`).
 - Before claiming a task complete, run `npm test` and report the output. Do not declare success based on reading the diff.
 - Commit messages follow conventional commits (`fix:`, `refactor:`, `test:`, `docs:`, `chore:`). Reference the roadmap step in the body when relevant.
 - GitHub Issues track the same work as `docs/issue-tracker.md`. When a PR resolves an item that has a matching GitHub issue, put `Closes #N` in the PR body so it auto-closes on merge. Every PR is reviewed by spawned reviewer agents (correctness + docs) before merge — see the issue-tracker workflow.
@@ -125,7 +125,7 @@ Observations about the Claude Code tooling itself, captured as Step 5.5 shipped.
 
 - **Long-file diff viewer duplication.** Claude Code's diff viewer occasionally renders a block of lines twice when displaying a proposed edit (observed around line 200 of multi-hundred-line files). Display artifact only — the actual file content is correct. Reread the file via `Read` if in doubt before editing; do not amend for apparent duplication unless `Read` confirms it.
 
-- **Gate doc updates on verification.** Claude Code may batch documentation updates (marking features "complete", writing past-tense claims about code behavior) before the code behind them is verified. Explicitly require test passage or other evidence before doc changes that assert behavior. "This test pins X" in review-notes.md is a claim that only becomes true after `npm test` confirms it.
+- **Gate doc updates on verification.** Claude Code may batch documentation updates (marking features "complete", writing past-tense claims about code behavior) before the code behind them is verified. Explicitly require test passage or other evidence before doc changes that assert behavior. "This test pins X" in a doc is a claim that only becomes true after `npm test` confirms it.
 
 - **Require raw output, not self-summary.** For any "is my work correct" verification, require Claude Code to paste raw tool output verbatim into the chat rather than accepting its summary. Claude Code will sometimes read a long output, declare it clean, and move on — which collapses the human review step. Ask for the raw bytes when it matters.
 

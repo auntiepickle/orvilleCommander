@@ -1,110 +1,83 @@
 # Orville Commander
 
-A web-based remote interface for viewing and controlling the Eventide Orville effects processor screen via MIDI. Built with WebMIDI, JavaScript, and HTML/CSS. The goal is to enable remote access on devices like browsers, with future cross-platform potential once a prototype is complete.
+A browser front-end for viewing and controlling the Eventide Orville over MIDI.
+It talks to the unit's SysEx interface, reconstructs the LCD from the device's
+text dumps, and renders it as HTML (plus an optional 1bpp screen-capture canvas),
+so the device can be driven from a browser instead of the front panel.
 
-## Table of Contents
-- [Overview](#overview)
-- [Setup and Installation](#setup-and-installation)
-- [Architecture](#architecture)
-- [Key Modules](#key-modules)
-- [Data Flow](#data-flow)
-- [Known Issues and Refactoring Opportunities](#known-issues-and-refactoring-opportunities)
-- [Contributing](#contributing)
+Vanilla ES modules, no UI framework.
 
-## Overview
-This project emulates the Orville's LCD screen and controls in a browser, using SysEx MIDI messages for communication. It parses responses, renders the screen as text/HTML (with optional bitmap canvas), and handles user interactions like keypresses and value changes.
+## Quick start
 
-- **Core Features**:
-  - MIDI connection and SysEx handling.
-  - Screen rendering (text-based with params, softkeys, and breadcrumbs).
-  - Virtual controls (buttons, keypad).
-  - State management for navigation (key stack, values).
-  - Debugging tools (logs, polling, config saving).
-
-- **Tech Stack**:
-  - JavaScript (ES modules).
-  - WebMIDI API for MIDI.
-  - HTML/CSS for UI.
-  - No external libraries beyond WebMIDI.
-
-## Setup and Installation
-1. Clone the repo: `git clone <repo-url>`.
-2. Open `index.html` in a modern browser (Chrome recommended for WebMIDI support).
-3. Connect MIDI devices via the UI (select input/output ports).
-4. Configure device ID (default: 0) and other settings (log level, bitmap fetching).
-5. Use the virtual panel to navigate and interact.
-
-**Dependencies**: None (vanilla JS), but requires browser MIDI access.
-
-## Architecture
-The app follows a modular structure with separation of concerns:
-- **State Management**: Centralized in `state.js` (appState object).
-- **MIDI Communication**: Handled in `midi.js` (send/receive SysEx).
-- **Parsing**: In `parser.js` (processes responses, bitmap rendering).
-- **Rendering**: In `renderer.js` (updates LCD with HTML/text).
-- **Controls/UI**: In `controls.js` and `index.html` (button events).
-- **Config/Persistence**: In `config.js` (localStorage).
-- **Entry Point**: `main.js` (initializes everything, event listeners).
-
-High-level diagram:
-```mermaid
-graph TD
-    A["User Input (Buttons/Keypad)"] --> B["controls.js"]
-    B --> C["midi.js: Send SysEx/Keypress"]
-    C --> D["Orville Device"]
-    D --> E["midi.js: Receive SysEx"]
-    E --> F["parser.js: Parse Response"]
-    F --> G["state.js: Update appState"]
-    G --> H["renderer.js: Render LCD"]
-    H --> I["index.html: Display"]
-    J["main.js: Init & Config"] --> G
+```
+npm install
+npm run dev      # Vite dev server, src/ as root — open the printed URL
 ```
 
-## Key Modules
+Use **Chrome, Edge, or Opera** — WebMIDI is required, and Firefox/Safari will
+silently fail to connect. Grant MIDI permission, pick the input/output ports,
+set the device ID (default 0), then navigate with the on-screen panel.
 
-* state.js: Holds global appState (e.g., currentKey, values, stack). Why? Single source of truth for reactivity.
+Other scripts:
 
-* midi.js: Manages ports, listeners, and SysEx commands (e.g., sendObjectInfoDump). Key functions: setMidiPorts, sendSysEx.
+```
+npm test           # Jest + jsdom
+npm run lint       # ESLint (flat config)
+npm run format     # Prettier
+npm run screenshot # Hardware-in-the-loop: capture the live screen to a PNG (needs the device)
+```
 
-* parser.js: Parses ASCII dumps into subs/objects; handles bitmap denibbling/rendering. Exports: parseResponse, renderBitmap.
+**Dependencies:** runtime — `webmidi` and `lodash.debounce` only. Dev toolchain —
+Vite, Jest, ESLint, Prettier, Babel.
 
-* renderer.js: Builds HTML for LCD (params, softkeys, breadcrumbs). Handles clicks/changes. Exports: updateScreen, renderScreen.
+## Architecture
 
-* controls.js: Maps buttons to keypress masks; setups event listeners. Exports: setupKeypressControls.
+User input → `controls.js` sends SysEx via `midi.js` → the Orville replies →
+`midi.js`'s inbound listener reassembles multi-packet SysEx and hands complete
+messages to `parser.js` → the parser writes state via `store.setState` and emits
+events on the `events.js` bus → `event-bridge.js` coalesces those and calls the
+renderer → `renderer.js` paints the LCD (and `bitmap.js`/`framebuffer.js` paint
+the screen-capture canvas).
 
-* main.js: Bootstraps app, connects MIDI, adds listeners. Exports: log, showLoading.
+| Module | Role |
+|---|---|
+| `main.js` | Entry point: DOM wiring, connect flow, event-bridge registration |
+| `controls.js` | Front-panel keypress masks + button → SysEx mapping |
+| `midi.js` | WebMIDI send, SysEx framing, inbound reassembly, dump-wave counter |
+| `parser.js` | SysEx byte stream → structured sub-objects & values; emits events |
+| `event-bridge.js` | Subscribes to parser events; owns render timing |
+| `renderer.js` | Sub-objects → LCD HTML; click/change handlers |
+| `bitmap.js` / `framebuffer.js` | `0x17` screen-dump decode + canvas render |
+| `store.js` / `state.js` | `appState` singleton behind an audited `setState` |
+| `events.js` | Tiny pub/sub bus (`emit` / `on`) |
+| `sysex-commands.js` | `CMD` / `KEY` / `SYSEX` / `SCREEN` protocol constants |
+| `sysex-split.js` | Shared ASCII dump tokenizer |
+| `navigation.js` | `toggleDspKey` |
+| `logger.js` | Gated `log()` + its own log-level/category config |
+| `hex-extract.js` | Debug-file hex parsing |
 
-* config.js: Loads/saves config (ports, logs). Exports: loadConfig, saveConfig.
+The eight-step decoupling refactor that broke the original import cycles is
+complete (merged in PR #23). `CLAUDE.md` has the authoritative, current
+architecture and conventions.
 
-* index.html: UI layout (LCD, buttons, debug tools).
+## How the device works
 
-## Data Flow
+The SysEx wire format is in [`docs/protocol.md`](docs/protocol.md); the device's
+behaviour (object tree, presets, value semantics, screen format, quirks) is in
+[`docs/device-model.md`](docs/device-model.md) — a from-scratch spec built by
+reverse-engineering plus live hardware capture. All frames are
+`F0 1C 70 <deviceId> <cmd> … F7`.
 
-1. User clicks button → controls.js sends keypress via midi.js.
+## Status & contributing
 
-2. Device responds with SysEx → midi.js listener → parser.js processes.
+Production-readiness work is tracked in two places that mirror each other:
+[GitHub Issues](https://github.com/auntiepickle/orvilleCommander/issues) and the
+checked-in ledger [`docs/issue-tracker.md`](docs/issue-tracker.md) (the
+resumable source of truth). The active Phase 3 design is in
+[`docs/refactor/phase3-state-model.md`](docs/refactor/phase3-state-model.md).
 
-3. parser.js updates appState (state.js).
-
-4. renderer.js re-renders LCD (index.html).
-
-5. For values: Similar flow with VALUE_DUMP/PUT.
-
-Polling (e.g., meters) runs intervals in main.js.
-
-## Known Issues and Refactoring Opportunities
-
-Active work is tracked in [GitHub Issues](https://github.com/auntiepickle/orvilleCommander/issues).
-
-The eight-step decoupling refactor that resolved the original tight-coupling,
-testing, and render-pipeline items is documented in [`docs/refactor/`](docs/refactor/) —
-see [`05-status.md`](docs/refactor/05-status.md) for the exit state and
-[`future-work.md`](docs/refactor/future-work.md) for deferred ideas.
-
-## Contributing
-
-* Fork and PR changes.
-
-* Focus on one feature/fix per PR (e.g., "Add JSDoc to midi.js").
-
-* Use git commit messages like: "docs: add initial README structure for overview and architecture".
+- One feature/fix per PR; conventional-commit messages (`fix:`, `refactor:`,
+  `test:`, `docs:`, `chore:`).
+- `npm test`, `npm run lint`, and `npm run format:check` must pass; CI enforces them.
+- When a PR resolves a tracked GitHub issue, put `Closes #N` in the body.
+- See `CLAUDE.md` for the full conventions and the smoke-test checklist.

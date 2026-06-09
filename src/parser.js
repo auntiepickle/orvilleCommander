@@ -192,8 +192,8 @@ export function parseResponse(data) {
         return;
       }
       const rawBytes = denibble(nibbles);
-      if (appState.logCategories['bitmap'])
-        log(`[LOG] Denibbled screen data to ${rawBytes.length} bytes`, 'debug', 'bitmap');
+      // log() gates on the 'bitmap' category itself (C6 — no appState read here).
+      log(`[LOG] Denibbled screen data to ${rawBytes.length} bytes`, 'debug', 'bitmap');
       emit('screen:received', { rawBytes });
     }
   } catch (err) {

@@ -1,7 +1,7 @@
 // main.js
 import { WebMidi } from 'webmidi';
 import { CMD, KEY } from './sysex-commands.js';
-import { TIMING } from './constants.js';
+import { TIMING, DEFAULT_LOG_CATEGORIES } from './constants.js';
 import { loadConfig, saveConfig, clearConfig, mergeLogCategories } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
 import {
@@ -17,7 +17,7 @@ import { toggleDspKey } from './navigation.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { denibble, renderBitmap } from './bitmap.js';
-import { log } from './logger.js';
+import { log, setLogLevel, setLogCategories, getLogCategories } from './logger.js';
 import { registerEventBridge } from './event-bridge.js';
 import { extractNibblesFromHex } from './hex-extract.js';
 
@@ -177,12 +177,12 @@ saveConfigBtn.addEventListener('click', () => {
     inputSelect.value,
     parseInt(deviceIdInput.value, 10),
     logLevelSelect.value,
-    appState.logCategories,
+    getLogCategories(),
     fetchBitmapCheckbox.checked,
     updateBitmapOnChangeCheckbox.checked,
     appState.presetKey
   );
-  setState({ logLevel: logLevelSelect.value }, 'main:save-config-log-level');
+  setLogLevel(logLevelSelect.value);
 });
 
 clearConfigBtn.addEventListener('click', () => {
@@ -340,14 +340,16 @@ const cachedConfig = loadConfig(
   fetchBitmapCheckbox,
   updateBitmapOnChangeCheckbox
 );
+setLogLevel(logLevelSelect.value);
+// Merge cached prefs over the defaults so new categories are not lost for
+// existing users (A4). With no cache at all, fresh users start all-on.
+setLogCategories(
+  cachedConfig
+    ? mergeLogCategories(DEFAULT_LOG_CATEGORIES, cachedConfig.logCategories)
+    : Object.fromEntries(Object.keys(DEFAULT_LOG_CATEGORIES).map((k) => [k, true]))
+);
 setState(
   {
-    logLevel: logLevelSelect.value,
-    // Merge cached prefs over the store defaults so new categories are not lost
-    // for existing users (A4). With no cache at all, fresh users start all-on.
-    logCategories: cachedConfig
-      ? mergeLogCategories(appState.logCategories, cachedConfig.logCategories)
-      : Object.fromEntries(Object.keys(appState.logCategories).map((k) => [k, true])),
     fetchBitmap: fetchBitmapCheckbox.checked,
     updateBitmapOnChange: updateBitmapOnChangeCheckbox.checked,
     presetKey: cachedConfig?.presetKey || KEY.DSP_A_PRESET,

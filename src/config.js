@@ -56,7 +56,7 @@ export function loadConfig(
  *
  * @example
  * // Save after user selects ports
- * saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, appState.presetKey);
+ * saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, getLogCategories(), fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, appState.presetKey);
  */
 export function saveConfig(
   outputId,

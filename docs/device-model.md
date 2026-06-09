@@ -227,7 +227,7 @@ specifies the denibbled layout exactly:
 | 4–7   | height     | screen height in pixels                              |
 | 8–11  | dumpSize   | bitmap size in bytes                                 |
 | 12 …  | bitmap     | `ceil(width/8) * height` bytes, 1bpp, MSB = leftmost |
-| last  | checksum   | 1 byte (2 nibbles); all bytes incl. size sum to 0    |
+| last  | checksum   | 1 byte (2 nibbles); see checksum note below          |
 
 For the Orville (240×64) this is the **1933-byte** stream we observe: 12 header
 + 1920 pixels + 1 checksum. **Verified against `screen-dump-black-hole.txt`**:
@@ -235,12 +235,19 @@ the header decodes to width `0x000000F0` = 240, height `0x00000040` = 64. So the
 12-byte header we'd been treating as opaque is really three u32 fields, and the
 trailing byte is the documented **checksum** (not a mystery).
 
-Pixels are row-major, MSB = leftmost (`src/framebuffer.js`). Note our decoder
-currently **hardcodes** 240×64 and skips a fixed 12-byte header; per this spec
-it could instead **read** width/height/size from the header and verify the
-checksum (logged as a robustness follow-up — see issue tracker). This is the
-physical LCD, independent of app navigation. Render any capture with
-`npm run screen <fixture> out.png`.
+**Checksum, exactly** `[V]`: the sum of every byte from the **size field
+(offset 8) through the checksum byte**, inclusive, is `0 mod 256` — confirmed
+against the full `screen-dump-black-hole.txt` capture. It does not include the
+width/height fields. (Tech Note 34's "all bytes incl. size sum to 0" means
+*from* the size field; see `protocol.md` §Screen bitmap and
+`SCREEN.CHECKSUM_SUM_OFFSET`.)
+
+Pixels are row-major, MSB = leftmost (`src/framebuffer.js`). The decoder
+**reads** width/height/size from the header (`parseScreenHeader`/`computePixels`,
+falling back to 240×64 only when the header dims are missing/insane) and
+`renderBitmap` flags truncated, bad-checksum, or insane-dimension dumps instead
+of silently rendering them (FB1, resolved). This is the physical LCD, independent
+of app navigation. Render any capture with `npm run screen <fixture> out.png`.
 
 ## 8. Dual DSP & presets `[V/D]`
 
@@ -312,8 +319,9 @@ distinct ids; id 0 = broadcast (§1).
   mis-tokenize (latent).
 - **Framing** `[V]` — OBJECTINFO uses CRLF lines + trailing NUL; VALUE_DUMP does
   not (see §1).
-- **Screen dump carries a checksum** `[D]` — the trailing byte is a sum-to-zero
-  checksum (§7); the app currently doesn't verify it.
+- **Screen dump carries a checksum** `[V]` — the trailing byte is a sum-to-zero
+  checksum over the size field through the checksum byte (§7); the decoder now
+  verifies it and flags a mismatch (FB1, resolved).
 - **Bad reads degrade to empty, not error** `[V]` (live-probed) — `OBJECTINFO`
   on an unknown key returns a **type-8 empty object**; `VALUE_DUMP` on an unknown
   key returns the key with an **empty value**. No `SYSEXC_ERROR` for reads. So a

@@ -77,14 +77,30 @@ The denibbled stream is **1933 bytes**, and Tech Note 34 specifies its layout:
 | 4–7          | height in pixels (u32) — `0x00000040` = 64        |
 | 8–11         | bitmap size in bytes (u32) — 1920                 |
 | 12–1931      | 1920 bytes of pixel data                          |
-| 1932         | 1-byte checksum (all bytes incl. size sum to 0)   |
+| 1932         | 1-byte checksum (see below)                        |
 
 So `SCREEN.HEADER_BYTES = 12` is really three u32 fields (width/height/size).
 Pixels are **`ceil(width/8) × height`, 1 bit per pixel, MSB = leftmost** — for
 240×64 that's 30 bytes/row — a plain row-major decode
-(`framebuffer.js:computePixels`). A set bit is a lit (green) pixel. The decoder
-hardcodes 240×64 today; per the spec it could read the dimensions from the
-header and verify the checksum (tracker follow-up).
+(`framebuffer.js:computePixels`). A set bit is a lit (green) pixel.
+
+**Checksum (exact, confirmed against a full hardware capture).** The trailing
+byte is set so that the sum of **every byte from the size field (offset 8)
+through the checksum byte, inclusive, is `0 mod 256`** — i.e.
+`sum(bytes[8 .. 1932]) & 0xFF === 0`. It does *not* cover the width/height
+fields (offsets 0–7). Tech Note 34's terser phrasing "all bytes incl. size sum
+to 0" means *from* the size field; the constants
+(`SCREEN.CHECKSUM_SUM_OFFSET = 8`) and `framebuffer.js:parseScreenHeader` make
+this unambiguous, and it is pinned by a test against `screen-dump-black-hole.txt`.
+
+**The decoder reads the header.** `framebuffer.js:parseScreenHeader` reads
+width/height/size from the header, `computePixels` derives the dimensions from
+it (falling back to `SCREEN.WIDTH`/`HEIGHT` = 240×64 only when the header dims
+are missing or out of range), and `bitmap.js:renderBitmap` logs an integrity
+error — rather than silently painting a partial or corrupt screen — when a dump
+is truncated, has a bad checksum, or carries insane dimensions. (A truncated
+dump is exactly the FB5 capture failure mode: the `@julusian/midi` CLI receive
+path caps the screen SysEx at 2048 bytes; see the issue tracker.)
 
 > Historical note: earlier code used a 13-byte header and compensated for the
 > resulting 1-byte misalignment with a column rotate + a 1px shift of the first

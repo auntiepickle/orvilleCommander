@@ -21,7 +21,9 @@ describe('denibble', () => {
 });
 
 describe('computePixels', () => {
-  // 13-byte header + 1920 data bytes, all 0xff (every pixel lit).
+  // 1933 bytes all 0xff (12-byte header + 1920 pixels + checksum); every
+  // pixel lit. The all-0xff header parses as an insane width, so dims fall
+  // back to 240x64 (see the fallback test below).
   const allOn = new Array(13 + 1920).fill(0xff);
 
   test('returns a full RGBA buffer of the right size', () => {
@@ -70,6 +72,13 @@ describe('computePixels', () => {
   test('falls back to 240x64 when the header dims are insane', () => {
     const px = computePixels(new Array(13 + 1920).fill(0xff)); // width parses as 0xffffffff
     expect(px.length).toBe(240 * 64 * 4);
+  });
+
+  test('zero-fills without throwing when the buffer is truncated below its dims', () => {
+    const px = computePixels(tinyScreen.slice(0, 14)); // 16x2 header intact, pixels cut short
+    expect(px.length).toBe(16 * 2 * 4);
+    expect(px[(0 * 16 + 0) * 4 + 1]).toBe(255); // first captured pixel still lit
+    expect(px[(1 * 16 + 15) * 4 + 1]).toBe(0); // beyond captured bytes -> off
   });
 });
 

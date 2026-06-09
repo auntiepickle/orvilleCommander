@@ -40,3 +40,6 @@ combine/
 *.bak
 
 logs/
+
+# Temp HIL captures (underscore-prefixed fixtures written by orville-probe/hil-screenshot)
+tests/fixtures/_*.txt

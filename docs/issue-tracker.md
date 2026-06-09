@@ -182,6 +182,18 @@ NOTE: Batch 1.4 (B10) complete.
         rapid probe open/close (recovers on its own). The HIL loop itself is already proven (drove A/B +
         read live; render-screen.js renders captured screens). For long live sessions use one long-lived
         process. Noted in device-model.md §12.
+- [x] B10g.4 HIL screenshot loop tool + RDP root-cause for "no MIDI devices":
+      * build_tools/hil-screenshot.cjs (npm `screenshot`): single long-lived process — opens MIDI
+        once, optional `--press k1,k2`, sends 0x18, captures 0x17, saves raw fixture, renders PNG via
+        render-screen.js. Implemented + lint/`node --check` clean. NOT yet exercised end-to-end live.
+      * ROOT CAUSE of the intermittent "no MIDI input devices currently available": RDP, not USB
+        churn or the device. Proven: Get-PnpDevice (system-global) shows U6MIDI Pro + all 6 ports OK,
+        but BOTH node's @julusian/midi AND raw WinMM midiInGetNumDevs() (per-session) return 0 in/
+        1 out (GS Wavetable only). RDP redirects the audio/MIDI stack; the physical interface stays
+        bound to the CONSOLE session and is invisible to the remote session's WinMM. Captures worked
+        earlier because the active session was the console. => Live HIL (G2, hil-screenshot) must run
+        from the physical console, OR mstsc Remote audio = "Play on remote computer" (unreliable for
+        MIDI in). Offline work (replay fixtures) is unaffected by RDP.
 
 ---
 

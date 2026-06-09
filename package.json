@@ -10,6 +10,7 @@
     "combine": "node build_tools/combine.cjs",
     "capture:fixtures": "node build_tools/capture-fixtures.cjs",
     "screen": "node build_tools/render-screen.js",
+    "screenshot": "node build_tools/hil-screenshot.cjs",
     "test": "jest",
     "lint": "eslint .",
     "format": "prettier --write .",

@@ -1,0 +1,160 @@
+/**
+ * Hardware-in-the-loop screenshot: drive the Orville and capture what it shows.
+ *
+ * Opens the MIDI ports ONCE (gentle on the USB driver — separate-process probing
+ * destabilized the U6MIDI Pro), optionally presses a sequence of front-panel
+ * keys, requests a screen dump (0x18 -> 0x17), saves the raw capture, and
+ * renders it to a PNG via build_tools/render-screen.js (the canonical decoder).
+ *
+ * Usage:
+ *   node build_tools/hil-screenshot.cjs --png logs/shot.png
+ *   node build_tools/hil-screenshot.cjs --press setup --png logs/setup.png
+ *   node build_tools/hil-screenshot.cjs --press ab,parameter --png logs/b-params.png
+ *
+ * Options: --in <substr> --out <substr> --dev <n> --win <ms>
+ *          --press <k1,k2,...>  keys to send before capturing (see KEYS)
+ *          --name <fixtureName> raw capture file (default _hil-shot) in tests/fixtures/
+ *          --png <path>         output PNG (default logs/hil-shot.png)
+ */
+
+const fs = require('node:fs');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+
+const KEYS = {
+  up: [0xfe, 0xff, 0xfd, 0xff],
+  down: [0xff, 0xfe, 0xfd, 0xff],
+  left: [0xff, 0xfe, 0xff, 0xff],
+  right: [0xfe, 0xff, 0xff, 0xff],
+  enter: [0xff, 0xff, 0xff, 0xef],
+  select: [0xff, 0xff, 0xfe, 0xff],
+  program: [0xf7, 0xff, 0xff, 0xff],
+  parameter: [0xff, 0xf7, 0xff, 0xff],
+  levels: [0xff, 0xff, 0xff, 0xfd],
+  setup: [0xff, 0xff, 0xf7, 0xff],
+  bypass: [0xff, 0xff, 0xfd, 0xff],
+  inc: [0xff, 0xff, 0xff, 0x7f],
+  dec: [0xff, 0xff, 0xff, 0xbf],
+  soft1: [0xfb, 0xff, 0xff, 0xff],
+  soft2: [0xff, 0xfb, 0xff, 0xff],
+  soft3: [0xff, 0xff, 0xfb, 0xff],
+  soft4: [0xff, 0xff, 0xff, 0xfb],
+  ab: [0xfd, 0xff, 0xfd, 0xff],
+};
+
+function parse(argv) {
+  const o = {
+    in: 'MIDIIN3 (U6MIDI Pro)',
+    out: 'MIDIOUT2 (U6MIDI Pro)',
+    dev: 1,
+    win: 3000,
+    press: [],
+    name: '_hil-shot',
+    png: 'logs/hil-shot.png',
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === '--in') o.in = argv[++i];
+    else if (a === '--out') o.out = argv[++i];
+    else if (a === '--dev') o.dev = parseInt(argv[++i], 10);
+    else if (a === '--win') o.win = parseInt(argv[++i], 10);
+    else if (a === '--press') o.press = argv[++i].split(',').filter(Boolean);
+    else if (a === '--name') o.name = argv[++i];
+    else if (a === '--png') o.png = argv[++i];
+  }
+  return o;
+}
+
+const nibble = (mask) => mask.flatMap((b) => [(b >> 4) & 0x0f, b & 0x0f]);
+const hex = (b) => b.map((x) => x.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function findPort(inst, sub) {
+  for (let i = 0; i < inst.getPortCount(); i++) if (inst.getPortName(i).includes(sub)) return i;
+  return -1;
+}
+
+async function main() {
+  const o = parse(process.argv.slice(2));
+  const midi = require('@julusian/midi');
+  const input = new midi.Input();
+  const output = new midi.Output();
+
+  const inIdx = findPort(input, o.in);
+  const outIdx = findPort(output, o.out);
+  if (inIdx === -1 || outIdx === -1) {
+    console.error(`MIDI port not found (in=${inIdx}, out=${outIdx}). Is the interface up?`);
+    process.exit(1);
+  }
+  input.openPort(inIdx);
+  output.openPort(outIdx);
+  input.ignoreTypes(false, true, true);
+
+  // 1. Drive any requested keypresses (single open port, paced).
+  for (const k of o.press) {
+    const mask = KEYS[k];
+    if (!mask) {
+      console.error(`unknown key '${k}'. known: ${Object.keys(KEYS).join(', ')}`);
+      input.closePort();
+      output.closePort();
+      process.exit(1);
+    }
+    output.sendMessage([0xf0, 0x1c, 0x70, o.dev, 0x01, ...nibble(mask), 0xf7]);
+    console.error(`pressed ${k}`);
+    await sleep(300);
+  }
+  if (o.press.length) await sleep(300); // settle
+
+  // 2. Request a screen dump and capture the 0x17 reply.
+  const got = await new Promise((resolve) => {
+    let done = false;
+    const h = (_dt, m) => {
+      if (
+        !done &&
+        m.length > 5 &&
+        m[0] === 0xf0 &&
+        m[1] === 0x1c &&
+        m[2] === 0x70 &&
+        m[4] === 0x17
+      ) {
+        done = true;
+        input.removeListener('message', h);
+        resolve(Array.from(m));
+      }
+    };
+    input.on('message', h);
+    output.sendMessage([0xf0, 0x1c, 0x70, o.dev, 0x18, 0xf7]);
+    setTimeout(() => {
+      if (!done) {
+        input.removeListener('message', h);
+        resolve(null);
+      }
+    }, o.win);
+  });
+
+  input.closePort();
+  output.closePort();
+
+  if (!got) {
+    console.error(`no 0x17 screen reply within ${o.win}ms`);
+    process.exit(1);
+  }
+
+  // 3. Save the raw capture and render it to PNG via the canonical decoder.
+  const dir = path.join(__dirname, '..', 'tests', 'fixtures');
+  fs.mkdirSync(dir, { recursive: true });
+  const fixture = path.join(dir, `${o.name}.txt`);
+  fs.writeFileSync(fixture, hex(got) + '\n');
+  console.log(`captured ${got.length} bytes -> ${fixture}`);
+
+  fs.mkdirSync(path.dirname(o.png), { recursive: true });
+  execFileSync('node', [path.join(__dirname, 'render-screen.js'), fixture, o.png, '6'], {
+    stdio: 'inherit',
+  });
+  console.log(`rendered -> ${o.png}`);
+}
+
+main().catch((e) => {
+  console.error('error:', e);
+  process.exit(1);
+});

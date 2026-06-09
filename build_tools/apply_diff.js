@@ -42,7 +42,7 @@ console.log(`Backup created: ${backupFile}`);
 try {
   child_process.execSync(`git apply --reject --whitespace=fix ${diffFile}`, { stdio: 'inherit' });
   console.log('Diff applied successfully with git apply.');
-} catch (err) {
+} catch {
   console.log('git apply failed. Falling back to manual hunk application...');
   // Parse diff and apply manually (simple for single-hunk diffs)
   const diffContent = fs.readFileSync(diffFile, 'utf8').replace(/\r\n/g, '\n'); // Normalize to LF

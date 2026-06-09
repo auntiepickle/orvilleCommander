@@ -215,7 +215,7 @@ export function parseSubObject(line) {
   const parent = parts[3] || '';
   const statement = parts[4] || '';
   const tag = parts[5] || '';
-  let value = '';
+  let value;
   let min = '',
     max = '',
     step = '';

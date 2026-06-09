@@ -246,4 +246,21 @@ describe('addSysexListener multi-packet reassembly', () => {
     handler({ data: Uint8Array.from([0xf0, 0x1c, 0x70, 1, 0x2e, 0x41, 0xf7]) });
     expect(parseResponse).toHaveBeenCalledWith([0xf0, 0x1c, 0x70, 1, 0x2e, 0x41, 0xf7]);
   });
+
+  test('reassembles a SysEx split across three packets', () => {
+    handler({ data: [0xf0, 0x1c, 0x70, 1, 0x17] }); // header
+    handler({ data: [0x01, 0x02] }); // middle continuation
+    expect(parseResponse).not.toHaveBeenCalled();
+    handler({ data: [0x03, 0xf7] }); // final continuation + terminator
+    expect(parseResponse).toHaveBeenCalledTimes(1);
+    expect(parseResponse).toHaveBeenCalledWith([0xf0, 0x1c, 0x70, 1, 0x17, 0x01, 0x02, 0x03, 0xf7]);
+  });
+
+  test('ignores a stray continuation packet (no F0 header) ending in F7', () => {
+    handler({ data: [0x03, 0x04, 0xf7] }); // headerless fragment that happens to end in F7
+    expect(parseResponse).not.toHaveBeenCalled(); // F0 guard rejects it
+    handler({ data: [0xf0, 0x1c, 0x70, 1, 0x2e, 0x41, 0xf7] }); // then a real message
+    expect(parseResponse).toHaveBeenCalledTimes(1);
+    expect(parseResponse).toHaveBeenCalledWith([0xf0, 0x1c, 0x70, 1, 0x2e, 0x41, 0xf7]);
+  });
 });

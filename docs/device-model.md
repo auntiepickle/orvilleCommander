@@ -254,7 +254,8 @@ of app navigation. Render any capture with `npm run screen <fixture> out.png`.
 ~3872-byte SysEx), so `npm run screenshot`
 (`build_tools/hil-screenshot.cjs`) reassembles chunks until `F7` before
 decoding — see `protocol.md` §Screen bitmap "Capturing screens (HIL)" and
-tracker FB5.
+tracker FB5. (Reassembling inbound SysEx until `F7` is general to every inbound
+type; the browser app does it too in `midi.js:addSysexListener` — tracker FB6.)
 
 ## 8. Dual DSP & presets `[V/D]`
 

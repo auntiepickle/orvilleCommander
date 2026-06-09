@@ -165,7 +165,9 @@ export function addSysexListener() {
     const data = Array.from(e.data);
     if (data[0] === SYSEX.START) sysexBuffer = data;
     else sysexBuffer = sysexBuffer.concat(data);
-    if (sysexBuffer[sysexBuffer.length - 1] === SYSEX.END) {
+    // Flush only a properly framed message (starts F0, ends F7). The F0 guard
+    // discards a stray continuation packet that arrives with no header.
+    if (sysexBuffer[0] === SYSEX.START && sysexBuffer[sysexBuffer.length - 1] === SYSEX.END) {
       parseResponse(sysexBuffer);
       sysexBuffer = [];
     }

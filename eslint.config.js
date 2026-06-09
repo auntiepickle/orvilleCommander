@@ -6,14 +6,12 @@ export default [
   { ignores: ['node_modules/**', 'combine/**', 'dist/**', '**/__snapshots__/**'] },
   js.configs.recommended,
   {
-    // Project-wide defaults: surface dead code and stray console use as warnings
-    // (these are cleaned up in the Phase 1 prune batches; warnings keep CI green meanwhile).
+    // Phase 1 cleanup is complete, so these are hard errors now. Prefix an
+    // intentionally-unused var/arg with _ to opt out (e.g. reserved params).
     rules: {
-      'no-unused-vars': 'warn',
-      'no-console': 'warn',
-      // Flagged spots are cleaned up in the Phase 1 prune batches; keep as warnings
-      // until then, then promote back to error once the code is clean.
-      'no-useless-assignment': 'warn',
+      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-console': 'error',
+      'no-useless-assignment': 'error',
     },
   },
   {

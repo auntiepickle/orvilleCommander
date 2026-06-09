@@ -86,12 +86,15 @@ HUMAN-GATE: none
 - [x] B8  parser comment corrected (isLoadingPreset clear is in event-bridge.js); CLAUDE.md architecture + module-structure sections refreshed for the completed refactor; toggleDspKey single-definition note.
 HUMAN-GATE: none
 
-### Phase 1 closeout — deferred
-- [ ] Lint-zeroing: promote no-unused-vars / no-console / no-useless-assignment to error once 19 remaining warnings cleared.
-      Blocked on the main.js unwired-button finding (below) + ~5 no-useless-assignment in parser/renderer (some resolve naturally in Phase 3).
-- [ ] FINDING (possible UX bug): main.js grabs ~11 button/input refs never wired to handlers
-      (backBtn, exportConfigBtn, importConfigInput, importConfigBtn, sendRequestBtn, getValueBtn, setValueInput, setValueBtn,
-      applyLogCategoriesBtn, keyInput, logCategoriesJson). Determine: dead lookups (remove) vs buttons in index.html missing handlers (wire or remove from UI).
+### Phase 1 closeout   [branch: chore/phase1-closeout]  [PR: #66]   (complete)
+- [x] Lint-zeroing: no-unused-vars / no-console / no-useless-assignment promoted to ERROR (with `^_`
+      opt-out for intentionally-reserved args, e.g. notifyResponse(_type,_key)). All 19 warnings cleared:
+      parser value init, renderer graphic-EQ inits + dead ancestorSeparatorAdded stores, apply_diff catch.
+      CI now runs `npm run lint` + `npm run format:check` so it can't regress.
+- [x] FINDING resolved (decision: remove): the 11 unwired Debug-Tools controls were real but handler-less.
+      Removed from index.html (key-input/send-request/get-value/set-value-input/set-value/back-btn,
+      export-config/import-config/import-config-btn, log-categories-json/apply-log-categories) and the
+      matching dead consts from main.js. Nothing functional lost (they did nothing). Can be built properly later if wanted.
 
 ### Batch 1.4 — No magic numbers: audit + document (B10)  [requested]   [branch: chore/extract-constants]  [PR: #64]
 Principle (now a CLAUDE.md convention): no unexplained literal constants anywhere — name and justify

@@ -395,8 +395,8 @@ export function renderScreen(subs, ascii, logParam) {
     displayLines.push(titleText);
     // Group graphic EQ NUMs with position 'a'
     const graphicEqSubs = subs.slice(1).filter((s) => s.type === 'NUM' && s.position === 'a');
-    let graphicEqLine = '';
-    let graphicEqHtml = '';
+    let graphicEqLine;
+    let graphicEqHtml;
     if (graphicEqSubs.length > 0) {
       const formattedParts = graphicEqSubs.map((s) => {
         const value = appState.currentValues[s.key] || s.value;
@@ -667,7 +667,6 @@ export function renderScreen(subs, ascii, logParam) {
         !ancestorSeparatorAdded
       ) {
         displayLines.push('');
-        ancestorSeparatorAdded = true;
       }
       const upperEntryIndex = appState.keyStack.length - 2;
       const upperEntry = appState.keyStack[upperEntryIndex];
@@ -777,7 +776,6 @@ export function renderScreen(subs, ascii, logParam) {
         !ancestorSeparatorAdded
       ) {
         mainHtmlLines.push('');
-        ancestorSeparatorAdded = true;
       }
       const upperEntryIndex = appState.keyStack.length - 2;
       const upperEntry = appState.keyStack[upperEntryIndex];

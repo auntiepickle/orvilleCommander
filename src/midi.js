@@ -46,15 +46,14 @@ function recordRequest(key) {
  * before any setState fan-out). Decrements once per accepted response
  * regardless of which sub-branch handles the data.
  *
- * @param {string} type - 'objectinfo' | 'valuedump'. Reserved for
- *   future per-type accounting in 7d; the current counter does not
- *   differentiate.
- * @param {string} key - The response's primary key (subs[0].key for
+ * @param {string} _type - 'objectinfo' | 'valuedump'. Reserved for
+ *   future per-type accounting; the current counter does not differentiate
+ *   (underscore marks it intentionally unused for now).
+ * @param {string} _key - The response's primary key (subs[0].key for
  *   OBJECTINFO, parts[0] for VALUE_DUMP). Reserved for future
- *   request/response correlation in 7d; the current counter does not
- *   match by key.
+ *   request/response correlation; the current counter does not match by key.
  */
-export function notifyResponse(type, key) {
+export function notifyResponse(_type, _key) {
   if (outstanding === 0) return;
   outstanding--;
   waveReceives++;

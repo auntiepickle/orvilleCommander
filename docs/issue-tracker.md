@@ -147,6 +147,15 @@ reviewer agents swept all of src/; findings consolidated below.
       complete && checksumOk) and re-rendered. Verified against the device. SCOPE: only hil-screenshot.cjs
       (the golden-capture path) was fixed; orville-probe.cjs's diagnostic `screen` action still keeps only the
       first chunk, which is fine for a quick diagnostic dump — fix it there too only if it ever needs full screens.
+- [x] FB6 RESOLVED (branch fix/app-sysex-reassembly): the SAME multi-packet truncation could hit the BROWSER
+      APP, not just the CLI. midi.js addSysexListener handed a single WebMIDI `e.data` straight to parseResponse
+      with no reassembly, so if Chrome ever delivers a long SysEx split across packets, the app would render a
+      truncated screen (0x17) OR a truncated/corrupt OBJECTINFO menu (e.g. the ~70-name bank list). FIX:
+      addSysexListener now buffers — starts a new buffer on F0 (SYSEX.START), appends continuation packets, and
+      only calls parseResponse on the F7 terminator; a pass-through when messages already arrive complete.
+      Covers every inbound SysEx type, not just the screen. Tested (complete pass-through, split reassembly,
+      buffer reset on new F0, Uint8Array data). NOT yet verified whether Chrome actually chunks on this device
+      (would need an in-browser test against the unit); the fix is correct either way (defensive + matches FB5).
 - [x] FB4 RESOLVED (branch fix/dump-watchdog-idle-reset): the midi.js dump watchdog was a fixed 1500ms hard
       ceiling that fired mid-response on large enumerations like the bank list (OBJECTINFO 10020012, ~70 names,
       ~4-6s). Replaced with an idle/silence watchdog (WATCHDOG_IDLE_MS 1500, rearmed on every send and receive)

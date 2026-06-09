@@ -152,8 +152,23 @@ export function addSysexListener() {
     log('Error: MIDI input not set; cannot add listener', 'error', 'error');
     return;
   }
+  // Reassemble multi-packet SysEx before parsing. Chrome's Web MIDI normally
+  // delivers a complete F0..F7 message in one event, but a long SysEx can be
+  // split across packets by the platform/driver (the ~3872-byte 0x17 screen
+  // dump and large OBJECTINFO dumps travel over a 31250-baud DIN link from the
+  // Orville). Start a new buffer on F0, append continuation packets, and only
+  // parse once the F7 terminator arrives. When messages already arrive complete
+  // this is a pass-through. (Matches the CLI capture tool; see
+  // docs/protocol.md "Capturing screens (HIL)".)
+  let sysexBuffer = [];
   selectedInput.addListener('sysex', (e) => {
-    parseResponse(e.data);
+    const data = Array.from(e.data);
+    if (data[0] === SYSEX.START) sysexBuffer = data;
+    else sysexBuffer = sysexBuffer.concat(data);
+    if (sysexBuffer[sysexBuffer.length - 1] === SYSEX.END) {
+      parseResponse(sysexBuffer);
+      sysexBuffer = [];
+    }
   });
 }
 

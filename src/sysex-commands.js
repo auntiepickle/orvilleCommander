@@ -5,7 +5,8 @@
 
 // SysEx framing bytes.
 export const SYSEX = {
-  END: 0xf7, // F7 SysEx end (used as a text marker when scanning hex dumps)
+  START: 0xf0, // F0 SysEx start (first byte of every inbound message)
+  END: 0xf7, // F7 SysEx end (inbound reassembly terminator; also a text marker when scanning hex dumps)
   MANUFACTURER: [0x1c, 0x70], // Eventide ID + DSP4000 product ID
   VALUE_SEPARATOR: 0x20, // space between key and value in a VALUE_PUT
   FRAME_PREFIX_LEN: 5, // F0 1C 70 <deviceId> <cmd> before the payload

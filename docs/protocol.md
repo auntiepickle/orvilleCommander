@@ -33,6 +33,19 @@ F0 1C 70 <deviceId> <cmd> <payload...> F7
 The five bytes before the payload are `SYSEX.FRAME_PREFIX_LEN`; inbound parsing
 slices `data.slice(5, -1)` to get the payload.
 
+**Inbound reassembly (every inbound type).** A single inbound SysEx is not
+guaranteed to arrive in one delivery: a long message can be split across packets
+by the platform/MIDI stack, and the slow 31250-baud DIN link makes the big dumps
+(`0x17` screen, large `0x32` OBJECTINFO such as the ~70-name bank list) the most
+likely to fragment. Both inbound paths therefore reassemble from `F0`
+(`SYSEX.START`) until the `F7` terminator before parsing, and feed the parser one
+complete message — start a new buffer on `F0`, append continuation packets, parse
+on `F7`. When a message already arrives whole this is a pass-through. The browser
+app does this in `midi.js:addSysexListener` (tracker FB6); the CLI capture tool
+does the same (tracker FB5; see **Capturing screens (HIL)** for the
+hardware-specific chunk sizes/timing). This applies to *all* inbound types
+(`0x17`, `0x2e`, `0x32`), not just screens.
+
 **Device ID.** The hardware uses 1–63. OrvilleCommander treats `0` as an
 auto-detect sentinel: on the first inbound message it adopts `data[3]` as the
 device ID, then matches on it thereafter.
@@ -122,7 +135,11 @@ accumulates chunks from the header until it sees `F7` (a ~4 s window with retry)
 then validates completeness. An earlier version kept only the first chunk and so
 produced a 2048-byte / top-rows-only capture — this is FB5 in the issue tracker,
 and was a transmission-speed/chunking artifact, **not** a device or buffer-size
-limit. Anyone capturing screens over this MIDI path hits the same chunking.
+limit. Anyone capturing screens over this MIDI path hits the same chunking. The
+reassemble-until-`F7` rule itself is general to every inbound type and is not
+CLI-specific — see **Inbound reassembly** under §Framing; the browser app does
+the same in `midi.js:addSysexListener` (tracker FB6). This section just documents
+the hardware-specific chunk sizes and timing the CLI tool observes.
 
 ### Object-info — request `0x31` (out), response `0x32` (in)
 

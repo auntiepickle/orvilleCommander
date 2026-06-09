@@ -35,7 +35,9 @@ index.html
       └─ hex-extract.js     debug-file hex parsing
 ```
 
-Data flow: user clicks → `controls.js` sends SysEx via `midi.js` → Orville responds → `midi.js` listener → `parser.js` parses, writes state via `store.setState`, and emits events on `events.js` → `event-bridge.js` coalesces and calls `renderer.renderScreen` → paints `#lcd`. Bitmap path: `0x17` SysEx → `parser.js` denibbles (`bitmap.js`) → emits `screen:received` → `event-bridge.js` → `renderBitmap` on the canvas.
+Data flow: user clicks → `controls.js` sends SysEx via `midi.js` → Orville responds → `midi.js` listener (`addSysexListener` reassembles multi-packet SysEx from `F0` to `F7` before parsing — see below) → `parser.js` parses, writes state via `store.setState`, and emits events on `events.js` → `event-bridge.js` coalesces and calls `renderer.renderScreen` → paints `#lcd`. Bitmap path: `0x17` SysEx → `parser.js` denibbles (`bitmap.js`) → emits `screen:received` → `event-bridge.js` → `renderBitmap` on the canvas.
+
+Inbound SysEx is not necessarily one WebMIDI event per message: a long dump (`0x17` screen, large `0x32` OBJECTINFO like the ~70-name bank list) can be split across packets, so `addSysexListener` buffers from `F0` until `F7` and calls `parseResponse` once per complete message — a pass-through when messages already arrive whole. Applies to every inbound type, not just screens. See `docs/protocol.md` §Framing "Inbound reassembly" and tracker FB6.
 
 ## Module structure (refactor complete)
 

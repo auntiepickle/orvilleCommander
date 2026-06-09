@@ -18,6 +18,7 @@
 import { parseResponse } from '../../src/parser.js';
 import { registerEventBridge } from '../../src/event-bridge.js';
 import { setMidiPorts } from '../../src/midi.js';
+import { updateScreen } from '../../src/renderer.js';
 import { appState } from '../../src/state.js';
 
 // jsdom has no 2D canvas context. Attach a minimal backing-store stub so the
@@ -57,6 +58,21 @@ export function createReplayHarness({ deviceId = 0, hideLoading = () => {} } = {
     },
     setCurrentKey(key) {
       appState.currentKey = key;
+    },
+    // Navigate to a key the way the app does: point currentKey there and call
+    // the real updateScreen, which arms a request wave (sendObjectInfoDump +
+    // sendValueDump through real midi.js, so the per-wave counter increments).
+    // Feeding the matching response(s) then drains the wave and fires
+    // dumpComplete — exercising the real completion path, not a timer guess.
+    navigate(key) {
+      appState.currentKey = key;
+      updateScreen();
+    },
+    // Advance fake timers far enough to flush both the legacy render timers
+    // (200ms) and the wave watchdog (1500ms), so assertions are agnostic to
+    // which mechanism triggers the render.
+    flush(ms = 2000) {
+      jest.advanceTimersByTime(ms);
     },
     lcdHtml() {
       return document.getElementById('lcd').innerHTML;

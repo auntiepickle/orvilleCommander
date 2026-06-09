@@ -113,10 +113,13 @@ reviewer agents swept all of src/; findings consolidated below.
       bitmap (nibbled; 12-byte header + 1920 1bpp + 1 trailing; row-major MSB-left), OBJECTINFO
       sub-object field order per type, VALUE request/put/dump (no PUT ack), key conventions. CLAUDE.md
       protocol table now links to it.
-- [x] B10d Wrote docs/device-model.md (companion to protocol.md): the conceptual model of how the unit
-      works — object tree + types, key conventions, dual-DSP/presets, value semantics, screen, and the
-      empirical quirks. LIVING DOC: extend it as hardware exploration reveals more (active-DSP reporting,
-      full bank taxonomy, the 0x17 trailing byte). Linked from protocol.md and CLAUDE.md.
+- [x] B10d docs/device-model.md is now a DURABLE FROM-SCRATCH SPEC (not just a reference): transport/
+      framing incl. the OBJECTINFO-vs-VALUE response-framing difference, command table, full object-line
+      grammar (child-count-in-hex, variable-length keys, position codes), per-type field grammar, key
+      conventions, value semantics, screen format, dual-DSP/presets, behavioral contract, a
+      "reimplement from scratch" checklist, and a §12 open-questions hardware backlog. Confidence-marked
+      [V]/[I]/[?]. Grounded in all tests/fixtures + parser/framebuffer + session-knowledge-dump §13.
+      Drives phase3-state-model.md. LIVING DOC — extend as hardware answers §12.
 
 NOTE: Batch 1.4 (B10) complete.
 

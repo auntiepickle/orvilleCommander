@@ -113,6 +113,10 @@ reviewer agents swept all of src/; findings consolidated below.
       bitmap (nibbled; 12-byte header + 1920 1bpp + 1 trailing; row-major MSB-left), OBJECTINFO
       sub-object field order per type, VALUE request/put/dump (no PUT ack), key conventions. CLAUDE.md
       protocol table now links to it.
+- [x] B10d Wrote docs/device-model.md (companion to protocol.md): the conceptual model of how the unit
+      works — object tree + types, key conventions, dual-DSP/presets, value semantics, screen, and the
+      empirical quirks. LIVING DOC: extend it as hardware exploration reveals more (active-DSP reporting,
+      full bank taxonomy, the 0x17 trailing byte). Linked from protocol.md and CLAUDE.md.
 
 NOTE: Batch 1.4 (B10) complete.
 

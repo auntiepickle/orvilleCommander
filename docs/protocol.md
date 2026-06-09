@@ -7,6 +7,10 @@ reverse-engineered from the device's responses and is documented from the code.
 Named constants live in [`src/sysex-commands.js`](../src/sysex-commands.js)
 (protocol) and [`src/constants.js`](../src/constants.js) (timing/layout).
 
+For the conceptual model — the object tree, presets/dual-DSP, value semantics,
+and behavioral quirks — see [`device-model.md`](device-model.md). This file is
+the wire format; that one is how the device behaves.
+
 ## Framing
 
 Every message is:

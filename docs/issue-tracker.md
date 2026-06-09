@@ -185,7 +185,10 @@ NOTE: Batch 1.4 (B10) complete.
 - [x] B10g.4 HIL screenshot loop tool + RDP root-cause for "no MIDI devices":
       * build_tools/hil-screenshot.cjs (npm `screenshot`): single long-lived process — opens MIDI
         once, optional `--press k1,k2`, sends 0x18, captures 0x17, saves raw fixture, renders PNG via
-        render-screen.js. Implemented + lint/`node --check` clean. NOT yet exercised end-to-end live.
+        render-screen.js. Implemented + lint/`node --check` clean.
+      * PROVEN end-to-end live (after the RDP fix below): baseline capture (A: Black Hole / space
+        params), `--press ab` drive+capture (B: MetallicChamber / detune params), then restored A.
+        Renders faithful PNGs; A2 bitmap fix confirmed clean on real hardware. G2 live loop works.
       * ROOT CAUSE of the intermittent "no MIDI input devices currently available": RDP, not USB
         churn or the device. Proven: Get-PnpDevice (system-global) shows U6MIDI Pro + all 6 ports OK,
         but BOTH node's @julusian/midi AND raw WinMM midiInGetNumDevs() (per-session) return 0 in/

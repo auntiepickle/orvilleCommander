@@ -31,7 +31,7 @@ index.html
       ├─ state.js           appState singleton (re-exported from store.js)
       ├─ sysex-commands.js  CMD / KEY protocol constants
       ├─ sysex-split.js     ASCII dump tokenizer (shared by parser + tests)
-      ├─ logger.js          gated log()
+      ├─ logger.js          gated log() + owns log level/category config (not on appState — see "Where state lives")
       └─ hex-extract.js     debug-file hex parsing
 ```
 
@@ -104,7 +104,7 @@ Sub-object types in the ASCII dump: `COL` (column/menu), `NUM`, `SET`, `CON` (co
 
 ## Where state lives
 
-Everything runtime is on `appState` (state.js). Everything persistent is in `localStorage.midiConfig` (config.js). There is no other store. If you need durable state, add it to `midiConfig` via `saveConfig`.
+Almost all runtime state is on `appState` (state.js). The exception: `logger.js` owns its own log level and per-category visibility as private module state (defaults from `constants.DEFAULT_LOG_CATEGORIES`), set via `setLogLevel` / `setLogCategories`. This was moved off `appState` (C6) so `logger.js` no longer imports `state.js`, breaking the `store` → `logger` → `state` → `store` import cycle. Everything persistent is in `localStorage.midiConfig` (config.js). There is no other store. If you need durable state, add it to `midiConfig` via `saveConfig`.
 
 ## Dev server quirks
 

@@ -287,8 +287,12 @@ from the root dump (device boots into last-used preset). Cache is a provisional 
 - [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number
 HUMAN-GATE: needs-hardware (eager-load throughput on the real unit; offline parse/render half covered by replay harness)
 
-### Batch 3.4 — Cycle cleanup
-- [ ] C6  Move logCategories off appState so logger.js no longer imports state.js (collapses store-logger-state cycle)
+### Batch 3.4 — Cycle cleanup   [branch: refactor/logcategories-off-appstate]  (GH #42)
+- [x] C6  Moved logLevel + logCategories off appState into logger.js (its own module state, defaults from
+      constants.DEFAULT_LOG_CATEGORIES). logger.js no longer imports state.js -> the store->logger->state->store
+      cycle is collapsed. parser.js bitmap-log guard dropped (log() gates the category itself); main.js sets log
+      prefs via setLogLevel/setLogCategories at boot + save; config @example updated. Tests updated (replay,
+      startup). 92 green, lint+format clean.
 HUMAN-GATE: none
 
 ### Batch 3.5 — Renderer folder-split (optional)

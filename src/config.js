@@ -56,7 +56,7 @@ export function loadConfig(
  *
  * @example
  * // Save after user selects ports
- * saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, appState.logCategories, fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, appState.presetKey);
+ * saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, getLogCategories(), fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, appState.presetKey);
  */
 export function saveConfig(
   outputId,
@@ -90,7 +90,7 @@ export function saveConfig(
  * present (at its default) for users with a pre-existing cache, instead of
  * being silently absent and treated as off by the logger.
  *
- * @param {Object} defaults - The default category map (store.js source of truth).
+ * @param {Object} defaults - The default category map (constants.DEFAULT_LOG_CATEGORIES source of truth).
  * @param {Object} [cached] - The cached category map from localStorage, if any.
  * @returns {Object} The merged category map.
  */

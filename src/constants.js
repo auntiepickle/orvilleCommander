@@ -44,3 +44,20 @@ export const CANVAS = {
 // Persistent config (localStorage).
 export const STORAGE_KEY = 'midiConfig';
 export const DEFAULT_LOG_LEVEL = 'info';
+
+// Default log-category visibility. Owned here (not on appState) so logger.js can
+// hold its own config without importing state.js — see logger.js. stateWrite is
+// off by default (verbose per-write tracing); everything else on.
+export const DEFAULT_LOG_CATEGORIES = {
+  sysexReceived: true,
+  sysexSent: true,
+  parsedDump: true,
+  valueChange: true,
+  noChange: true,
+  renderScreen: true,
+  bitmap: true,
+  screenDump: true,
+  error: true,
+  general: true,
+  stateWrite: false,
+};

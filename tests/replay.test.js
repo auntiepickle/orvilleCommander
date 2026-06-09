@@ -33,7 +33,6 @@ describe('offline replay harness', () => {
     appState.paramOffset = 0;
     appState.lastAscii = '';
     appState.updateBitmapOnChange = false;
-    appState.logCategories = { bitmap: false };
     h = createReplayHarness({ deviceId: 0 });
   });
 

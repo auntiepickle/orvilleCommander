@@ -59,8 +59,8 @@ jest.mock('../src/main.js', () => {
 });
 
 // Logger mock is INTENTIONALLY ungated. The real logger silences debug-level
-// traces when appState.logLevel === 'info' (the default) and filters by
-// appState.logCategories. The mock records every log() call regardless, which
+// traces when its logLevel === 'info' (the default) and filters by its own
+// logCategories (logger.js module state since C6). The mock records every log() call regardless, which
 // lets Tier A assert on the [stateWrite] trace that store.setState emits at
 // debug level under a category that defaults false. This is a deliberate
 // divergence from the real app's log-visibility behavior; it lets us
@@ -219,20 +219,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
       currentSubs: [],
       lastAscii: '',
       deviceId: 0,
-      logLevel: 'info',
-      logCategories: {
-        sysexReceived: true,
-        sysexSent: true,
-        parsedDump: true,
-        valueChange: true,
-        noChange: true,
-        renderScreen: true,
-        bitmap: true,
-        screenDump: true,
-        error: true,
-        general: true,
-        stateWrite: false,
-      },
+      // logLevel + logCategories now live in logger.js (C6), not appState.
       fetchBitmap: true,
       updateBitmapOnChange: true,
       currentSoftkeys: [],

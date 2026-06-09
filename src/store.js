@@ -33,20 +33,8 @@ export const appState = {
   currentSubs: [],
   lastAscii: '',
   deviceId: 0,
-  logLevel: 'info',
-  logCategories: {
-    sysexReceived: true,
-    sysexSent: true,
-    parsedDump: true,
-    valueChange: true,
-    noChange: true,
-    renderScreen: true,
-    bitmap: true,
-    screenDump: true,
-    error: true,
-    general: true,
-    stateWrite: false,
-  },
+  // logLevel + logCategories moved into logger.js (C6) to break the
+  // store -> logger -> state import cycle.
   fetchBitmap: true,
   updateBitmapOnChange: true,
   currentSoftkeys: [],

@@ -272,10 +272,14 @@ HUMAN-GATE: none
 
 ### Batch 3.2 — State-shape hardening
 - [ ] C3  Normalize keyStack mixed types (string@0, objects@1+) to always-objects or split structures (GH #39)
-- [x] C5  (branch fix/autoload-subs-param, GH #41) renderer autoload-descend now records the `subs` param it
-      was invoked with, not the global appState.currentSubs — under stale debounced delivery the global may be
-      a newer dump, which recorded the wrong keyStack parent lineage. currentKey stays global (it is the loaded
-      key, distinct from subs[0]; startup.test pins this). New renderer.test case pins the stale-delivery path.
+- [x] C5  (branch fix/autoload-subs-param, GH #41) renderer autoload-descend now sources the keyStack parent
+      entry from the `subs` param it was invoked with, not the global appState.currentSubs. NOTE (from review):
+      renderScreen re-pins currentSubs=subs at its top (render-pin), so global==param today and this was NOT an
+      observable bug — the fix is correct-by-construction / defensive (robust if the pin is ever moved/removed).
+      currentKey stays global (it is the loaded key, distinct from subs[0]; startup.test pins this). New
+      renderer.test forces a divergent stale global (no-op setter) to prove the descend reads the param —
+      verified fail-on-old / pass-on-fix. RESIDUAL (minor, follow-up): the entry's `key` still reads the global
+      appState.currentKey, the same staleness class, but no param carries the loaded key.
 - [ ] C8  Clear childSubs on navigation (GH #44 — partial clears exist in renderer; some nav paths bypass them)
 - [ ] C7  Replace endsWith('0002') meter heuristic with a protocol-based check (GH #43 — "heuristic
       masquerading as protocol"; literal already named KEY_SUFFIX.METER in #57, deeper fix = detect CON-type

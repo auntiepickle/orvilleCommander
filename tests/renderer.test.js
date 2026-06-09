@@ -265,13 +265,9 @@ describe('renderer.js', () => {
     expect(sendValueDump).toHaveBeenCalledWith('10010000', null);
   });
 
-  test('autoload-descend records the param subs, not the stale global currentSubs (#41)', () => {
+  test('autoload-descend sources the keyStack entry from the param subs, not the global (#41)', () => {
     appState.autoLoad = true;
     appState.currentKey = '401000b'; // the key being loaded (stays global)
-    // A stale global left by a newer dump — must NOT seed the keyStack entry.
-    appState.currentSubs = [
-      { type: 'COL', position: '0', key: 'STALE', parent: '', statement: 'Stale', tag: 'stale' },
-    ];
     // The subs THIS render was invoked with: two short-tag COL children, no params.
     const subs = [
       { type: 'COL', position: '0', key: '0', parent: '', statement: 'Real Root', tag: 'realroot' },
@@ -285,7 +281,30 @@ describe('renderer.js', () => {
       },
       { type: 'COL', position: '2', key: '10020000', parent: '0', statement: 'Prog', tag: 'prog' },
     ];
-    renderScreen(subs, '', mockLog);
+    // renderScreen re-pins appState.currentSubs = subs at its top, which normally
+    // keeps global == param and masks the divergence. Pin the global to a STALE
+    // value with a no-op setter so it survives that re-pin — simulating stale
+    // debounced delivery. This makes the test fail on the old code (which read
+    // appState.currentSubs[0]) and pass on the fix (which reads subs[0]).
+    const stale = [
+      { type: 'COL', position: '0', key: 'STALE', parent: '', statement: 'Stale', tag: 'stale' },
+    ];
+    Object.defineProperty(appState, 'currentSubs', {
+      configurable: true,
+      get: () => stale,
+      set: () => {}, // swallow renderScreen's render-pin write
+    });
+    try {
+      renderScreen(subs, '', mockLog);
+    } finally {
+      // Restore currentSubs as a normal data property for subsequent tests.
+      Object.defineProperty(appState, 'currentSubs', {
+        configurable: true,
+        enumerable: true,
+        writable: true,
+        value: [],
+      });
+    }
 
     expect(appState.keyStack).toHaveLength(1);
     const entry = appState.keyStack[0];

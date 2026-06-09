@@ -846,12 +846,13 @@ export function renderScreen(subs, ascii, logParam) {
         'info',
         'general'
       );
-      // Use the `subs` this render was invoked with, not the global
-      // appState.currentSubs — under stale debounced delivery the global may
-      // have been overwritten by a newer dump, which would record the wrong
-      // parent lineage in keyStack (C5 / #41). currentKey stays global: it is
-      // the key being loaded (e.g. the preset), distinct from subs[0] (the
-      // rendered page's main object).
+      // Source the keyStack parent entry from the `subs` this render was invoked
+      // with, not the global appState.currentSubs. The render-pin at the top of
+      // renderScreen keeps the global == subs today, but reading the param is
+      // correct-by-construction and stays right if a stale/newer dump ever
+      // diverges the global from this render's input (C5 / #41). currentKey stays
+      // global: it is the key being loaded (e.g. the preset), distinct from
+      // subs[0] (the rendered page's main object).
       const parentMain = subs[0];
       const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
       setState(

@@ -846,7 +846,14 @@ export function renderScreen(subs, ascii, logParam) {
         'info',
         'general'
       );
-      const parentMain = appState.currentSubs[0];
+      // Source the keyStack parent entry from the `subs` this render was invoked
+      // with, not the global appState.currentSubs. The render-pin at the top of
+      // renderScreen keeps the global == subs today, but reading the param is
+      // correct-by-construction and stays right if a stale/newer dump ever
+      // diverges the global from this render's input (C5 / #41). currentKey stays
+      // global: it is the key being loaded (e.g. the preset), distinct from
+      // subs[0] (the rendered page's main object).
+      const parentMain = subs[0];
       const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
       setState(
         {
@@ -855,7 +862,7 @@ export function renderScreen(subs, ascii, logParam) {
             {
               key: appState.currentKey,
               tag: parentTag,
-              subs: (appState.currentSubs || []).slice(),
+              subs: subs.slice(),
             },
           ],
           currentKey: softSubsLocal[0].key,

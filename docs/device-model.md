@@ -206,8 +206,14 @@ etc. Note function menus can contain DSP-prefixed keys (`Tempo` is `40090000`).
   preset roots and root return just the key: `401000b ` / `0`). `[V]`
 - **SET value:** `"<indexHex> <desc>"`, e.g. `8060001 1b off` = index `0x1b`,
   desc `off`. `[V]`
-- **Write:** `VALUE_PUT` (`0x2d <key> 0x20 <value>`). **Not acknowledged** — the
-  device sends no confirmation; re-read via `VALUE_DUMP` to confirm. `[V]`
+- **Write:** `VALUE_PUT` (`0x2d <key> 0x20 <value>`). **The device echoes a
+  `VALUE_DUMP` of the resulting value** `[V]` (live-probed) — i.e. a PUT *is*
+  acknowledged with the effective value, **even when unchanged** (put `50`→`50`
+  still echoed `50`). Out-of-range values are **clamped** to min/max, not
+  rejected (`diff/time` put `999`, max 100 → echoed `100`); no `SYSEXC_ERROR`.
+  Because the app's parser handles inbound `0x2e`, this echo already updates the
+  cache — a separate re-read isn't strictly required (relevant to the A3
+  optimistic-write decision and the Phase 3 render flow).
 - A TRG is fired by putting `1`.
 
 ## 7. Screen bitmap `[D]`
@@ -292,8 +298,10 @@ distinct ids; id 0 = broadcast (§1).
 
 ## 9. Behavioral contract & quirks
 
-- **No PUT acknowledgement** `[V]` — keep no optimistic value; reconcile by
-  re-dumping.
+- **PUTs are echoed** `[V]` (corrected) — a `VALUE_PUT` triggers a `VALUE_DUMP`
+  of the resulting (possibly clamped) value, even on no-change. So writes are
+  self-confirming; out-of-range clamps to min/max (no error). (Earlier this was
+  recorded as "no ack" — live probing showed otherwise.)
 - **Boots into last-used preset** `[V]` — read current state from root.
 - **Active DSP not on the wire** `[V]` — app-side view state.
 - **Favorites re-order** `[V]` — loading from the favorites bank can shift the
@@ -373,19 +381,23 @@ empty/nonexistent object; **bad reads** return empty (no error); the full
 (load-menu keys answer without navigating, just slowly); large enumerations are
 **slow (~4–6 s)**; **active DSP** is drivable (A/B keypress) and detectable
 (toggle + re-read the display-scoped selectors) — see §8; **keypress (`0x01`)
-works live** — we toggled A/B over MIDI.
+works live** — we toggled A/B over MIDI; **PUTs are echoed** and **out-of-range
+writes clamp** (no error) — see §6/§9.
 
-Still open — needs a hardware session or more captures:
+Still open — needs a hardware session or more captures (all minor):
 
 - A *dedicated* read for the active DSP (we can drive/detect it via §8, but no
-  single "which DSP" value key has been found — minor).
-- **CON** absolute value range (monitors have min/max specifiers, but the wire
-  value's range is unconfirmed).
-- Does a **bad write** (out-of-range `VALUE_PUT`) elicit `SYSEXC_ERROR (0x0D)`,
-  or clamp/ignore silently? (Bad *reads* are answered above.)
+  single "which DSP" value key has been found).
+- **CON** absolute value range — live meters read ~0 at rest (need an audio
+  signal through the unit to see a non-zero meter), so the wire range is still
+  unconfirmed (we treat ≈0..1).
 - The **bank-change SysEx** message format (deferred to the Programming Manual,
-  which doesn't spell it out) — capture by watching what the unit emits, or test
-  candidates.
+  which doesn't spell it out) — capture by watching what the unit emits.
+
+> Live-session note: the U6MIDI Pro USB interface intermittently drops under
+> rapid repeated port open/close (each probe is a fresh process). It recovers on
+> its own. For long live sessions, prefer a single long-lived process that opens
+> the port once.
 
 ## Sources
 

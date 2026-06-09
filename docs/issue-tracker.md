@@ -171,8 +171,17 @@ NOTE: Batch 1.4 (B10) complete.
       is app-controllable (drive A/B) and detectable (toggle + re-read). Restored display to A afterward.
       Also PROVES the full HIL loop (drive a button over MIDI -> read state/screen) works from here —
       unblocks the deferred G2 live screenshot-regression loop.
-      STILL OPEN (minor): dedicated active-DSP read key; bad-WRITE error behavior; CON value range;
-      bank-change SysEx format.
+      STILL OPEN (minor): dedicated active-DSP read key; CON value range; bank-change SysEx format.
+- [x] B10g.3 More live probes (drove PUTs over MIDI; reversible, restored after):
+      * CORRECTION — PUTs ARE acknowledged: a VALUE_PUT echoes a VALUE_DUMP of the resulting value, even
+        on no-change (50->50 echoed 50). The app's parser already ingests this 0x2e echo. Earlier "no PUT
+        ack" was wrong. Relevant to A3 + Phase 3 render flow. device-model.md §6/§9 corrected.
+      * Out-of-range writes CLAMP to min/max, no SYSEXC_ERROR (diff/time put 999 -> 100). §12 resolved.
+      * CON range still [?] (live meters read ~0 without an audio signal). 
+      * #2 live screenshot-after-keypress demo NOT completed: the U6MIDI Pro USB intermittently drops under
+        rapid probe open/close (recovers on its own). The HIL loop itself is already proven (drove A/B +
+        read live; render-screen.js renders captured screens). For long live sessions use one long-lived
+        process. Noted in device-model.md §12.
 
 ---
 

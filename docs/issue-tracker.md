@@ -131,9 +131,11 @@ reviewer agents swept all of src/; findings consolidated below.
 ### Device-research follow-ups (from Tech Note 34)
 - [ ] FB1 framebuffer.js robustness: READ width/height/size from the 0x17 header (per TN34) instead of
       hardcoding 240x64, and verify the trailing checksum. CODE change — pending (own PR). Low priority.
-- [ ] FB4 (NEW, from live capture) midi.js watchdog (WATCHDOG_MS 1500) is too SHORT: large enumerations
-      like the bank list (OBJECTINFO 10020012, ~70 names) take ~4-6s, so a wave would hit the watchdog
-      mid-response. Raise it / make adaptive before the Phase 3 eager loader relies on dumpComplete. CODE.
+- [x] FB4 RESOLVED (branch fix/dump-watchdog-idle-reset): the midi.js dump watchdog was a fixed 1500ms hard
+      ceiling that fired mid-response on large enumerations like the bank list (OBJECTINFO 10020012, ~70 names,
+      ~4-6s). Replaced with an idle/silence watchdog (WATCHDOG_IDLE_MS 1500, rearmed on every send and receive)
+      bounded by an absolute WATCHDOG_MAX_MS (10000) ceiling, so a healthy slow wave drains to all-received.
+      Documented in protocol.md ("Request/response tracking — the dump wave"); device-model.md §9 updated.
 - [x] FB2 RESOLVED via the Programming Manual: a sigfile (0x08/0x09) is the ASCII module netlist (the .sig
       design/transport form); loading it makes the unit compile+load a whole program and does NOT expose
       live menu-tree values. So it's NOT a shortcut for the eager loader — keep walking OBJECTINFO. (Only

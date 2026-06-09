@@ -322,9 +322,12 @@ distinct ids; id 0 = broadcast (§1).
   the legacy commands; no `OK` is seen after a `VALUE_PUT`, hence reconcile-by-redump.
 - **Large enumerations are slow** `[V]` (live-probed) — most dumps reply in well
   under a second, but the bank list (`OBJECTINFO 10020012`, ~70 names) takes
-  **~4–6 s**. Implication: the per-wave watchdog in `midi.js` (1500 ms) is too
-  short and would fire mid-enumeration; raise it / make it adaptive before the
-  eager loader relies on it (tracked FB4). `OBJECTINFO` is otherwise context-free
+  **~4–6 s**. Implication: a fixed per-wave watchdog would fire mid-enumeration.
+  The `midi.js` watchdog is therefore an idle/silence timer (`WATCHDOG_IDLE_MS`,
+  rearmed on each send/receive) bounded by an absolute `WATCHDOG_MAX_MS` cap, so a
+  healthy slow enumeration drains to completion rather than being cut short (FB4,
+  resolved; see [`protocol.md`](protocol.md) "Request/response tracking — the dump
+  wave"). `OBJECTINFO` is otherwise context-free
   — load-menu keys (`10020011`/`10020012`) answer without navigating there, just
   slowly.
 - **Keypress table** `[D]` — verified `controls.js:keypressMasks` against Tech

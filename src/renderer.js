@@ -846,7 +846,13 @@ export function renderScreen(subs, ascii, logParam) {
         'info',
         'general'
       );
-      const parentMain = appState.currentSubs[0];
+      // Use the `subs` this render was invoked with, not the global
+      // appState.currentSubs — under stale debounced delivery the global may
+      // have been overwritten by a newer dump, which would record the wrong
+      // parent lineage in keyStack (C5 / #41). currentKey stays global: it is
+      // the key being loaded (e.g. the preset), distinct from subs[0] (the
+      // rendered page's main object).
+      const parentMain = subs[0];
       const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
       setState(
         {
@@ -855,7 +861,7 @@ export function renderScreen(subs, ascii, logParam) {
             {
               key: appState.currentKey,
               tag: parentTag,
-              subs: (appState.currentSubs || []).slice(),
+              subs: subs.slice(),
             },
           ],
           currentKey: softSubsLocal[0].key,

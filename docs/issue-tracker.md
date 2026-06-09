@@ -271,10 +271,15 @@ config toggles lazy) -> render on dumpComplete.
 HUMAN-GATE: none
 
 ### Batch 3.2 — State-shape hardening
-- [ ] C3  Normalize keyStack mixed types (string@0, objects@1+) to always-objects or split structures
-- [ ] C5  Renderer autoload: use `subs` param instead of global appState.currentSubs[0]
-- [ ] C8  Clear childSubs on navigation
-- [ ] C7  Replace endsWith('0002') meter heuristic with a defined check (KEY_SUFFIX.METER)
+- [ ] C3  Normalize keyStack mixed types (string@0, objects@1+) to always-objects or split structures (GH #39)
+- [x] C5  (branch fix/autoload-subs-param, GH #41) renderer autoload-descend now records the `subs` param it
+      was invoked with, not the global appState.currentSubs — under stale debounced delivery the global may be
+      a newer dump, which recorded the wrong keyStack parent lineage. currentKey stays global (it is the loaded
+      key, distinct from subs[0]; startup.test pins this). New renderer.test case pins the stale-delivery path.
+- [ ] C8  Clear childSubs on navigation (GH #44 — partial clears exist in renderer; some nav paths bypass them)
+- [ ] C7  Replace endsWith('0002') meter heuristic with a protocol-based check (GH #43 — "heuristic
+      masquerading as protocol"; literal already named KEY_SUFFIX.METER in #57, deeper fix = detect CON-type
+      from loaded subs rather than key suffix; needs more VALUE_DUMP coverage first)
 - [ ] NEW Persist active DSP (A/B) app-side as view state (default A)
 HUMAN-GATE: none
 

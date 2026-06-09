@@ -265,6 +265,37 @@ describe('renderer.js', () => {
     expect(sendValueDump).toHaveBeenCalledWith('10010000', null);
   });
 
+  test('autoload-descend records the param subs, not the stale global currentSubs (#41)', () => {
+    appState.autoLoad = true;
+    appState.currentKey = '401000b'; // the key being loaded (stays global)
+    // A stale global left by a newer dump — must NOT seed the keyStack entry.
+    appState.currentSubs = [
+      { type: 'COL', position: '0', key: 'STALE', parent: '', statement: 'Stale', tag: 'stale' },
+    ];
+    // The subs THIS render was invoked with: two short-tag COL children, no params.
+    const subs = [
+      { type: 'COL', position: '0', key: '0', parent: '', statement: 'Real Root', tag: 'realroot' },
+      {
+        type: 'COL',
+        position: '1',
+        key: '10010000',
+        parent: '0',
+        statement: 'Setup',
+        tag: 'setup',
+      },
+      { type: 'COL', position: '2', key: '10020000', parent: '0', statement: 'Prog', tag: 'prog' },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    expect(appState.keyStack).toHaveLength(1);
+    const entry = appState.keyStack[0];
+    expect(entry.tag).toBe('realroot'); // from param subs[0], not the stale 'stale'
+    expect(entry.subs[0].key).toBe('0');
+    expect(entry.subs.map((s) => s.key)).not.toContain('STALE');
+    expect(entry.key).toBe('401000b'); // currentKey (loaded key) stays global
+    expect(appState.currentKey).toBe('10010000'); // descended to first child
+  });
+
   test('lcd click on dsp-clickable swaps active preset and pushes keyStack', () => {
     appState.currentKey = '0';
     appState.dspAName = 'Reverb';

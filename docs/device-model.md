@@ -249,6 +249,13 @@ falling back to 240×64 only when the header dims are missing/insane) and
 of silently rendering them (FB1, resolved). This is the physical LCD, independent
 of app navigation. Render any capture with `npm run screen <fixture> out.png`.
 
+**Capturing from hardware** `[V]`: the dump arrives over the U6MIDI Pro's slow
+31250-baud DIN link as several 2048-byte buffer chunks (~1.2 s for the full
+~3872-byte SysEx), so `npm run screenshot`
+(`build_tools/hil-screenshot.cjs`) reassembles chunks until `F7` before
+decoding — see `protocol.md` §Screen bitmap "Capturing screens (HIL)" and
+tracker FB5.
+
 ## 8. Dual DSP & presets `[V/D]`
 
 Two independent engines, A and B, **both always running**; the front panel only

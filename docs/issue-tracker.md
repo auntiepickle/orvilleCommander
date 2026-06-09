@@ -18,7 +18,8 @@ physical Orville. `needs-decision` = a product/UX or irreversible call for the m
 3. Do the item's **NEXT:** action. Run `npm test` and report raw output. Add a snapshot test first if
    touching render logic.
 4. Update this ledger (status + NEXT), commit (conventional-commit message, no AI-attribution, no
-   emoji), push, open/append the batch PR.
+   emoji), push, open/append the batch PR. If the item has a matching GitHub issue, put `Closes #N`
+   in the PR body so it auto-closes on merge. Spawn reviewer agents (correctness + docs) before merge.
 5. On a gate, mark the item with its gate tag, write the exact validation steps under the batch, and
    move to the next non-blocked item.
 

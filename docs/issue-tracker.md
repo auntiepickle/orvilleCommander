@@ -113,6 +113,13 @@ reviewer agents swept all of src/; findings consolidated below.
       bitmap (nibbled; 12-byte header + 1920 1bpp + 1 trailing; row-major MSB-left), OBJECTINFO
       sub-object field order per type, VALUE request/put/dump (no PUT ack), key conventions. CLAUDE.md
       protocol table now links to it.
+- [x] B10d docs/device-model.md is now a DURABLE FROM-SCRATCH SPEC (not just a reference): transport/
+      framing incl. the OBJECTINFO-vs-VALUE response-framing difference, command table, full object-line
+      grammar (child-count-in-hex, variable-length keys, position codes), per-type field grammar, key
+      conventions, value semantics, screen format, dual-DSP/presets, behavioral contract, a
+      "reimplement from scratch" checklist, and a §12 open-questions hardware backlog. Confidence-marked
+      [V]/[I]/[?]. Grounded in all tests/fixtures + parser/framebuffer + session-knowledge-dump §13.
+      Drives phase3-state-model.md. LIVING DOC — extend as hardware answers §12.
 
 NOTE: Batch 1.4 (B10) complete.
 
@@ -142,21 +149,34 @@ NOTE: screen format is NOT in system_commands.txt (only button SysEx is) — the
 
 ## Phase 3 — Architecture (behavior-affecting; needs 0.3 test-net + 0.4 replay first)
 
-### Batch 3.1 — dumpComplete events (headline perf + correctness)
-- [ ] C1  Replace stacked 200ms setTimeout + debounce with explicit dumpComplete(key,data) events (event-bridge.js, parser.js:121,158, renderer 200/300/500ms chains)
+DESIGN: see docs/refactor/phase3-state-model.md. Driving invariant — never render an unconfirmed
+value as current (show a loading placeholder, not a stale number). Three state domains: device model
+(authoritative, dump-confirmed), app view (local; includes active DSP A/B, persisted app-side, default A),
+physical LCD (independent mirror). Connect = pre-paint structure from cache (hint) -> root dump
+authoritative -> land on last-active DSP's preset -> EAGER-load that preset's tree (default; `eagerLoad`
+config toggles lazy) -> render on dumpComplete.
+
+### Batch 3.1 — dumpComplete events (headline perf + correctness; the substrate)
+- [ ] C1  Replace stacked 200ms setTimeout + debounce with explicit dumpComplete(key,data) events (event-bridge.js, parser.js, renderer 200/300/500ms chains). Drives both the connect handshake and eager-load completion.
 - [ ] C4  Delete isLoadingPreset boolean once events expose dump-complete; update startup.test.js Tier A/B
 HUMAN-GATE: none
 
 ### Batch 3.2 — State-shape hardening
 - [ ] C3  Normalize keyStack mixed types (string@0, objects@1+) to always-objects or split structures
-- [ ] C5  Renderer autoload: use `subs` param instead of global appState.currentSubs[0] (renderer.js:740)
+- [ ] C5  Renderer autoload: use `subs` param instead of global appState.currentSubs[0]
 - [ ] C8  Clear childSubs on navigation
-- [ ] C7  Replace endsWith('0002') meter heuristic with a defined check (parser.js:152)
+- [ ] C7  Replace endsWith('0002') meter heuristic with a defined check (KEY_SUFFIX.METER)
+- [ ] NEW Persist active DSP (A/B) app-side as view state (default A)
 HUMAN-GATE: none
 
-### Batch 3.3 — autoLoad race
-- [ ] C2  Remove 500ms race (main.js:145-159); subscribe to rootDumpComplete && cachedPresetKey
-HUMAN-GATE: needs-decision — landing page: cached preset (401000b) vs setup menu (10010000)?
+### Batch 3.3 — Connect handshake + eager loader + landing  (replaces the autoLoad race)
+DECISION RESOLVED (see phase3-state-model.md): land on the last-active DSP's preset, read authoritatively
+from the root dump (device boots into last-used preset). Cache is a provisional structure-only pre-paint.
+- [ ] C2  Remove the 500ms autoLoad race (main.js); land via rootDumpComplete -> active preset
+- [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX
+- [ ] NEW `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
+- [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number
+HUMAN-GATE: needs-hardware (eager-load throughput on the real unit; offline parse/render half covered by replay harness)
 
 ### Batch 3.4 — Cycle cleanup
 - [ ] C6  Move logCategories off appState so logger.js no longer imports state.js (collapses store-logger-state cycle)

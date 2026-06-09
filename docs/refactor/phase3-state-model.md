@@ -1,0 +1,87 @@
+# Phase 3 design — state model & connect flow
+
+Design agreed before implementing Phase 3. The architecture batches
+(`dumpComplete` events, autoLoad, keyStack) are reorganized around this model.
+
+## Driving invariant
+
+**Never render an unconfirmed value as if it were current.** Showing wrong
+information is the one thing we refuse to do. Cache and pre-paint may fill
+*structure* (menu names, layout) so the UI is never blank, but a parameter
+*value* is shown only after a `VALUE_DUMP` confirms it from the device.
+Anything unconfirmed renders as a loading placeholder, not a stale number.
+
+Eager-on-connect (the default) is simply how we satisfy this invariant up front
+for the active preset.
+
+## Three state domains
+
+| Domain            | Source of truth | Synced?                  |
+| ----------------- | --------------- | ------------------------ |
+| **Device model**  | the hardware    | yes — confirmed via dumps |
+| **App view**      | the app         | no — local, free to roam |
+| **Physical LCD**  | the hardware    | independent mirror (0x17) |
+
+- **Device model:** per-DSP loaded preset (key + name), parameter values.
+- **App view:** `currentKey` / `keyStack` / `paramOffset`, plus the **active DSP
+  (A/B)**. Navigation is random-access by key (`OBJECTINFO`/`VALUE_DUMP`) and
+  sends no keypresses, so it never moves the front panel.
+- **Physical LCD:** what the unit is showing; we never force it to follow the
+  app, and the app never assumes it.
+
+Principle: **reconcile the model, not the view.**
+
+## Active DSP
+
+The root dump lists both presets but does **not** flag which DSP is active
+(verified against `tests/fixtures/objectinfo-root.txt`). So active-DSP is **app
+view state**: persisted app-side (last A/B used), default **A** on first run.
+Which DSP you're looking at is a view concern, not a device-model fact. (If a
+device value key ever turns out to report it, revisit — hardware exploration.)
+
+## Connect flow
+
+The Orville boots into its last-used preset, so the device's *current* state at
+connect already *is* the last-used preset — we read it rather than remember it.
+
+1. **Connect** ports + listener.
+2. **Pre-paint (provisional)** from cached `presetKey` — structure only, to
+   avoid a blank screen. Values render as loading until confirmed.
+3. **Request root.** On `rootDumpComplete`, adopt the device's real DSP A/B
+   keys + names as authoritative (discard the cache hint if it disagrees).
+4. **Choose landing** = active preset for the app-side last-active DSP (default A).
+5. **Eager load (default):** traverse the active preset's tree —
+   `OBJECTINFO` each child COL, `VALUE_DUMP` each param — bounded by depth and a
+   visited set, issued as one request wave. Show a loading state.
+6. On `dumpComplete` (wave drained) → hide loading → render the fully-confirmed
+   preset. Browsing within it is now instant and correct.
+
+`eagerLoad` config flag (default **on**, persisted in `midiConfig`) flips step 5
+to **lazy**: fetch-on-navigate (today's behavior), with the same
+loading-placeholder-until-confirmed rule for anything not yet fetched.
+
+Eager scope: the **active preset tree only**. The other DSP and the
+setup/program/levels menus stay lazy (fetched + loading-gated on navigation).
+
+## How this maps to the Phase 3 batches
+
+- **3.1 `dumpComplete` events** — the substrate. Replace the stacked
+  200ms `setTimeout`/`debounce` with explicit `dumpComplete(key, data)` events;
+  these drive both the connect handshake and eager-load completion. Removes the
+  timer stack; folds in `isLoadingPreset` removal.
+- **3.2 State-shape hardening** — normalize `keyStack`; persist active DSP
+  app-side; the "view" is now built deterministically from the tree.
+- **3.3 Connect handshake + eager loader + landing** — replaces the 500ms
+  autoLoad race entirely with the root-dump-driven flow above; adds the
+  eager-loader module, the `eagerLoad` config toggle, and the loading UX. Adds
+  the render guard that enforces the driving invariant (placeholder for
+  unconfirmed values).
+- **3.4 Cycle cleanup** — move `logCategories` off `appState` (logger↔state).
+
+## Validation / open items
+
+- Eager-load throughput on real hardware (many `OBJECTINFO`/`VALUE` round
+  trips) — confirm the wave completes promptly; tune depth/bound if needed.
+  Hardware-gated; the replay harness can cover the parsing/render half offline.
+- Whether any device value key reports the active DSP (would upgrade active-DSP
+  from app-guess to device-confirmed). Hardware exploration, optional.

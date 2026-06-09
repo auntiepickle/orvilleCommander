@@ -62,7 +62,7 @@ When writing new tests:
 
 ## Protocol quick reference
 
-Full details in [`docs/protocol.md`](docs/protocol.md). All SysEx is framed `F0 1C 70 <deviceId> <cmd> ... F7`. Commands seen in code:
+Wire format in [`docs/protocol.md`](docs/protocol.md); how the device behaves (object tree, presets, value semantics, quirks) in [`docs/device-model.md`](docs/device-model.md). All SysEx is framed `F0 1C 70 <deviceId> <cmd> ... F7`. Commands seen in code:
 
 | Cmd | Direction | Meaning |
 |---|---|---|

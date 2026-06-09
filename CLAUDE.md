@@ -92,6 +92,7 @@ Sub-object types in the ASCII dump: `COL` (column/menu), `NUM`, `SET`, `CON` (co
 - When touching render logic, add a renderer snapshot test first (see `03-test-coverage-gap.md`).
 - Before claiming a task complete, run `npm test` and report the output. Do not declare success based on reading the diff.
 - Commit messages follow conventional commits (`fix:`, `refactor:`, `test:`, `docs:`, `chore:`). Reference the roadmap step in the body when relevant.
+- GitHub Issues track the same work as `docs/issue-tracker.md`. When a PR resolves an item that has a matching GitHub issue, put `Closes #N` in the PR body so it auto-closes on merge. Every PR is reviewed by spawned reviewer agents (correctness + docs) before merge — see the issue-tracker workflow.
 - If a task grows beyond its stated scope mid-session, stop and ask rather than expanding. Mechanically necessary follow-throughs (e.g., updating a test mock after an import change) are in-scope and do not require asking.
 - All work happens on a feature branch merged via PR; never commit directly to `main`. If `git branch --show-current` shows `main`, branch first.
 

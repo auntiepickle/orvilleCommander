@@ -1,17 +1,17 @@
 // tests/midi.test.js
 //
-// 7c-scoped: covers the per-wave request counter, 1500ms hard-ceiling
-// watchdog, and getDumpStats added in this step. The byte-level contract
-// suite for sendSysEx / sendObjectInfoDump / sendValuePut / sendKeypress
-// (CLAUDE.md "Testing", originally planned for roadmap step 1) is still
-// pending and is not in scope for this file. The 5 cases below mirror
-// the counter's actual contract as approved in 7c plan review:
+// Covers the per-wave request counter, the idle-reset watchdog, and
+// getDumpStats. The byte-level contract suite for sendSysEx /
+// sendObjectInfoDump / sendValuePut / sendKeypress lives in the second
+// describe below. The counter/watchdog cases mirror its actual contract:
 //
-//   1. 0->1 transition starts the watchdog.
+//   1. 0->1 transition arms the idle watchdog.
 //   2. all-received fires when outstanding returns to 0.
-//   3. watchdog fires at the ceiling and is NOT reset by mid-wave sends.
-//   4. notifyResponse with outstanding===0 is a no-op.
-//   5. getDumpStats returns a snapshot copy, not a live reference.
+//   3. the idle watchdog is rearmed by mid-wave sends and receives
+//      (it is a silence timer, not a fixed hard ceiling).
+//   4. the absolute WATCHDOG_MAX_MS cap fires under continuous activity.
+//   5. notifyResponse with outstanding===0 is a no-op.
+//   6. getDumpStats returns a snapshot copy, not a live reference.
 //
 // midi.js's finishWave touches a single appState key (lastDumpComplete)
 // via the real store.setState. The real store/state are safe under jest
@@ -62,7 +62,7 @@ describe('midi.js per-wave counter and watchdog (7c)', () => {
     jest.useRealTimers();
   });
 
-  test('first send (0->1 transition) starts the watchdog', () => {
+  test('first send (0->1 transition) arms the idle watchdog', () => {
     sendObjectInfoDump('a');
     jest.advanceTimersByTime(1499);
     expect(received).toHaveLength(0);
@@ -88,19 +88,36 @@ describe('midi.js per-wave counter and watchdog (7c)', () => {
     expect(appState.lastDumpComplete).toMatchObject({ reason: 'all-received' });
   });
 
-  test('watchdog is per-wave hard ceiling: subsequent sends within the wave do NOT reset it', () => {
-    sendObjectInfoDump('a');
-    jest.advanceTimersByTime(1000);
-    sendObjectInfoDump('b');
-    jest.advanceTimersByTime(499);
+  test('idle watchdog is rearmed by mid-wave sends and receives (not a hard ceiling)', () => {
+    sendObjectInfoDump('a'); // armed at t=0, would fire t=1500
+    jest.advanceTimersByTime(1000); // t=1000
+    sendObjectInfoDump('b'); // send rearms -> would fire t=2500
+    jest.advanceTimersByTime(1000); // t=2000, outstanding=2
+    notifyResponse('objectinfo', 'a'); // receive rearms -> would fire t=3500, outstanding=1
+    jest.advanceTimersByTime(1499); // t=3499
     expect(received).toHaveLength(0);
-    jest.advanceTimersByTime(1);
+    jest.advanceTimersByTime(1); // t=3500
     expect(received).toHaveLength(1);
     expect(received[0]).toMatchObject({
       reason: 'watchdog',
       sendCount: 2,
+      receiveCount: 1,
       lastKey: 'b',
     });
+  });
+
+  test('absolute WATCHDOG_MAX_MS cap fires even under continuous activity', () => {
+    sendObjectInfoDump('a'); // waveStart t=0, outstanding stays >0 throughout
+    // Rearm the idle window every second so only the absolute cap can end
+    // the wave. WATCHDOG_MAX_MS is 10000 and WATCHDOG_IDLE_MS is 1500.
+    for (let t = 1000; t < 10000; t += 1000) {
+      jest.advanceTimersByTime(1000);
+      sendObjectInfoDump('x');
+      expect(received).toHaveLength(0);
+    }
+    jest.advanceTimersByTime(1000); // reach t=10000, the absolute cap
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({ reason: 'watchdog' });
   });
 
   test('notifyResponse with outstanding===0 is a no-op', () => {

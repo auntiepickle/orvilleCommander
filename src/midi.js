@@ -10,14 +10,18 @@ import { TIMING } from './constants.js';
 let selectedOutput = null;
 let selectedInput = null;
 
-// 7c shadow-fire — per-wave request counter and 1500ms hard-ceiling
-// watchdog. A wave begins when outstanding transitions 0->1. The
-// watchdog is set once at wave start and is NOT reset on subsequent
-// sends within the wave (hard ceiling, not silence detector). The
-// wave ends either when outstanding returns to 0
-// (reason='all-received') or when the watchdog fires
-// (reason='watchdog'). Existing 200ms parser timers remain in place;
-// consumer migration is 7d.
+// Per-wave request counter and idle-reset watchdog. A wave begins when
+// outstanding transitions 0->1. The watchdog is an idle/silence timer:
+// it is rearmed for WATCHDOG_IDLE_MS on every send AND every received
+// response, bounded by an absolute WATCHDOG_MAX_MS ceiling measured from
+// wave start. This lets a healthy multi-second tree enumeration complete
+// via outstanding returning to 0 (reason='all-received') instead of being
+// cut short mid-stream; the watchdog (reason='watchdog') now fires only on
+// a genuine stall (silence longer than the idle window) or the absolute
+// cap. (Earlier this was a fixed 1500ms hard ceiling set once at wave
+// start, which tripped during normal 4-6s enumerations and dropped every
+// response that arrived after.) Existing 200ms parser timers remain in
+// place; consumer migration is Phase 3.1.
 let outstanding = 0;
 let waveSends = 0;
 let waveReceives = 0;
@@ -26,17 +30,27 @@ let waveLastKey = null;
 let watchdogHandle = null;
 const dumpStats = { all: 0, watchdog: 0 };
 
+// (Re)arm the idle watchdog for WATCHDOG_IDLE_MS, never extending past the
+// absolute WATCHDOG_MAX_MS ceiling from wave start. Called on every send and
+// every received response while a wave is in flight.
+function rearmWatchdog() {
+  if (watchdogHandle !== null) clearTimeout(watchdogHandle);
+  const remaining = TIMING.WATCHDOG_MAX_MS - (Date.now() - waveStart);
+  const delay = Math.max(0, Math.min(TIMING.WATCHDOG_IDLE_MS, remaining));
+  watchdogHandle = setTimeout(forceComplete, delay);
+}
+
 function recordRequest(key) {
   if (outstanding === 0 && watchdogHandle === null) {
     waveStart = Date.now();
     waveSends = 0;
     waveReceives = 0;
     waveLastKey = null;
-    watchdogHandle = setTimeout(forceComplete, TIMING.WATCHDOG_MS);
   }
   outstanding++;
   waveSends++;
   waveLastKey = key;
+  rearmWatchdog();
 }
 
 /**
@@ -59,6 +73,8 @@ export function notifyResponse(_type, _key) {
   waveReceives++;
   if (outstanding === 0) {
     finishWave('all-received');
+  } else {
+    rearmWatchdog();
   }
 }
 

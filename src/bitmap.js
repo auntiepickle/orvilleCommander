@@ -1,6 +1,6 @@
 // bitmap.js
 import { log } from './logger.js';
-import { denibble, computePixels } from './framebuffer.js';
+import { denibble, computePixels, parseScreenHeader } from './framebuffer.js';
 import { SCREEN } from './sysex-commands.js';
 import { CANVAS } from './constants.js';
 
@@ -12,8 +12,27 @@ export { denibble };
 export function renderBitmap(canvasId, rawBytes) {
   const canvas = document.getElementById(canvasId);
   const ctx = canvas.getContext('2d');
-  const width = SCREEN.WIDTH;
-  const height = SCREEN.HEIGHT;
+  // Use the dimensions the device reports in the header (falling back to the
+  // 240x64 defaults if the header is missing/insane), and surface integrity
+  // problems rather than silently rendering a partial or corrupt screen.
+  const hdr = parseScreenHeader(rawBytes);
+  const width = hdr.dimsValid ? hdr.width : SCREEN.WIDTH;
+  const height = hdr.dimsValid ? hdr.height : SCREEN.HEIGHT;
+  if (!hdr.dimsValid) {
+    log(
+      `[SCREEN] Header dims out of range (${hdr.width}x${hdr.height}); using ${width}x${height}`,
+      'error',
+      'error'
+    );
+  } else if (!hdr.complete) {
+    log(
+      `[SCREEN] Dump truncated: got ${rawBytes.length} bytes, expected ${hdr.expectedLength}`,
+      'error',
+      'error'
+    );
+  } else if (!hdr.checksumOk) {
+    log('[SCREEN] Dump checksum mismatch', 'error', 'error');
+  }
   canvas.width = width;
   canvas.height = height;
   canvas.style.width = CANVAS.CSS_WIDTH;

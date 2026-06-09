@@ -11,11 +11,22 @@ export const SYSEX = {
   FRAME_PREFIX_LEN: 5, // F0 1C 70 <deviceId> <cmd> before the payload
 };
 
-// Screen-dump (0x17) geometry, after denibbling.
+// Screen-dump (0x17) geometry, after denibbling. The 12-byte header is three
+// big-endian u32 fields (width, height, bitmap size in bytes), followed by the
+// 1bpp pixel data and a 1-byte checksum. See docs/protocol.md "Screen bitmap".
 export const SCREEN = {
-  WIDTH: 240,
-  HEIGHT: 64,
+  WIDTH: 240, // fallback width if the header is missing/insane
+  HEIGHT: 64, // fallback height if the header is missing/insane
   HEADER_BYTES: 12, // header bytes before the 1bpp pixel data
+  WIDTH_OFFSET: 0, // u32 width field
+  HEIGHT_OFFSET: 4, // u32 height field
+  SIZE_OFFSET: 8, // u32 bitmap-size field
+  CHECKSUM_BYTES: 1, // trailing checksum byte after the pixel data
+  // The checksum is set so that the sum of every byte from the size field
+  // (SIZE_OFFSET) through the checksum byte, inclusive, is 0 mod 256. Verified
+  // against hardware captures; TN34 phrases it "all bytes incl. size sum to 0".
+  CHECKSUM_SUM_OFFSET: 8,
+  MAX_DIMENSION: 4096, // sanity bound for a header-reported width/height
 };
 
 export const CMD = {

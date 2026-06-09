@@ -1,11 +1,13 @@
 # Eventide Orville SysEx protocol
 
 A working reference for the SysEx dialect OrvilleCommander speaks to the Eventide
-Orville. Only the button-press table is from an Eventide source
-(`system_commands.txt` at the repo root); everything else here was
-reverse-engineered from the device's responses and is documented from the code.
-Named constants live in [`src/sysex-commands.js`](../src/sysex-commands.js)
-(protocol) and [`src/constants.js`](../src/constants.js) (timing/layout).
+Orville. Framing, the keypress table, and the screen dump are documented in
+Eventide **Tech Note 34** ("MIDI Sysex Messages on the DSP4000"; see
+[`device-model.md`](device-model.md) §Sources). The **object protocol** the app
+relies on (`0x2d`/`0x2e`/`0x31`/`0x32`) is **not** in any Eventide document —
+it's reverse-engineered from the device's responses and the code. Named
+constants live in [`src/sysex-commands.js`](../src/sysex-commands.js) (protocol)
+and [`src/constants.js`](../src/constants.js) (timing/layout).
 
 For the conceptual model — the object tree, presets/dual-DSP, value semantics,
 and behavioral quirks — see [`device-model.md`](device-model.md). This file is
@@ -67,17 +69,22 @@ is `midi.js:nibble()`.
 **nibble-encoded** (every byte ≤ `0x0F`); pairs are recombined high-then-low by
 `framebuffer.js:denibble()`.
 
-The denibbled stream is **1933 bytes**:
+The denibbled stream is **1933 bytes**, and Tech Note 34 specifies its layout:
 
-| Bytes        | Meaning                                  |
-| ------------ | ---------------------------------------- |
-| 0–11         | header (`SCREEN.HEADER_BYTES` = 12)      |
-| 12–1931      | 1920 bytes of pixel data                 |
-| 1932         | 1 trailing byte (checksum/terminator)    |
+| Bytes        | Meaning                                          |
+| ------------ | ------------------------------------------------ |
+| 0–3          | width in pixels (u32) — `0x000000F0` = 240        |
+| 4–7          | height in pixels (u32) — `0x00000040` = 64        |
+| 8–11         | bitmap size in bytes (u32) — 1920                 |
+| 12–1931      | 1920 bytes of pixel data                          |
+| 1932         | 1-byte checksum (all bytes incl. size sum to 0)   |
 
-Pixels are **240×64, 1 bit per pixel, 30 bytes/row, MSB = leftmost pixel**, a
-plain row-major decode (`framebuffer.js:computePixels`). A set bit is a lit
-(green) pixel.
+So `SCREEN.HEADER_BYTES = 12` is really three u32 fields (width/height/size).
+Pixels are **`ceil(width/8) × height`, 1 bit per pixel, MSB = leftmost** — for
+240×64 that's 30 bytes/row — a plain row-major decode
+(`framebuffer.js:computePixels`). A set bit is a lit (green) pixel. The decoder
+hardcodes 240×64 today; per the spec it could read the dimensions from the
+header and verify the checksum (tracker follow-up).
 
 > Historical note: earlier code used a 13-byte header and compensated for the
 > resulting 1-byte misalignment with a column rotate + a 1px shift of the first

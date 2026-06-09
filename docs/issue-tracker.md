@@ -120,6 +120,21 @@ reviewer agents swept all of src/; findings consolidated below.
       "reimplement from scratch" checklist, and a §12 open-questions hardware backlog. Confidence-marked
       [V]/[I]/[?]. Grounded in all tests/fixtures + parser/framebuffer + session-knowledge-dump §13.
       Drives phase3-state-model.md. LIVING DOC — extend as hardware answers §12.
+- [x] B10e Reconciled the spec against the official Eventide Tech Note 34 ("MIDI Sysex Messages on the
+      DSP4000", URL the user supplied). Confirmed/upgraded: id=0=broadcast, MSN-first nibbling, and the
+      0x17 screen header = width(u32)+height(u32)+size(u32) all nibbled + a 1-byte sum-to-zero CHECKSUM
+      (verified: our fixture's header decodes to 240x64). Boundary finding: the object protocol
+      (0x2d/0x2e/0x31/0x32) is NOT in TN34 — it's an undocumented Orville extension; our docs are its only
+      spec. Added [D] confidence marker + a Sources section to device-model.md; updated protocol.md screen
+      layout + framing notes. TN34 PDF kept locally in logs/ (gitignored; copyright) — cited by URL only.
+
+### Device-research follow-ups (from Tech Note 34)
+- [ ] FB1 framebuffer.js robustness: READ width/height/size from the 0x17 header (per TN34) instead of
+      hardcoding 240x64, and verify the trailing checksum. Low priority; current hardcode works for this unit.
+- [ ] FB2 Evaluate the documented sigfile dump (0x08/0x09) as a one-shot full-preset load — possibly a
+      faster/more-complete alternative to walking the OBJECTINFO tree for the Phase 3 eager loader.
+- [ ] FB3 Cross-check controls.js keypressMasks vs TN34 Appendix A + system_commands.txt; document any
+      Orville-specific combo keys (UP/DOWN/AB) that diverge from the DSP4000 table.
 
 NOTE: Batch 1.4 (B10) complete.
 

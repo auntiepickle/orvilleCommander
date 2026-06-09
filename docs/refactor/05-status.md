@@ -21,6 +21,11 @@ Step 8: partial. Navigation extraction landed; cycle 5 closed; toggleDspKey
   Cycle 5 (controls↔renderer): closed by Step 8 partial (f38111e)
   (Cycle 1, midi↔parser, never closed — see "Open / not addressed".)
 
+  Later (post-f38111e): the store→logger→state→store cycle introduced in Step 5
+  (logger.js read appState.logCategories/logLevel) was collapsed in C6 — log
+  level + categories moved into logger.js's own module state, so logger.js no
+  longer imports state.js. See future-work.md and issue-tracker C6.
+
 ## Open / not addressed
   Cycle 1, midi↔parser coupling (02-top-couplings.md §3) — never on the 8-step
         roadmap; would require a from-scratch scope if ever revisited.

@@ -1,29 +1,45 @@
 # Orville SysEx device specification
 
-A durable, reverse-engineered specification of how the Eventide Orville behaves
-over SysEx — intended to be complete enough to **reimplement this app from
-scratch**. It is the conceptual + behavioral spec; [`protocol.md`](protocol.md)
-is the byte-level wire companion. Only the button-press table is vendor-supplied
-(`system_commands.txt`); everything else here was derived from captured dumps
-(`tests/fixtures/`) and the parsing code.
+A durable specification of how the Eventide Orville behaves over SysEx —
+intended to be complete enough to **reimplement this app from scratch**. It is
+the conceptual + behavioral spec; [`protocol.md`](protocol.md) is the byte-level
+wire companion.
+
+**Documented vs. reverse-engineered — read this first.** Eventide's *Tech Note
+34 / Technical Note #94, "MIDI Sysex Messages on the DSP4000"* (see §Sources) is
+the authoritative reference for the **legacy** protocol: framing, the keypress
+table, the screen dump, and the program/setup/sigfile/info commands
+(opcodes `0x00`–`0x1A`). **However, the object protocol this app actually relies
+on — `OBJECTINFO`/`VALUE` (`0x2d`, `0x2e`, `0x31`, `0x32`) — is NOT in Tech Note
+34 or any other Eventide document we have.** It is an undocumented Orville/7000
+extension, reverse-engineered here from captured dumps (`tests/fixtures/`) and
+the parsing code. So: trust Tech Note 34 for §1/§2-legacy/§7/keypress; this
+document is the *only* spec for §3–§6 (the object/value model).
 
 **Living document** — extend it as hardware exploration answers the open
 questions in §12.
 
-**Confidence legend:** `[V]` verified from captures/code · `[I]` inferred but
-unconfirmed · `[?]` unknown, needs a hardware session.
+**Confidence legend:** `[V]` verified from captures/code · `[D]` documented in
+Tech Note 34 · `[I]` inferred but unconfirmed · `[?]` unknown, needs a hardware
+session.
 
 ---
 
-## 1. Transport & framing `[V]`
+## 1. Transport & framing `[D]`
 
-Every message: `F0 1C 70 <deviceId> <cmd> <payload…> F7`.
+Every message: `F0 1C 70 <deviceId> <cmd> <payload…> F7` (Tech Note 34).
 
-- `1C 70` = Eventide + DSP4000 manufacturer/product id.
-- `deviceId` 1–63. This app uses `0` as an auto-detect sentinel: it adopts the
-  first inbound message's id byte, then matches on it.
+- `1C` = Eventide, `70` = the 4000-family (`H4000`) product id.
+- `deviceId`: per Tech Note 34, **`0` means broadcast — all units listen**. This
+  app instead uses `0` locally as an auto-detect sentinel: it adopts the first
+  inbound message's id byte and matches on it thereafter (so it talks to one
+  unit by id rather than broadcasting).
+- **Nibbling** `[D]`: many payloads split each 8-bit byte into two 4-bit
+  nibbles (MIDI data bytes are 7-bit), **most-significant nibble first**.
 - Outbound payloads that carry a key send the **ASCII bytes of the hex key
   string** (e.g. key `0` → `0x30`; key `401000b` → `34 30 31 30 30 30 62`).
+  Note this ASCII-key addressing is part of the undocumented object protocol,
+  not Tech Note 34.
 - **Response framing differs by command** `[V]`:
   - `OBJECTINFO (0x32)` payload ends `0D 0A 20 00 F7` — sub-object lines are
     **CRLF-separated**, and there is a trailing space + **NUL** before `F7`.
@@ -43,7 +59,28 @@ Every message: `F0 1C 70 <deviceId> <cmd> <payload…> F7`.
 | `0x18` | out | Request screen    | (none)                                   |
 | `0x17` | in  | Screen bitmap     | nibbled framebuffer (see §7)              |
 
+`0x01`, `0x17`, `0x18` are documented in Tech Note 34 `[D]`. **`0x2d`/`0x2e`/
+`0x31`/`0x32` are NOT** — they're the reverse-engineered object protocol `[V]`.
 Full byte tables and the keypress nibbling are in `protocol.md`.
+
+### Documented legacy commands not used by this app `[D]`
+
+Tech Note 34 defines opcodes `0x00`–`0x1A`. The app ignores most, but they're
+worth knowing — especially the alternative ways to read a preset and the
+ack/error replies:
+
+| Cmd    | Name                  | Notes                                            |
+| ------ | --------------------- | ------------------------------------------------ |
+| `0x00` | `SYSEXC_OK`           | "last command was OK" ack (for assorted commands) |
+| `0x0D` | `SYSEXC_ERROR`        | error reply; may carry an ASCII message           |
+| `0x06`/`0x15` | PROGRAM want/dump | current program in binary                       |
+| `0x07`/`0x16` | SETUP want/dump   | unit setup state                                |
+| `0x08`/`0x09` | SIGFILE dump/want | **preset as a human-readable operator netlist** (HEAD…TAIL); a different representation than the §3 OBJECTINFO menu tree |
+| `0x0A`/`0x0B` | SIGFILE remote/quick | remote-editor variants; `0x0A` replies `OK`/`ERROR` |
+| `0x19`/`0x1A` | INFO dump/want    | ASCII system info (ROM name/revision/time/size) |
+
+Whether the object commands (`0x2d`, etc.) ever reply with `OK`/`ERROR` is
+unknown — see §12.
 
 ## 3. Object model `[V]`
 
@@ -139,14 +176,31 @@ etc. Note function menus can contain DSP-prefixed keys (`Tempo` is `40090000`).
   device sends no confirmation; re-read via `VALUE_DUMP` to confirm. `[V]`
 - A TRG is fired by putting `1`.
 
-## 7. Screen bitmap `[V]`
+## 7. Screen bitmap `[D]`
 
-`0x18` requests; `0x17` returns a **nibble-encoded** payload. Denibbled (high
-nibble then low) it is **1933 bytes**: 12-byte header + 1920 bytes of pixels +
-1 trailing byte. Pixels are **240×64, 1bpp, 30 bytes/row, MSB = leftmost**, a
-plain row-major decode. The trailing byte's meaning is `[?]` (checksum?). This is
-the physical LCD, independent of app navigation. Decoder: `src/framebuffer.js`;
-render any capture with `npm run screen <fixture> out.png`.
+`0x18` requests; `0x17` returns a **nibble-encoded** payload. Tech Note 34
+specifies the denibbled layout exactly:
+
+| Bytes | Field      | Meaning                                              |
+| ----- | ---------- | --------------------------------------------------- |
+| 0–3   | width      | screen width in pixels (8 nibbles, MSN-first)        |
+| 4–7   | height     | screen height in pixels                              |
+| 8–11  | dumpSize   | bitmap size in bytes                                 |
+| 12 …  | bitmap     | `ceil(width/8) * height` bytes, 1bpp, MSB = leftmost |
+| last  | checksum   | 1 byte (2 nibbles); all bytes incl. size sum to 0    |
+
+For the Orville (240×64) this is the **1933-byte** stream we observe: 12 header
++ 1920 pixels + 1 checksum. **Verified against `screen-dump-black-hole.txt`**:
+the header decodes to width `0x000000F0` = 240, height `0x00000040` = 64. So the
+12-byte header we'd been treating as opaque is really three u32 fields, and the
+trailing byte is the documented **checksum** (not a mystery).
+
+Pixels are row-major, MSB = leftmost (`src/framebuffer.js`). Note our decoder
+currently **hardcodes** 240×64 and skips a fixed 12-byte header; per this spec
+it could instead **read** width/height/size from the header and verify the
+checksum (logged as a robustness follow-up — see issue tracker). This is the
+physical LCD, independent of app navigation. Render any capture with
+`npm run screen <fixture> out.png`.
 
 ## 8. Dual DSP & presets `[V]`
 
@@ -171,6 +225,19 @@ one the front-panel A/B button drives) is **not** reported anywhere observed
   mis-tokenize (latent).
 - **Framing** `[V]` — OBJECTINFO uses CRLF lines + trailing NUL; VALUE_DUMP does
   not (see §1).
+- **Screen dump carries a checksum** `[D]` — the trailing byte is a sum-to-zero
+  checksum (§7); the app currently doesn't verify it.
+- **Ack/error exist, but only for legacy commands** `[D/V]` — the protocol has
+  `SYSEXC_OK (0x00)` and `SYSEXC_ERROR (0x0D)`, but they're tied to the
+  documented commands (e.g. the remote sigfile load). The object commands
+  (`0x2d`/`0x31`) are undocumented and we see no `OK` after a `VALUE_PUT` — hence
+  the reconcile-by-re-dump rule. Whether a *bad* object request elicits
+  `SYSEXC_ERROR` is untested (§12).
+- **Keypress table** `[D]` — Tech Note 34 Appendix A lists the DSP4000 key bits.
+  The Orville shares most (ENTER `FFFFFFEF`, SETUP `FFFFF7FF`, PROGRAM
+  `F7FFFFFF`, …) but differs for some (its UP/DOWN/AB are multi-bit combos not
+  in the DSP4000 table). `system_commands.txt` is the canonical Orville table
+  and is what `controls.js` must match.
 
 ## 10. Reimplementing from scratch — checklist
 
@@ -195,14 +262,42 @@ connect handshake reads current presets from the §8 root dump; active DSP is th
 
 ## 12. Open questions (hardware backlog) `[?]`
 
+Resolved by Tech Note 34 (no longer open): the `0x17` trailing byte (checksum);
+the 12-byte screen header (width/height/size); MSN-first nibbling; `id=0`
+semantics (broadcast).
+
+Still open — needs a hardware session or more captures:
+
 - Does any value key report the **active DSP**? (Would upgrade §8 from guess to
   fact.)
 - The full **bank/preset taxonomy** (~70 firmware banks) — names, indices,
   how the program/bank SETs enumerate them.
-- The `0x17` **trailing byte** — checksum, terminator, or status?
 - Exhaustive **TYPE** list and the meaning of the `8` meta type; any types beyond
-  COL/NUM/SET/CON/TRG/INF.
+  COL/NUM/SET/CON/TRG/INF. (Undocumented — not in Tech Note 34.)
 - **NUM** units and the exact role of `min/max/step`; **CON** value range.
-- Are there **error/NAK** responses (malformed request, out-of-range PUT)?
+- Does a **bad object request** (`0x2d`/`0x31`) elicit `SYSEXC_ERROR (0x0D)`, or
+  silence? Does a `VALUE_PUT` ever return `SYSEXC_OK`? (Affects how defensively
+  the eager loader / writes behave.)
 - Is `OBJECTINFO`/`VALUE_DUMP` truly context-free for **every** key regardless of
   front-panel position? (Assumed; spot-check edge menus.)
+- The **sigfile** (`0x08`/`0x09`) representation vs the OBJECTINFO tree — could a
+  one-shot sigfile dump be a faster/complete way to load a preset's full state
+  than walking the object tree? Worth evaluating for the eager loader.
+
+## Sources
+
+- **Eventide Tech Note 34 / Technical Note #94 — "MIDI Sysex Messages on the
+  DSP4000"** (applies to Orville and the 7000 family): the authoritative legacy
+  protocol (framing, nibbling, keypress Appendix A, screen dump, program/setup/
+  sigfile/info, OK/ERROR). PDF:
+  `https://s3.amazonaws.com/com.eventide.downloads/Discontinued+products/Tech_Note_34_MIDISysex.pdf`
+- **Eventide Orville documentation index**:
+  `https://www.eventideaudio.com/downloads/?product=Orville&download_type=documentation`
+  — also lists the Orville User Manual (v3.0), Presets Manual, Programming
+  Manual for Harmonizers (operators/sigfile reference), and the Pedal/Switch
+  tutorial.
+- `system_commands.txt` (repo root) — the Orville keypress table this app uses.
+- `tests/fixtures/` — captured OBJECTINFO/VALUE/screen dumps the object-protocol
+  sections (§3–§7) are reverse-engineered from.
+- The object protocol (`0x2d`/`0x2e`/`0x31`/`0x32`) is **not** in any Eventide
+  document we have; §3–§6 here are the only spec for it.

@@ -144,12 +144,50 @@ Structural patterns on otherwise-dynamic keys:
 - `KEY_SUFFIX.PRESET` (`'000b'`) — a preset/DSP root key.
 - `KEY_SUFFIX.METER` (`'0002'`) — a meter parameter (immediate re-render).
 
-## Request/response tracking (app-side)
+## Request/response tracking — the dump wave (app-side)
 
 Not part of the wire protocol, but relevant when reading the code: `midi.js`
-counts outstanding requests per "wave" and emits a `dumpComplete` event when the
-count returns to zero or a `WATCHDOG_MS` (1500 ms) ceiling fires. This backs the
-render-coalescing in `event-bridge.js`.
+groups request/response activity into **dump waves** and emits a `dumpComplete`
+event when a wave finishes. This is the substrate the Phase 3.1 eager loader and
+render-coalescing build on (see
+[`refactor/phase3-state-model.md`](refactor/phase3-state-model.md)).
+
+**Wave lifecycle:**
+
+- A wave **starts** when the `outstanding` request counter transitions `0 → 1`.
+- Each `OBJECTINFO_DUMP` (`0x31`) and `VALUE_DUMP` request (`0x2d`) increments
+  `outstanding` (via `recordRequest`). `VALUE_PUT` is **not** counted — the
+  device sends no response to a put (see the `0x2d` section above).
+- Each matching `0x32` / `0x2e` response decrements `outstanding`, via
+  `notifyResponse`, which `parser.js` calls at the top of each branch. The
+  counter is a pure count — it does not yet correlate responses to requests by
+  key or type.
+- A wave **ends** one of two ways, both emitting `dumpComplete` with a `reason`:
+  - `all-received` — `outstanding` returns to `0` (the healthy path).
+  - `watchdog` — the timeout fires (a stall or a runaway wave).
+
+The `dumpComplete` payload is
+`{ reason, sendCount, receiveCount, durationMs, lastKey }`; it is also written to
+`appState.lastDumpComplete` and logged. `getDumpStats()` exposes a session tally
+of `all` vs `watchdog` reasons.
+
+**Watchdog (idle/silence timer, not a hard ceiling).** Two timing constants in
+[`src/constants.js`](../src/constants.js) bound a wave:
+
+- `WATCHDOG_IDLE_MS` (1500 ms) — the watchdog is **rearmed for this interval on
+  every send and every received response** while a wave is in flight. It fires
+  only after this much *silence*, i.e. a genuine stall.
+- `WATCHDOG_MAX_MS` (10000 ms) — an absolute per-wave ceiling measured from wave
+  start; a rearm never extends the timer past this, so a pathological wave that
+  keeps producing traffic still terminates.
+
+The idle design replaced an earlier fixed 1500 ms ceiling set once at wave start.
+That ceiling tripped during normal large enumerations — the bank list
+(`OBJECTINFO 10020012`, ~70 names) takes ~4–6 s on real hardware (see
+[`device-model.md`](device-model.md) §9, "Large enumerations are slow") — cutting
+the wave short and dropping every response that arrived after. The idle window
+lets a healthy multi-second enumeration drain to `all-received`; the absolute cap
+is the backstop.
 
 ## Sources
 

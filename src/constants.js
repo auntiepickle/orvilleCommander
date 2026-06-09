@@ -18,7 +18,11 @@ export const TIMING = {
   PORT_INIT_MS: 500, // delay after auto-selecting cached ports at boot
   POLL_INTERVAL_MS: 500, // meter-polling re-request interval
   REDUMP_MS: 200, // parser re-dump after the Favorites re-order fix
-  WATCHDOG_MS: 1500, // per-wave dump-complete hard ceiling
+  WATCHDOG_IDLE_MS: 1500, // dump-complete idle/silence watchdog, rearmed on each send and receive;
+  //                         well over the sub-second gap between responses in a healthy wave, so it
+  //                         fires only on a genuine stall (see docs/protocol.md "the dump wave")
+  WATCHDOG_MAX_MS: 10000, // dump-complete absolute per-wave ceiling regardless of activity; comfortably
+  //                         above the slowest observed enumeration (bank list ~4-6s, device-model.md §9)
   SYNC_STEP_MS: 1000, // pause between steps of the dev sync test loop
 };
 

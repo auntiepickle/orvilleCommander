@@ -47,7 +47,11 @@ function parse(argv) {
     in: 'MIDIIN3 (U6MIDI Pro)',
     out: 'MIDIOUT2 (U6MIDI Pro)',
     dev: 1,
-    win: 3000,
+    // The Orville talks to the U6MIDI Pro over a 31250-baud DIN link, so a
+    // ~3872-byte screen dump takes ~1.2s to transmit and the binding delivers
+    // it as multiple 2048-byte buffers. Wait long enough to reassemble all of
+    // them (see captureScreen).
+    win: 4000,
     press: [],
     name: '_hil-shot',
     png: 'logs/hil-shot.png',
@@ -72,6 +76,59 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function findPort(inst, sub) {
   for (let i = 0; i < inst.getPortCount(); i++) if (inst.getPortName(i).includes(sub)) return i;
   return -1;
+}
+
+// Request a screen dump (0x18) and reassemble the 0x17 reply. @julusian/midi on
+// WinMM delivers a long SysEx as multiple 2048-byte buffer chunks: the first
+// starts with F0 1C 70 dev 17, the rest are raw continuation bytes, and the last
+// ends with F7. Accumulate from the header chunk until we see F7. Returns the
+// full SysEx byte array, or whatever arrived before the window elapsed (the
+// caller validates completeness). Resolves once the stream terminates so a
+// complete capture does not wait out the whole window.
+function captureScreen(input, output, o) {
+  return new Promise((resolve) => {
+    let done = false;
+    let started = false;
+    const chunks = [];
+    const finish = (val) => {
+      if (done) return;
+      done = true;
+      input.removeListener('message', h);
+      resolve(val);
+    };
+    const h = (_dt, m) => {
+      const arr = Array.from(m);
+      if (!started) {
+        const isScreen =
+          arr.length > 5 &&
+          arr[0] === 0xf0 &&
+          arr[1] === 0x1c &&
+          arr[2] === 0x70 &&
+          arr[4] === 0x17;
+        if (!isScreen) return; // ignore unrelated SysEx until the screen header
+        started = true;
+      }
+      chunks.push(arr);
+      if (arr[arr.length - 1] === 0xf7) finish([].concat(...chunks)); // complete SysEx
+    };
+    input.on('message', h);
+    output.sendMessage([0xf0, 0x1c, 0x70, o.dev, 0x18, 0xf7]);
+    setTimeout(() => finish(chunks.length ? [].concat(...chunks) : null), o.win);
+  });
+}
+
+const denibbleBytes = (n) => {
+  const out = [];
+  for (let i = 0; i + 1 < n.length; i += 2) out.push((n[i] << 4) | n[i + 1]);
+  return out;
+};
+
+// A complete screen SysEx ends with F7 and denibbles to header + size + checksum.
+function isCompleteScreen(sysex) {
+  if (!sysex || sysex[sysex.length - 1] !== 0xf7) return false;
+  const raw = denibbleBytes(sysex.slice(5, sysex.length - 1));
+  const size = ((raw[8] << 24) | (raw[9] << 16) | (raw[10] << 8) | raw[11]) >>> 0;
+  return raw.length >= 12 + size + 1; // 12-byte header + pixels + checksum
 }
 
 async function main() {
@@ -105,32 +162,17 @@ async function main() {
   }
   if (o.press.length) await sleep(300); // settle
 
-  // 2. Request a screen dump and capture the 0x17 reply.
-  const got = await new Promise((resolve) => {
-    let done = false;
-    const h = (_dt, m) => {
-      if (
-        !done &&
-        m.length > 5 &&
-        m[0] === 0xf0 &&
-        m[1] === 0x1c &&
-        m[2] === 0x70 &&
-        m[4] === 0x17
-      ) {
-        done = true;
-        input.removeListener('message', h);
-        resolve(Array.from(m));
-      }
-    };
-    input.on('message', h);
-    output.sendMessage([0xf0, 0x1c, 0x70, o.dev, 0x18, 0xf7]);
-    setTimeout(() => {
-      if (!done) {
-        input.removeListener('message', h);
-        resolve(null);
-      }
-    }, o.win);
-  });
+  // 2. Request a screen dump and reassemble the 0x17 reply, retrying if a
+  //    capture comes back truncated (a slow/partial DIN transmission).
+  let got = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    got = await captureScreen(input, output, o);
+    if (isCompleteScreen(got)) break;
+    console.error(
+      `attempt ${attempt}: ${got ? `incomplete capture (${got.length} bytes)` : 'no 0x17 reply'}; retrying`
+    );
+    await sleep(300);
+  }
 
   input.closePort();
   output.closePort();
@@ -138,6 +180,11 @@ async function main() {
   if (!got) {
     console.error(`no 0x17 screen reply within ${o.win}ms`);
     process.exit(1);
+  }
+  if (!isCompleteScreen(got)) {
+    console.error(
+      `WARNING: screen capture is incomplete after retries (${got.length} bytes saved)`
+    );
   }
 
   // 3. Save the raw capture and render it to PNG via the canonical decoder.

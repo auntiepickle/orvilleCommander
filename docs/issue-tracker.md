@@ -135,15 +135,15 @@ reviewer agents swept all of src/; findings consolidated below.
       silently painting a partial screen. CHECKSUM ALGORITHM confirmed against a full hardware capture: the
       sum of every byte from the size field (offset 8) through the trailing checksum byte is 0 mod 256 (TN34's
       "all bytes incl. size sum to 0" = from the size field). Tests pin it against screen-dump-black-hole.txt.
-- [ ] FB5 (NEW, found during FB1) HIL capture truncates SysEx at 2048 bytes: hil-screenshot.cjs /
-      orville-probe.cjs (via @julusian/midi on WinMM) receive a 0x17 screen dump as exactly 2048 message
-      bytes -> only 1021 of the expected 1933 denibbled bytes (header says size=1920; we get ~1009 pixel
-      bytes = top ~34 of 64 rows). The five golden captures in tests/fixtures/golden/ (PR #75) are therefore
-      TOP-PORTION-ONLY, not full screens — the bottom half is zero-filled, not blank. The full-capture path
-      works (screen-dump-black-hole.txt is a complete 1933-byte dump from the browser/app debug path), so this
-      is specific to the @julusian/midi CLI receive buffer. NEEDS DEVICE: fix the CLI sysex buffer (or
-      reassemble multi-buffer sysex), then recapture full goldens. Until then the goldens regression-test only
-      the top rows. FB1's truncation check (complete=false) now detects this class of bug at decode time.
+- [x] FB5 RESOLVED (branch fix/hil-sysex-reassembly): HIL screen captures were truncated. ROOT CAUSE: the
+      Orville drives the U6MIDI Pro over a 31250-baud DIN link, so a ~3872-byte 0x17 dump takes ~1.2s to
+      transmit and @julusian/midi (WinMM) delivers it as multiple 2048-byte buffer chunks (first chunk starts
+      F0 1C 70 dev 17 with no F7; continuation chunks are raw bytes; the last ends F7). The old tool grabbed
+      only the first chunk within a 1.5s window -> 2048 bytes / 1021 denibbled / top ~34 rows. NOT a device or
+      buffer-size bug (setBufferSize proved unreliable here). FIX: hil-screenshot.cjs now reassembles chunks
+      from the header chunk until F7, waits a 4s window for the slow transmission, retries on incomplete, and
+      validates completeness. The five golden captures were RECAPTURED full (3872 bytes each, 1933 denibbled,
+      complete && checksumOk) and re-rendered. Verified against the device.
 - [x] FB4 RESOLVED (branch fix/dump-watchdog-idle-reset): the midi.js dump watchdog was a fixed 1500ms hard
       ceiling that fired mid-response on large enumerations like the bank list (OBJECTINFO 10020012, ~70 names,
       ~4-6s). Replaced with an idle/silence watchdog (WATCHDOG_IDLE_MS 1500, rearmed on every send and receive)

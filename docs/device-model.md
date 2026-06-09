@@ -243,8 +243,13 @@ Two independent engines, A and B, **both always running**; the front panel only
 own object subtree (`preset root → category COLs → params`, e.g. `Black Hole` →
 `space`, `in eq`, `info`). The unit **boots into the last-used preset** per DSP,
 so the root dump is the authoritative current state at connect. The **active
-DSP** is **not** reported on the wire — the User Manual confirms the A/B display
-indicator is a front-panel-only affordance `[D]` — so treat it as app-side state.
+DSP** is **not** reported on the wire as a value — but it is **controllable and
+observable** `[V]` (live-probed): sending the **A/B keypress** (`0x01`, mask
+`FDFFFDFF`) toggles the displayed DSP, and the shared load-menu selectors
+(`10020011`/`10020012`) then reflect the other DSP (verified A→B→A: program
+selector went `' 12 Black Hole'` → `' 12 Auto Tape Flanger'` → back). So the app
+both *controls* the active DSP (drive A/B) and can *detect* it (toggle and
+observe), and otherwise tracks it as app-side view state.
 
 ### Banks & program loading `[D]` (Orville User Manual)
 
@@ -269,8 +274,12 @@ indicator is a front-panel-only affordance `[D]` — so treat it as app-side sta
   **bank SET `10020012`** (`'bank: %s'`) enumerates banks; the **program SET
   `10020011`** (`'programs: %s'`) enumerates the presets in the *current* bank.
   Each option is `'<slot> <name>'` with the slot number space-padded (e.g.
-  `' 12 Black Hole'` = slot 12). Querying these reflects the **currently
-  displayed DSP**.
+  `' 12 Black Hole'` = slot 12). These selectors are **scoped to the displayed
+  DSP** (see §8 active-DSP) and show the DSP's **cued** program — what a load
+  trigger would load — which can differ from the **running** preset name in the
+  root dump (e.g. B's selector cued `Auto Tape Flanger` while B was running
+  `MetallicChamber`). So load operations via these selectors target whichever
+  DSP is currently displayed; switch with the A/B keypress first if needed.
 - **Factory bank taxonomy `[V]`** — captured live: **70 named banks**, numbered
   **0–80 with gaps** (empty slots skipped, e.g. 25, 33–41, 60). Full list in
   `tests/fixtures/objectinfo-10020012-banks.txt`; highlights: `0 Favorites`,
@@ -362,13 +371,14 @@ Resolved by the live hardware session (no longer open): the **`8` type** =
 empty/nonexistent object; **bad reads** return empty (no error); the full
 **factory bank taxonomy** (70 banks, captured); **OBJECTINFO is context-free**
 (load-menu keys answer without navigating, just slowly); large enumerations are
-**slow (~4–6 s)**.
+**slow (~4–6 s)**; **active DSP** is drivable (A/B keypress) and detectable
+(toggle + re-read the display-scoped selectors) — see §8; **keypress (`0x01`)
+works live** — we toggled A/B over MIDI.
 
 Still open — needs a hardware session or more captures:
 
-- Does any value key report the **active DSP**? (The program/bank SETs reflect
-  the *displayed* DSP — toggling A/B then re-reading `10020011` would confirm and
-  give a detection method. Quick to test next time the unit is on.)
+- A *dedicated* read for the active DSP (we can drive/detect it via §8, but no
+  single "which DSP" value key has been found — minor).
 - **CON** absolute value range (monitors have min/max specifiers, but the wire
   value's range is unconfirmed).
 - Does a **bad write** (out-of-range `VALUE_PUT`) elicit `SYSEXC_ERROR (0x0D)`,

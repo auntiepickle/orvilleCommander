@@ -164,8 +164,15 @@ NOTE: Batch 1.4 (B10) complete.
       * OBJECTINFO confirmed context-free (load-menu keys answer un-navigated, just slow).
       New fixtures: objectinfo-{10020012-banks,10020011-programs,10020000-program,4040001-spaceparams},
       valuedump-4070001. New tool build_tools/orville-probe.cjs (interactive probe with --save).
-      STILL OPEN (quick, next time unit is on): active-DSP detection (toggle A/B, re-read 10020011);
-      bad-WRITE error behavior; CON value range; bank-change SysEx format.
+- [x] B10g.2 active-DSP RESOLVED by DRIVING the unit: added a `key` action to orville-probe.cjs (sends
+      keypress 0x01 with the controls.js masks) and toggled A/B over MIDI myself. Confirmed the program/bank
+      selectors (10020011/10020012) are scoped to the DISPLAYED DSP and show the CUED program (can differ
+      from the running preset; B cued 'Auto Tape Flanger'/bank 8 while running MetallicChamber). Active DSP
+      is app-controllable (drive A/B) and detectable (toggle + re-read). Restored display to A afterward.
+      Also PROVES the full HIL loop (drive a button over MIDI -> read state/screen) works from here —
+      unblocks the deferred G2 live screenshot-regression loop.
+      STILL OPEN (minor): dedicated active-DSP read key; bad-WRITE error behavior; CON value range;
+      bank-change SysEx format.
 
 ---
 

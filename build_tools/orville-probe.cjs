@@ -58,6 +58,30 @@ function parse(argv) {
   return o;
 }
 
+// Front-panel keypress masks (4 bytes, active-low), mirrored from controls.js.
+// A keypress is cmd 0x01 with the mask split into 8 nibbles (MSN first).
+const KEYS = {
+  up: [0xfe, 0xff, 0xfd, 0xff],
+  down: [0xff, 0xfe, 0xfd, 0xff],
+  left: [0xff, 0xfe, 0xff, 0xff],
+  right: [0xfe, 0xff, 0xff, 0xff],
+  enter: [0xff, 0xff, 0xff, 0xef],
+  select: [0xff, 0xff, 0xfe, 0xff],
+  program: [0xf7, 0xff, 0xff, 0xff],
+  parameter: [0xff, 0xf7, 0xff, 0xff],
+  levels: [0xff, 0xff, 0xff, 0xfd],
+  setup: [0xff, 0xff, 0xf7, 0xff],
+  bypass: [0xff, 0xff, 0xfd, 0xff],
+  inc: [0xff, 0xff, 0xff, 0x7f],
+  dec: [0xff, 0xff, 0xff, 0xbf],
+  soft1: [0xfb, 0xff, 0xff, 0xff],
+  soft2: [0xff, 0xfb, 0xff, 0xff],
+  soft3: [0xff, 0xff, 0xfb, 0xff],
+  soft4: [0xff, 0xff, 0xff, 0xfb],
+  ab: [0xfd, 0xff, 0xfd, 0xff],
+};
+const nibble = (mask) => mask.flatMap((b) => [(b >> 4) & 0x0f, b & 0x0f]);
+
 const midi = require('@julusian/midi');
 const ascii = (k) => k.split('').map((c) => c.charCodeAt(0));
 const hex = (b) => b.map((x) => x.toString(16).padStart(2, '0').toUpperCase()).join(' ');
@@ -177,7 +201,14 @@ async function main() {
   else if (action === 'put')
     req = [0xf0, 0x1c, 0x70, o.dev, CMD.VAL, ...ascii(o.rest[1]), 0x20, ...ascii(o.rest[2]), 0xf7];
   else if (action === 'screen') req = [0xf0, 0x1c, 0x70, o.dev, CMD.SCREEN_REQ, 0xf7];
-  else if (action === 'raw') req = o.rest.slice(1).map((h) => parseInt(h, 16));
+  else if (action === 'key') {
+    const mask = KEYS[o.rest[1]];
+    if (!mask) {
+      console.error(`unknown key '${o.rest[1]}'. known: ${Object.keys(KEYS).join(', ')}`);
+      process.exit(1);
+    }
+    req = [0xf0, 0x1c, 0x70, o.dev, 0x01, ...nibble(mask), 0xf7];
+  } else if (action === 'raw') req = o.rest.slice(1).map((h) => parseInt(h, 16));
   else {
     console.error(`unknown action: ${action}`);
     process.exit(1);

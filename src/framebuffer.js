@@ -42,8 +42,7 @@ function readU32BE(bytes, offset) {
   );
 }
 
-const dimsSane = (w, h) =>
-  w > 0 && h > 0 && w <= SCREEN.MAX_DIMENSION && h <= SCREEN.MAX_DIMENSION;
+const dimsSane = (w, h) => w > 0 && h > 0 && w <= SCREEN.MAX_DIMENSION && h <= SCREEN.MAX_DIMENSION;
 
 /**
  * Parse and integrity-check a denibbled 0x17 screen dump's 12-byte header.

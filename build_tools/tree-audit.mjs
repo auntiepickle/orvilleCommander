@@ -7,7 +7,7 @@
 // Violations are emitted as JSON lines and summarized; report saved to
 // logs/tree-audit-report.json.
 //
-// Usage: node build_tools/tree-audit.mjs [maxDepth=2] [quietMs=1500] [capMs=15000]
+// Usage: node build_tools/tree-audit.mjs [maxDepth=2] [quietMs=1500] [capMs=120000]
 
 import { JSDOM } from 'jsdom';
 import midi from '@julusian/midi';
@@ -15,7 +15,18 @@ import fs from 'node:fs';
 
 const MAX_DEPTH = parseInt(process.argv[2] || '2', 10);
 const QUIET_MS = parseInt(process.argv[3] || '1500', 10);
-const CAP_MS = parseInt(process.argv[4] || '15000', 10);
+// Hard per-node runaway ceiling ONLY. Settling is bounded by link IDLENESS,
+// not wall-clock: while messages keep arriving the backlog is draining and
+// the auditor keeps waiting (the program subtree's bank-list dumps can back
+// the 31250-baud link up past any reasonable fixed cap — R5; a 15s cap
+// produced a spurious no-render at 10030000 whose dump arrived moments
+// after the window expired).
+const CAP_MS = parseInt(process.argv[4] || '120000', 10);
+// Give up on a node only after the link has been COMPLETELY silent this
+// long without its dump pinning. Generous multiple of the longest observed
+// single-response gap (the ~70-bank list takes ~1.2s of link time and
+// arrives whole): 8s of pure silence means the response is not coming.
+const GIVE_UP_IDLE_MS = 8000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- DOM + app boot (same recipe as live-app.mjs) ------------------
@@ -189,8 +200,12 @@ async function settleOn(key) {
   const start = Date.now();
   while (Date.now() - start < CAP_MS) {
     const onNode = appState.currentSubs?.[0]?.key === key;
-    const quiet = Date.now() - lastMsgAt >= QUIET_MS;
-    if (onNode && quiet) return true;
+    const idle = Date.now() - lastMsgAt;
+    if (onNode && idle >= QUIET_MS) return true;
+    // Idle-bounded give-up: only when the link has gone fully silent
+    // without the node pinning. Mere slowness (backlog still draining,
+    // messages still flowing) keeps the window open.
+    if (!onNode && idle >= GIVE_UP_IDLE_MS) return false;
     await sleep(150);
   }
   return appState.currentSubs?.[0]?.key === key;

@@ -284,10 +284,12 @@ scheduling. Known open notes (#105): duplicate derived sibling labels
 
 **Acceptance:** offline suite green; then a device-on `npm run tree-audit`
 reporting ZERO violations (the last standing class — blank-node reachability
-— is resolved by the label policy). PASSED 2026-06-10: depth 2, 42 nodes
-fetched, 41 audited, zero violations (capMs=30000 to ride out the program
-subtree's bank-list backlog — the R5 congestion class flagged one spurious
-no-render at the default 15s cap).
+— is resolved by the label policy). PASSED 2026-06-10: depth 2 at stock
+defaults, 42 nodes fetched, 41 audited, zero violations. (The auditor's
+settle window is now bounded by link idleness rather than wall-clock — the
+old fixed 15s cap flagged one spurious no-render while the program
+subtree's bank-list backlog was still draining, the R5 congestion class;
+app-side request scheduling stays with #106.)
 
 ## Validation / open items
 

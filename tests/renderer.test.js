@@ -437,6 +437,8 @@ describe('renderer.js', () => {
       },
     ];
     renderScreen(subs, '', mockLog);
+    // Seed stale entries so the clear assertion below is not vacuous (C8/#44).
+    appState.childSubs = { stale: [{ key: 'stale', type: 'NUM' }] };
 
     const dspB = document.querySelector('.dsp-clickable[data-key="801000b"]');
     expect(dspB).toBeTruthy();

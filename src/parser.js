@@ -135,10 +135,11 @@ export function parseResponse(data) {
                   'general'
                 );
                 sendValuePut(programSub.key, newIndex.toString());
-                // No optimistic cache write (A3): the Orville does not
-                // acknowledge a PUT, so the re-dump below is the single source
-                // of truth and avoids a divergent cached value if the PUT does
-                // not take.
+                // No optimistic cache write (A3): the device echoes a 0x2e
+                // dump of the resulting (possibly clamped) value after a PUT
+                // (B10g.3), and the delayed re-dump below reconciles on top of
+                // that — either way the device, not a local write, is the
+                // single source of truth if the PUT does not take as sent.
                 setTimeout(() => sendValueDump(programSub.key), TIMING.REDUMP_MS);
               }
             }

@@ -288,8 +288,10 @@ HUMAN-GATE: none
       currentSubs IS currentKey's dump). Shipped: removed the three redundant childSubs:{} patches in the
       renderer click handlers (updateScreen documented as the single clear point); made the parser guard's
       consistency precondition explicit (currentSubs[0].key === currentKey — fail-closed for late dumps
-      after navigation; new test proven fail-on-old); pinned the clear across descend/sibling/back/DSP-toggle
-      paths; documented the main-line PARENT self-echo in device-model.md §3 (a dump cannot self-identify
+      after navigation; new test proven fail-on-old); pinned the clear with stale-seeded childSubs across
+      descend/sibling/back paths (the pre-existing DSP-toggle test also asserts childSubs is empty after
+      nav, but starts from empty childSubs, so that path alone would not catch a clear regression);
+      documented the main-line PARENT self-echo in device-model.md §3 (a dump cannot self-identify
       its parent — verified across all 8 OBJECTINFO fixtures). RESIDUAL (defer to C1): a VALID child dump
       can be dropped if a stale re-render re-pins currentSubs before it lands — harmless (next updateScreen
       refetch self-heals); request-correlated dumpComplete events are the real fix.

@@ -276,10 +276,25 @@ for (const [key, node] of colNodes) {
     const valFrag = (p.value || '').trim().slice(0, 20);
     if (!stmtFrag && !tagFrag && !valFrag) continue; // blank spacers: render-skip by design
     if (p.type === 'INF' && !stmtFrag && !valFrag) continue; // pure-format INF, value arrives later
+    // Format-only CON (statement blank, tag IS the format spec — the pedal
+    // monitors): renders as pure formatted value with no stable literal and
+    // no data-key (R10). Rather than skipping blind, derive a pattern from
+    // the format (specs -> a number, '%%' -> '%') and require SOME line to
+    // match it, so total disappearance still flags.
+    if (p.type === 'CON' && !stmtFrag && /%-?\d*(\.\d*)?[fs]/.test(tagFrag)) {
+      const derived = tagFrag
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&') // escape literals
+        .replace(/%-?\\?\d*(\\\.\d*)?[fs]/g, '-?\\d+(\\.\\d+)?\\s*') // specs -> a number
+        .replace(/%%/g, '%');
+      if (!new RegExp(derived).test(mainText)) {
+        flag(key, 'param-missing', `format-only CON ${p.key} '${p.tag}' not rendered`);
+      }
+      continue;
+    }
     const textHit =
       (stmtFrag && mainText.includes(stmtFrag)) ||
       (p.type === 'INF' && valFrag && mainText.includes(valFrag)) || // INF renders its value
-      (tagFrag && mainText.includes(tagFrag)); // blanket short-text fallback (bar CONs render tag-only, no data-key)
+      (tagFrag && mainText.includes(tagFrag)); // blanket short-text fallback (spec-less indicator CONs render tag + bar, no data-key — R10)
     if (keyCount === 0 && !textHit) {
       flag(key, 'param-missing', `${p.type} ${p.key} '${p.statement}' not rendered`);
     } else if (keyCount > 1) {

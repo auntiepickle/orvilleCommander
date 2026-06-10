@@ -601,10 +601,25 @@ in logs/ (program-screen.png).
       actions (save/delete program/bank, card ops, link, STR name edits — TRG/STR puts under
       10020xxx); known gap: front-panel changes outside the app (mitigate via Sync button /
       reconnect refetch). Possibly also clear hideLoading earlier when content is cache-served.
+- [x] R10 (GH #116; branch fix/con-format-in-tag) CON DISPLAY SEMANTICS FIXED + §12 'CON range'
+      RESOLVED (live probe 2026-06-10): CON values arrive in DISPLAY units, not 0-1 fractions —
+      assign/MIDI monitors 0-100 against '%%' formats, file sizes raw bytes, sample rate Hz — and
+      the format spec may live in the TAG when the statement is blank (pedal monitors: '' +
+      '%2.1f%%'). Two renderer bugs fell out of the old assumptions: format-in-tag CONs went down
+      the bar path (literal '%2.1f%%' as label + pegged-full bar from 70.7 clamped into 0-1), and
+      the *100 'percent inflation' rendered 'monitor = 10003.00%'. Fix in both CON render sites
+      (top-level + embed): format detection falls back to the tag; *100 deleted; bar path remains
+      for spec-less indicator CONs only (Tempo 'Beat'). Review hardening: '%%' now collapses to '%'
+      via FORMAT_SPEC_RE's leading alternative on EVERY param path — the live LCD used to show
+      'mod rate :  60 %%' because only the CON branch collapsed post-hoc; CON format detection uses
+      the tight CON_FORMAT_RE (a literal '%' can't be misread as a format). Audit detector: format-
+      only CONs are checked against a PATTERN derived from their format (specs -> a number) instead
+      of skipped blind, so total disappearance still flags. device-model §3 + §12 updated; CON
+      snapshot input corrected to display units. NOTE: audio LEVEL meters are NOT tree CONs (device draws them
+      into the LCD framebuffer; bitmap path only — probed to depth 3).
 NOTE: C2 landing validated LIVE end to end on this session: root dump -> landing -> descend ->
 'space parameters' with values matching the physical LCD capture (logs/hil-shot.png). Perf reported
-good by the maintainer. The B10g.3 §12 item "CON range" still open (no audio signal connected;
-meter rendering verifiable offline with synthetic values — renderer CON snapshot covers it).
+good by the maintainer. The B10g.3 §12 item "CON range" RESOLVED by R10 above.
 HUMAN-GATE: none (all reproducible offline or with the harness)
 
 ### Batch 3.4 — Cycle cleanup   [branch: refactor/logcategories-off-appstate]  (GH #42)

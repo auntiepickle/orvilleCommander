@@ -315,15 +315,25 @@ const handleParamClick = (e) => {
  * formatValue('%-10s', 'test', true, 'key123'); // '<span class="param-value" data-key="key123">test      </span>'
  */
 // Every value format specifier the device's statement strings use (%f and %s
-// families plus the literal '%%'); shared by formatValue and the R3
-// pre-paint placeholder substitution.
-const FORMAT_SPEC_RE = /%(-)?(\d*)(\.\d*)?f|%(-)?(\d*)s|%/g;
+// families plus the literal '%%', which collapses to a single '%' — the
+// leading alternative, so the device's percent-suffix statements like
+// 'diff/time : %3.0f %%' render '60 %' and not '60 %%' on EVERY param
+// path (R10 review: only the CON branch used to collapse, post-hoc).
+// Shared by formatValue and the R3 pre-paint placeholder substitution.
+const FORMAT_SPEC_RE = /%%|%(-)?(\d*)(\.\d*)?f|%(-)?(\d*)s|%/g;
+
+// Does a string contain a REAL value format spec ('%[-][width][.prec]f' or
+// '%[-][width]s')? Used to decide whether a CON's statement/tag is a format
+// (R10) — deliberately tighter than FORMAT_SPEC_RE's bare-'%' alternative,
+// so a hypothetical literal like '% of files' is not misread as a format.
+// No /g flag: .test() on a global regex is lastIndex-stateful.
+const CON_FORMAT_RE = /%-?\d*(\.\d*)?f|%-?\d*s/;
 
 function formatValue(statement, value, isHtml = false, key = '') {
   return statement.replace(
     FORMAT_SPEC_RE,
     (match, fLeftFlag, fWidthStr, precStr, sLeftFlag, sWidthStr) => {
-      if (match === '%') return '%';
+      if (match === '%%' || match === '%') return '%';
       if (fLeftFlag !== undefined || fWidthStr !== undefined || precStr !== undefined) {
         // %[-]width[.prec]f
         const leftAlign = fLeftFlag === '-';
@@ -372,13 +382,11 @@ let prePainting = false;
 
 // A param line with every value slot blanked to the placeholder: the
 // statement (else the tag) with format specifiers substituted; '%%'
-// collapses to a literal '%' (each '%' matches the bare-% alternative
-// individually, so the pair needs the same explicit collapse the CON
-// render path applies).
+// collapses to a literal '%' via the shared regex's leading alternative.
 const placeholderLine = (s) =>
-  (s.statement || s.tag || '')
-    .replace(FORMAT_SPEC_RE, (m) => (m === '%' ? '%' : RENDER.VALUE_PLACEHOLDER))
-    .replace('%%', '%');
+  (s.statement || s.tag || '').replace(FORMAT_SPEC_RE, (m) =>
+    m === '%%' || m === '%' ? '%' : RENDER.VALUE_PLACEHOLDER
+  );
 
 export function renderScreen(subs, ascii, logParam) {
   const lcdEl = document.getElementById('lcd');
@@ -597,13 +605,27 @@ export function renderScreen(subs, ascii, logParam) {
         if (isNaN(meterValue)) {
           meterValue = 0; // Default to 0 if invalid value
         }
-        if (/%.*[fs]/.test(s.statement)) {
-          let displayValue = meterValue;
-          if (s.statement.includes('%%')) displayValue *= 100;
-          fullText = formatValue(s.statement, displayValue);
-          if (fullText.includes('%%')) fullText = fullText.replace('%%', '%');
+        // CON display semantics (probed live, device-model §3/§12): values
+        // arrive in DISPLAY units (assign monitors 0-100 with a '%%'
+        // format; file sizes in raw bytes), and the format spec can live
+        // in the TAG when the statement is blank (the pedal monitors:
+        // statement '', tag '%2.1f%%'). The old statement-only check sent
+        // pedal monitors down the bar path with the literal format string
+        // as their label, and the old *100 "percent inflation" assumed 0-1
+        // fractions — live values disprove it ('monitor = %2.2f%%' at
+        // 100.03 rendered as 10003.00%).
+        const conFormat = CON_FORMAT_RE.test(s.statement)
+          ? s.statement
+          : CON_FORMAT_RE.test(s.tag)
+            ? s.tag
+            : null;
+        if (conFormat) {
+          fullText = formatValue(conFormat, meterValue); // '%%' collapses in formatValue
           fullHtml = fullText;
         } else {
+          // No format spec anywhere: an indicator CON (the Tempo 'Beat'
+          // flasher is the only live-observed case) — render the bar,
+          // treating the value as a 0-1 fraction, clamped.
           const tagLength = s.tag.length;
           const barSpace = LAYOUT.LCD_COLUMNS - tagLength - 1;
           let barLength = Math.round(meterValue * barSpace);
@@ -715,11 +737,16 @@ export function renderScreen(subs, ascii, logParam) {
             if (isNaN(meterValue)) {
               meterValue = 0; // Default to 0 if invalid value
             }
-            if (/%.*[fs]/.test(cs.statement)) {
-              let displayValue = meterValue;
-              if (cs.statement.includes('%%')) displayValue *= 100;
-              childFullText = formatValue(cs.statement, displayValue);
-              if (childFullText.includes('%%')) childFullText = childFullText.replace('%%', '%');
+            // Same CON display semantics as the top-level branch (probed
+            // live): format spec may live in the tag; values are display
+            // units, never *100-inflated.
+            const conFormat = CON_FORMAT_RE.test(cs.statement)
+              ? cs.statement
+              : CON_FORMAT_RE.test(cs.tag)
+                ? cs.tag
+                : null;
+            if (conFormat) {
+              childFullText = formatValue(conFormat, meterValue); // '%%' collapses in formatValue
               childFullHtml = childFullText;
             } else {
               const tagLength = cs.tag.length;

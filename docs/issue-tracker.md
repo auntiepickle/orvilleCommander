@@ -429,10 +429,11 @@ and arrival races; the cure is view DERIVED from the device tree.
       prompts for free text and PUTs the string (mirrors the NUM edit flow). STR added to PARAM_TYPES
       (descend predicate counts it). ACCEPTANCE: tree audit rerun — both STR param-missing violations
       GONE; the board is down to ONE violation (the fully-blank 100100d0 label policy, T1b).
-      needs-hardware NOTE: multi-word strings untested on the PUT wire (readback is safe — splitLine
-      keeps quoted names one token) and empty-string puts (clear semantics) untested; the handler
-      rejects empty + non-ASCII and clamps to the declared field width. (PUT payload is key SPACE value;
-      single tokens verified) — try a two-word name on the unit when convenient.
+      HARDWARE QUESTIONS RESOLVED (probed live, same session): multi-word puts WORK — put 'Two Words'
+      echoed "10020052 'Two Words'" (the device quotes multi-word values in the dump, so splitLine
+      readback is safe end to end); empty-string puts are IGNORED by the device (value unchanged), so
+      the handler's empty-rejection matches hardware semantics exactly. The handler also rejects
+      non-ASCII (7-bit SysEx) and clamps to the declared field width.
 - [x] R9  (branch fix/empty-tag-softkey-labels) Empty-tag children UNREACHABLE — FIXED with derived
       labels: probing showed 10030601 is position 'c' (a new position code, like 'e'), so it was never
       an embed candidate, and the tag-only softkey filter dropped it; its children (the per-output gain

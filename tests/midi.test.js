@@ -226,21 +226,51 @@ describe('midi.js SysEx byte contract', () => {
     expect(isWaveOpen()).toBe(false);
   });
 
-  test('GET_SCREEN mid-wave is deferred, coalesced, and fired after the drain (#107)', () => {
+  test('GET_SCREEN mid-wave is deferred, coalesced, and fired after the drain (#107)', async () => {
     // The device drops requests that collide with its own bitmap
     // transmission (measured live: send=7 recv=4 waves riding to the 10s
     // cap), so bitmap fetches serialize after the open wave — R5's fix.
+    // The fire rides a microtask so the wave's final response finishes
+    // parsing first; flush with an await before asserting.
     sendObjectInfoDump('a'); // wave open
     output.sendSysex.mockClear();
     sendSysEx(0x18, []);
     sendSysEx(0x18, []); // coalesces with the first
     expect(output.sendSysex).not.toHaveBeenCalled(); // deferred, not sent
-    notifyResponse('objectinfo', 'a'); // wave drains -> deferred fetch fires
+    notifyResponse('objectinfo', 'a'); // wave drains
+    expect(output.sendSysex).not.toHaveBeenCalled(); // not synchronously...
+    jest.runAllTicks(); // ...but on the microtask (fake timers intercept it)
     expect(output.sendSysex).toHaveBeenCalledTimes(1); // exactly one
     expect(output.sendSysex).toHaveBeenCalledWith([0x1c, 0x70], [0x00, 0x18]);
     expect(isWaveOpen()).toBe(true); // the fired fetch is its own counted wave
     notifyResponse('screen', null);
     expect(isWaveOpen()).toBe(false);
+  });
+
+  test('a deferred GET_SCREEN re-defers behind requests a dumpComplete handler sends (#107)', async () => {
+    // The collision-avoidance core: handler requests (settled-render value
+    // fetches, eager-loader steps) must never join a wave whose bitmap is
+    // about to be inbound. The deferred fetch yields to them and goes out
+    // on a LATER drain, alone on the link.
+    let handlerFired = false;
+    const off = on('dumpComplete', () => {
+      if (!handlerFired) {
+        handlerFired = true;
+        sendValueDump('x'); // a settled render's fetch opens a new wave
+      }
+    });
+    sendObjectInfoDump('a');
+    output.sendSysex.mockClear();
+    sendSysEx(0x18, []); // deferred behind the open wave
+    notifyResponse('objectinfo', 'a'); // drain -> handler opens a NEW wave
+    jest.runAllTicks();
+    // The microtask saw outstanding > 0 and kept the fetch deferred.
+    const screenSends = output.sendSysex.mock.calls.filter((c) => c[1][1] === 0x18);
+    expect(screenSends).toHaveLength(0);
+    notifyResponse('valuedump', 'x'); // the handler wave drains
+    jest.runAllTicks();
+    expect(output.sendSysex.mock.calls.filter((c) => c[1][1] === 0x18)).toHaveLength(1);
+    off();
   });
 
   test('sendValueDump emits cmd 0x2d with the key as ASCII bytes', () => {

@@ -357,7 +357,8 @@ distinct ids; id 0 = broadcast (§1).
   under a second, but the bank list (`OBJECTINFO 10020012`, ~70 names) takes
   **~4–6 s**. Implication: a fixed per-wave watchdog would fire mid-enumeration.
   The `midi.js` watchdog is therefore an idle/silence timer (`WATCHDOG_IDLE_MS`,
-  rearmed on each send/receive) bounded by an absolute `WATCHDOG_MAX_MS` cap, so a
+  rearmed on each send, each receive, and each raw inbound packet — #107; see
+  [`protocol.md`](protocol.md)) bounded by an absolute `WATCHDOG_MAX_MS` cap, so a
   healthy slow enumeration drains to completion rather than being cut short (FB4,
   resolved; see [`protocol.md`](protocol.md) "Request/response tracking — the dump
   wave"). `OBJECTINFO` is otherwise context-free

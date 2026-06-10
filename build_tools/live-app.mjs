@@ -234,7 +234,12 @@ if (MODE === 'walk') {
   await waitFor(() => appState.currentSubs[0]?.key === '10020000');
   click('.softkey[data-key="10020020"]') || click('[data-key="10020020"]');
   const settled = await waitFor(() => appState.currentSubs[0]?.key === '10020020' && hasCons());
-  if (!settled) console.log('[live] WARN: save program never settled; report will abort');
+  if (!settled) {
+    // Abort on the settle itself: falling through could measure whatever
+    // CON-bearing menu happens to be on screen (review finding).
+    console.log('[live] ABORT: save program never settled; not measuring');
+    process.exit(1);
+  }
   const conKeys = appState.currentSubs.filter((s) => s.type === 'CON').map((s) => s.key);
   console.log(
     `[live] smoke menu: ${appState.currentKey} with ${conKeys.length} CONs (${conKeys.join(',')})`
@@ -292,10 +297,9 @@ if (MODE === 'walk') {
 
 console.log('\n===== last dumpComplete =====');
 console.log(JSON.stringify(appState.lastDumpComplete));
-// WinMM closePort can hang after heavy callback traffic (observed: the
-// smoke run's process survived its own report and held the port). The
-// unref'd timer guarantees exit either way; the OS releases the ports.
-setTimeout(() => process.exit(0), 2000).unref();
-input.closePort();
-output.closePort();
+// Exit WITHOUT closePort: WinMM closePort blocked synchronously after the
+// heavy-callback smoke run (the process survived its own report and held
+// the port; a same-thread timer fallback cannot fire through a synchronous
+// native block — review finding). The OS releases the ports on process
+// death, which is also what every TaskStop/kill path has relied on.
 process.exit(0);

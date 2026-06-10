@@ -237,8 +237,12 @@ The planned Phase 3.3 eager loader builds on the same substrate (see
 - `GET_SCREEN` is additionally **serialized after the open wave** (#107): the
   device drops requests that collide with its own bitmap transmission
   (measured live: send=7 recv=4 waves riding to the 10s cap), so a fetch
-  requested mid-wave is deferred and coalesced, fired by `finishWave` once the
-  link is clear. Meter polling likewise **skips its tick while a wave is
+  requested mid-wave is deferred and coalesced, fired on a microtask after a
+  drain leaves the link clear. Requests sent by `dumpComplete` handlers take
+  priority — the bitmap re-defers behind them, which on a cold connect means
+  the landing screen fetch waits out the eager loader's walk (accepted: the
+  production walk over the fan-out-cached preset subtree is near-instant, and
+  the virtual LCD is already rendered from structure). Meter polling likewise **skips its tick while a wave is
   open** (`isWaveOpen`), self-pacing to link capacity — without the gate, the
   saturation smoke measured ticks joining waves faster than the link drains
   (44% watchdog ratio, waves merged to the 10s ceiling, settled renders frozen

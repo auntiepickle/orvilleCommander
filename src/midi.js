@@ -42,8 +42,10 @@ let pendingScreenFetch = false;
 const dumpStats = { all: 0, watchdog: 0 };
 
 // (Re)arm the idle watchdog for WATCHDOG_IDLE_MS, never extending past the
-// absolute WATCHDOG_MAX_MS ceiling from wave start. Called on every send and
-// every received response while a wave is in flight.
+// absolute WATCHDOG_MAX_MS ceiling from wave start. Called on every send,
+// every received response, AND every raw inbound packet (#107 — a streaming
+// bitmap's partial packets are activity, not silence) while a wave is in
+// flight.
 function rearmWatchdog() {
   if (watchdogHandle !== null) clearTimeout(watchdogHandle);
   const remaining = TIMING.WATCHDOG_MAX_MS - (Date.now() - waveStart);
@@ -135,13 +137,23 @@ function finishWave(reason) {
     'info',
     'general'
   );
-  // Fire the deferred screen fetch only if the dumpComplete handlers above
-  // did not open a new wave (a settled render's value refetches take
-  // priority — the bitmap re-defers behind them and goes out on a later
+  // Fire the deferred screen fetch via a microtask (review hardening): the
+  // wave's FINAL response drains the counter at the top of its parser
+  // branch, so a synchronous fire here would launch the bitmap before that
+  // response finished parsing — and any fetches its render then sends
+  // would collide with the inbound bitmap, the exact device-drop the
+  // deferral exists to prevent. The microtask runs after the whole MIDI
+  // callback completes; it re-checks the flag and the counter because the
+  // handlers above may have opened a new wave (a settled render's value
+  // fetches take priority — the bitmap re-defers and goes out on a later
   // drain, alone on the link).
-  if (pendingScreenFetch && outstanding === 0) {
-    pendingScreenFetch = false;
-    sendSysEx(CMD.GET_SCREEN, []);
+  if (pendingScreenFetch) {
+    queueMicrotask(() => {
+      if (pendingScreenFetch && outstanding === 0) {
+        pendingScreenFetch = false;
+        sendSysEx(CMD.GET_SCREEN, []);
+      }
+    });
   }
 }
 
@@ -187,6 +199,9 @@ export function isWaveOpen() {
 export function setMidiPorts(output, input, devId) {
   selectedOutput = output;
   selectedInput = input;
+  // A fetch deferred against the OLD device must not fire at the new one
+  // after the stale wave watchdogs out (#107 review).
+  pendingScreenFetch = false;
   setState({ deviceId: devId }, 'midi:set-ports');
 }
 

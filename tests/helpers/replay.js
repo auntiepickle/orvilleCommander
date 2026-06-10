@@ -9,11 +9,12 @@
 // here, so it applies across the real module graph this helper pulls in):
 //   jest.mock('../src/main.js', () => ({ showLoading: jest.fn(), hideLoading: jest.fn() }));
 //   jest.mock('../src/logger.js', () => ({ log: jest.fn() }));
-//   jest.mock('lodash.debounce', () => (fn) => fn); // make the bridge's debounce synchronous
 //
 // renderer.js imports showLoading from main.js (top-level DOM/MIDI wiring),
-// so main.js must be mocked. The bridge still emits render:request from a
-// 200ms setTimeout, so the test advances fake timers to flush a render.
+// so main.js must be mocked. Since C1 the bridge renders synchronously on
+// objectinfo:received for the current key (and again on dumpComplete when a
+// request wave drains) — no timer advance is needed to flush the structure
+// paint after feeding a dump for the current key.
 
 import { parseResponse } from '../../src/parser.js';
 import { registerEventBridge } from '../../src/event-bridge.js';

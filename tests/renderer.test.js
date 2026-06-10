@@ -35,7 +35,6 @@ describe('renderer.js', () => {
     appState.currentKey = '0';
     appState.presetKey = '401000b';
     appState.autoLoad = false;
-    appState.isLoadingPreset = false;
     appState.paramOffset = 0;
     appState.dspAName = '';
     appState.dspBName = '';

@@ -80,8 +80,9 @@ export function parseResponse(data) {
         setState({ currentSubs: subs }, 'parser:current-subs');
         emit('objectinfo:received', { key: main.key, subs, ascii });
       } else if (main.key === KEY.ROOT && appState.currentKey !== KEY.ROOT) {
-        // Background root dump received (e.g., after preset load); subscriber re-renders the
-        // current screen so the new top-bar/DSP names land. isLoadingPreset clear lives in event-bridge.js.
+        // Background root dump received (e.g., after preset load). The new
+        // top-bar/DSP names land on the wave's settled render (dumpComplete);
+        // the event remains for observability.
         emit('objectinfo:received', { key: main.key });
       } else {
         // Store child sub-menu data only if it's a child of the current menu.
@@ -112,8 +113,11 @@ export function parseResponse(data) {
           emit('objectinfo:received', { key: main.key });
         }
       }
-      // Fix for Favorites re-ordering after preset load
-      if (main.key === KEY.FAVORITES && appState.isLoadingPreset && appState.loadingPresetName) {
+      // Fix for Favorites re-ordering after preset load. Gates on
+      // loadingPresetName alone since C4 deleted isLoadingPreset. NOTE: no
+      // production code writes loadingPresetName — this path is currently
+      // reachable only in tests (pre-existing; see the ledger C4 entry).
+      if (main.key === KEY.FAVORITES && appState.loadingPresetName) {
         const bankSub = subs.find((s) => s.key === KEY.BANK_SELECT);
         if (bankSub) {
           const bankValue = appState.currentValues[bankSub.key] || bankSub.value;

@@ -6,7 +6,6 @@
 
 jest.mock('../src/main.js', () => ({ showLoading: jest.fn(), hideLoading: jest.fn() }));
 jest.mock('../src/logger.js', () => ({ log: jest.fn() }));
-jest.mock('lodash.debounce', () => (fn) => fn);
 
 import { createReplayHarness } from './helpers/replay.js';
 import { loadFixture } from './helpers/sysex-fixture.js';
@@ -29,7 +28,6 @@ describe('offline replay harness', () => {
     appState.dspAName = '';
     appState.dspBName = '';
     appState.autoLoad = false;
-    appState.isLoadingPreset = false;
     appState.paramOffset = 0;
     appState.lastAscii = '';
     appState.updateBitmapOnChange = false;

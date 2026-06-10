@@ -39,7 +39,7 @@ export const appState = {
   updateBitmapOnChange: true,
   currentSoftkeys: [],
   pollingEnabled: false,
-  isLoadingPreset: false,
+  // isLoadingPreset deleted (C4/#40): hideLoading is driven by dumpComplete.
   childSubs: {}, // Added for child sub-menu storage
   lastDumpComplete: null, // 7c shadow-fire breadcrumb; written by midi:dump-complete
 };

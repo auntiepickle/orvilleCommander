@@ -1,89 +1,63 @@
 // src/event-bridge.js
 //
-// Step 7 parser <-> renderer handoff. Parser emits objectinfo:received,
-// value:received, screen:received; this bridge owns the coalescing
-// (renderTimeout + shared debounce) and the isLoadingPreset/hideLoading
-// invariants that used to be inlined in parser.js.
+// Step 7 parser <-> renderer handoff, rebuilt on dumpComplete (Phase 3.1,
+// C1/#37). The old per-message timer stack (RENDER_COALESCE_MS setTimeout
+// chains + a shared lodash debounce + the render:request indirection) is
+// gone; midi.js's request-wave tracking is the render clock now.
 //
-// hideLoading is injected via the registerEventBridge({ hideLoading })
-// parameter rather than imported from main.js. That injection is what
-// severs the would-be event-bridge.js -> main.js back-edge (main.js
-// imports registerEventBridge from here). Without DI, this module would
-// create a new event-bridge.js <-> main.js cycle. The point of Step 7 is
-// killing cycles, not relocating them.
+// Render triggers — exactly two:
+//   1. objectinfo:received with key === currentKey: the PROGRESSIVE
+//      structure paint. The menu being navigated to paints the instant its
+//      dump lands (values may still be loading).
+//   2. dumpComplete: the SETTLED paint + hideLoading. The request wave
+//      drained ('all-received') or stalled out ('watchdog'); render the
+//      confirmed state once. Value-only waves (meter poll ticks, value
+//      refetches) render here — one render per wave, not per message.
 //
-// ONE debouncedRenderRequest instance is constructed per registerEventBridge
-// call and closed over by all four on(...) registrations. Per-emit
-// construction would silently break the 200ms coalescing. renderTimeout is
-// shared between the objectinfo and value subscribers so an A-then-F
-// cross-event sequence clears as it did when both lived in parser.
+// A render that itself issues requests (missing values, embed prefetch)
+// opens a new wave whose drain triggers the next settled paint; the loop
+// converges when a render issues no new requests. value:received is still
+// emitted by the parser (C7 classification, pinned by tests) but the bridge
+// no longer consumes it; isLoadingPreset is deleted (C4/#40) — hideLoading
+// is driven solely by dumpComplete.
+//
+// hideLoading is injected via registerEventBridge({ hideLoading }) rather
+// than imported from main.js — that injection severs the would-be
+// event-bridge.js -> main.js back-edge (main.js imports registerEventBridge
+// from here). The point of Step 7 was killing cycles, not relocating them.
 //
 // registerEventBridge returns a teardown function. Production calls it once
-// at boot and ignores the return; the startup characterization test calls
-// it per-beforeEach and uses the teardown in afterEach to prevent
-// cross-test subscriber leakage.
+// at boot and ignores the return; tests call it per-beforeEach and use the
+// teardown in afterEach to prevent cross-test subscriber leakage.
 
-import { emit, on } from './events.js';
+import { on } from './events.js';
 import { renderScreen } from './renderer.js';
-import { parseSubObject } from './parser.js';
 import { renderBitmap } from './bitmap.js';
 import { appState } from './state.js';
-import { setState } from './store.js';
 import { log } from './logger.js';
-import debounce from 'lodash.debounce';
-import { TIMING } from './constants.js';
 
 export function registerEventBridge({ hideLoading }) {
-  let renderTimeout = null;
   const unsubscribers = [];
 
-  const debouncedRenderRequest = debounce(({ subs, ascii }) => {
-    let subsToUse = subs;
-    if (!subsToUse && ascii) {
-      subsToUse = ascii
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line)
-        .map(parseSubObject);
+  const render = () => {
+    // renderScreen no-ops on empty subs itself; the guard here just avoids
+    // the call entirely before anything has been parsed (e.g. a watchdog
+    // dumpComplete on a wave whose responses never arrived).
+    if (appState.currentSubs && appState.currentSubs.length > 0) {
+      renderScreen(appState.currentSubs, appState.lastAscii, log);
     }
-    renderScreen(subsToUse, ascii, log);
-  }, TIMING.RENDER_DEBOUNCE_MS);
-
-  unsubscribers.push(on('render:request', debouncedRenderRequest));
+  };
 
   unsubscribers.push(
-    on('objectinfo:received', ({ key, subs, ascii }) => {
-      if (key === appState.currentKey) {
-        if (renderTimeout) clearTimeout(renderTimeout);
-        renderTimeout = setTimeout(() => {
-          emit('render:request', { subs, ascii });
-          if (!appState.isLoadingPreset) hideLoading();
-          renderTimeout = null;
-        }, TIMING.RENDER_COALESCE_MS);
-      } else if (key === '0' && appState.currentKey !== '0') {
-        emit('render:request', { subs: appState.currentSubs, ascii: appState.lastAscii });
-        if (appState.isLoadingPreset) {
-          hideLoading();
-          setState({ isLoadingPreset: false }, 'main:objectinfo-loading-preset-clear');
-        }
-      } else {
-        emit('render:request', { subs: appState.currentSubs, ascii: appState.lastAscii });
-      }
+    on('objectinfo:received', ({ key }) => {
+      if (key === appState.currentKey) render();
     })
   );
 
   unsubscribers.push(
-    on('value:received', ({ immediate }) => {
-      if (immediate) {
-        emit('render:request', { subs: appState.currentSubs, ascii: null });
-      } else {
-        if (renderTimeout) clearTimeout(renderTimeout);
-        renderTimeout = setTimeout(() => {
-          emit('render:request', { subs: null, ascii: appState.lastAscii });
-          if (!appState.isLoadingPreset) hideLoading();
-          renderTimeout = null;
-        }, TIMING.RENDER_COALESCE_MS);
-      }
+    on('dumpComplete', () => {
+      render();
+      hideLoading();
     })
   );
 
@@ -96,9 +70,5 @@ export function registerEventBridge({ hideLoading }) {
   return function teardown() {
     for (const off of unsubscribers) off();
     unsubscribers.length = 0;
-    if (renderTimeout) {
-      clearTimeout(renderTimeout);
-      renderTimeout = null;
-    }
   };
 }

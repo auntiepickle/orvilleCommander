@@ -163,7 +163,6 @@ const handleSelectChange = (e) => {
         const loadKey = appState.presetKey.startsWith(KEY_PREFIX.DSP_A)
           ? KEY.LOAD_TRIGGER_A
           : KEY.LOAD_TRIGGER_B;
-        setState({ isLoadingPreset: true }, 'renderer:select-change-load-preset');
         sendValuePut(loadKey, '1');
         log(`Auto-triggered load for ${loadKey} after program change`, 'info', 'general');
         setTimeout(() => {
@@ -226,7 +225,6 @@ const handleParamClick = (e) => {
       } else if (sub.type === 'TRG') {
         showLoading();
         if (key === KEY.LOAD_TRIGGER_A || key === KEY.LOAD_TRIGGER_B) {
-          setState({ isLoadingPreset: true }, 'renderer:param-click-trg-load-preset');
           log('Started loading preset.', 'info', 'general');
         }
         sendValuePut(key, '1');

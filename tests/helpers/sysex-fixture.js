@@ -74,6 +74,16 @@ export function extractExpectedFromRoot(rootBytes) {
   };
 }
 
+// Non-COL children (params) in fixture order — the keys renderScreen fetches
+// values for when it paints the menu (Option B: fixture-derived).
+export function extractParamKeysFromDump(bytes) {
+  const subs = decodeSubs(bytes);
+  return subs
+    .slice(1)
+    .filter((s) => !['COL', '8'].includes(s.type))
+    .map((s) => s.key);
+}
+
 export function extractExpectedFromPreset(presetBytes) {
   const subs = decodeSubs(presetBytes);
   const children = subs.slice(1);

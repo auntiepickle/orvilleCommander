@@ -26,8 +26,8 @@ let sysexListenerHandler = null;
 // a genuine stall (silence longer than the idle window) or the absolute
 // cap. (Earlier this was a fixed 1500ms hard ceiling set once at wave
 // start, which tripped during normal 4-6s enumerations and dropped every
-// response that arrived after.) Existing 200ms parser timers remain in
-// place; consumer migration is Phase 3.1.
+// response that arrived after.) Consumers migrated in Phase 3.1 (C1):
+// event-bridge.js renders the settled paint on dumpComplete.
 let outstanding = 0;
 let waveSends = 0;
 let waveReceives = 0;

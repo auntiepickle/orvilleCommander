@@ -29,7 +29,6 @@ describe('parseResponse', () => {
     appState.currentSubs = [];
     appState.currentValues = {};
     appState.childSubs = {};
-    appState.isLoadingPreset = false;
     appState.loadingPresetName = null;
     appState.currentKey = '10010000'; // Use non-root for main test
     appState.deviceId = 0; // Explicit for test data match
@@ -255,7 +254,8 @@ describe('parseResponse', () => {
 
   test('handles Favorites re-ordering fix during preset load', () => {
     appState.currentKey = '10020010';
-    appState.isLoadingPreset = true;
+    // Gate is loadingPresetName alone since C4 deleted isLoadingPreset.
+    // (No production code writes loadingPresetName — characterization only.)
     appState.loadingPresetName = 'Target Preset';
     appState.currentValues['10020012'] = '0 Favorites'; // Mock bank value
     // Mock multi-line ASCII for OBJECTINFO_DUMP with subs

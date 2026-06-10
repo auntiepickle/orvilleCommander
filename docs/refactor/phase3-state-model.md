@@ -78,6 +78,63 @@ setup/program/levels menus stay lazy (fetched + loading-gated on navigation).
   unconfirmed values).
 - **3.4 Cycle cleanup** — move `logCategories` off `appState` (logger↔state).
 
+## Implementation notes — 3.1 as built (C1/#37 + C4/#40)
+
+The substrate predated this batch: `midi.js` counts every `OBJECTINFO`/`VALUE`
+request into a **wave** (`recordRequest`/`notifyResponse`, FB4 idle watchdog)
+and emits `dumpComplete` when the wave drains (`reason='all-received'`) or
+stalls out (`reason='watchdog'`). FB7 secured the exactly-once decrement this
+relies on. C1 is the consumer migration.
+
+**Render triggers (event-bridge.js).** The per-message timer stack
+(`RENDER_COALESCE_MS` setTimeout chains + the shared lodash debounce + the
+`render:request` indirection) is gone. The bridge now renders on exactly two
+signals:
+
+1. `objectinfo:received` with `key === currentKey` — the **progressive
+   structure paint**: the menu you navigated to paints the instant its dump
+   lands, with values still loading.
+2. `dumpComplete` — the **settled paint** + `hideLoading()`: the request wave
+   drained (or the watchdog gave up on a stall); render the confirmed state
+   once. Value-only waves (meter polling, value refetches) render here — one
+   render per wave, not per message.
+
+Renders that themselves issue requests (missing values, embed prefetch) start
+a new wave, whose drain triggers the next settled paint; the loop converges
+when a render issues no new requests.
+
+**Consequences (intentional behavior changes):**
+
+- The ~400ms render stall (coalesce + debounce) is gone; `RENDER_DEBOUNCE_MS`
+  and `RENDER_COALESCE_MS` are deleted from constants.js, and the
+  `lodash.debounce` runtime dependency is removed.
+- **The autoload landing-page race is eliminated as a side effect.** The race
+  existed because root's render was timer-delayed past `select-ports-init`
+  (which sets `autoLoad=true`), so the root render consumed the flag and
+  descended into the first *root* menu (setup) instead of the preset. With the
+  root dump rendering synchronously on arrival — before the
+  `PORT_INIT_MS`-delayed `select-ports-init` — root renders with
+  `autoLoad=false`, and the flag is consumed by the *preset* render, which
+  descends into the preset's first menu. This is the landing 3.3 wants
+  (C2/#38 still owns removing the `PORT_INIT_MS` timer itself and landing via
+  the root dump explicitly).
+- Mid-wave CON updates no longer trigger per-message immediate renders;
+  meters render once per poll-tick wave (drain follows the tick's last
+  response). The parser still classifies and emits
+  `value:received {immediate}` (C7-pinned); the bridge no longer consumes it.
+- `isLoadingPreset` is deleted (C4): `hideLoading` is driven solely by
+  `dumpComplete`, so the "don't hide early while a preset loads" interim
+  gating falls away. The parser's Favorites re-order fix now gates on
+  `loadingPresetName` alone — which **no production code writes** (pre-existing;
+  the path is characterized by tests only — see the ledger).
+
+**Test strategy.** Replay/startup suites no longer advance coalesce timers;
+where fixture responses are fed without recorded requests (replay), the
+parser's own fan-out sends open a wave and the idle watchdog
+(`WATCHDOG_IDLE_MS`) closes it — or the suite feeds the wave to drain. The
+startup characterization Tier A/B sequences are rewritten in the same commit,
+per their own charter, and now pin the race-free landing.
+
 ## Validation / open items
 
 - Eager-load throughput on real hardware (many `OBJECTINFO`/`VALUE` round

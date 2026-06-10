@@ -5,6 +5,8 @@
 jest.mock('../src/midi.js', () => ({
   sendKeypress: jest.fn(),
   sendSysEx: jest.fn(),
+  sendValueDump: jest.fn(),
+  isWaveOpen: jest.fn(() => false),
 }));
 
 jest.mock('../src/renderer.js', () => ({
@@ -20,8 +22,8 @@ jest.mock('../src/navigation.js', () => ({
   toggleDspKey: jest.fn(() => '801000b'),
 }));
 
-import { keypressMasks, setupKeypressControls } from '../src/controls.js';
-import { sendKeypress, sendSysEx } from '../src/midi.js';
+import { keypressMasks, setupKeypressControls, meterPollTick } from '../src/controls.js';
+import { sendKeypress, sendSysEx, sendValueDump, isWaveOpen } from '../src/midi.js';
 import { updateScreen } from '../src/renderer.js';
 import { toggleDspKey } from '../src/navigation.js';
 import { appState } from '../src/state.js';
@@ -117,6 +119,27 @@ describe('controls', () => {
     // subs} shape (C3/#39): tag from the root dump's main line, subs from
     // the recorded root node.
     expect(appState.keyStack).toEqual([{ key: '0', tag: 'ORVILLE', subs: appState.currentSubs }]);
+  });
+
+  test('meterPollTick fans VALUE requests for on-screen CONs — but SKIPS while a wave is open (#107)', () => {
+    // The saturation gate: without it, ticks join waves faster than the
+    // 31250-baud link drains them (measured live: 44% watchdog ratio,
+    // settled renders frozen to the 10s ceiling; 3.57% with the gate).
+    appState.currentSubs = [
+      { type: 'COL', position: '0', key: '10020020', parent: '10020020', statement: 'save' },
+      { type: 'CON', position: '1', key: '10020027', parent: '10020020', statement: 'size %5.0f' },
+      { type: 'CON', position: '2', key: '10020028', parent: '10020020', statement: 'left %5.0f' },
+      { type: 'NUM', position: '3', key: '10020021', parent: '10020020', statement: 'b %2.0f' },
+    ];
+    sendValueDump.mockClear();
+
+    isWaveOpen.mockReturnValue(true);
+    expect(meterPollTick()).toBe(false); // gated
+    expect(sendValueDump).not.toHaveBeenCalled();
+
+    isWaveOpen.mockReturnValue(false);
+    expect(meterPollTick()).toBe(true);
+    expect(sendValueDump.mock.calls.map((c) => c[0])).toEqual(['10020027', '10020028']); // CONs only
   });
 
   test('fetchBitmap disabled skips the screen fetch', () => {

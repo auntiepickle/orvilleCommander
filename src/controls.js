@@ -1,5 +1,5 @@
 // controls.js
-import { sendKeypress, sendSysEx } from './midi.js';
+import { sendKeypress, sendSysEx, sendValueDump, isWaveOpen } from './midi.js';
 import { CMD, KEY } from './sysex-commands.js';
 import { TIMING } from './constants.js';
 import { updateScreen } from './renderer.js';
@@ -55,6 +55,26 @@ export const keypressMasks = {
   minus: [0xff, 0xff, 0xef, 0xff],
   cxl: [0xff, 0xff, 0xff, 0xdf],
 };
+
+/**
+ * One meter-poll tick: requests a VALUE_DUMP for every CON in the on-screen
+ * menu — unless a request wave is open, in which case the tick is SKIPPED
+ * (#107 saturation gate). Without the gate, the live smoke measured ticks
+ * joining waves faster than the 31250-baud link drains them: outstanding
+ * never reached 0, waves merged to the 10s watchdog ceiling, and settled
+ * renders froze for the duration (44% watchdog ratio; 3.57% with the
+ * gate). Skipping self-paces polling to link capacity. main.js drives this
+ * on a TIMING.METER_POLL_MS interval.
+ *
+ * @returns {boolean} Whether the tick ran (false = gated). For tests/logs.
+ */
+export function meterPollTick() {
+  if (isWaveOpen()) return false;
+  for (const sub of appState.currentSubs.filter((s) => s.type === 'CON')) {
+    sendValueDump(sub.key);
+  }
+  return true;
+}
 
 /**
  * Sets up event listeners for virtual button controls in the UI.

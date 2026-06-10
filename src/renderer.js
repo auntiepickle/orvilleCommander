@@ -520,7 +520,13 @@ export function renderScreen(subs, ascii, logParam) {
     } else if (graphicEqSubs.length > 0) {
       const formattedParts = graphicEqSubs.map((s) => {
         const value = appState.currentValues[s.key] || s.value;
-        if (appState.currentValues[s.key] === undefined) sendValueDump(s.key); // empty string = confirmed-absent, do not refetch (C1 review)
+        // Fetch only when the dump carried NO value either — the same rule
+        // SET/INF/STR always had (#107: the missing !s.value guard made
+        // every settled render resend dump-valued NUMs, and each solo
+        // wave's watchdog render resent again — a self-perpetuating
+        // refetch loop measured live). Empty string stays confirmed-absent
+        // (C1): no refetch.
+        if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key);
         // Parse tag like 'v1:%3.0f' for label and format
         const [label, format] = s.tag.split(':');
         const formattedValue = formatValue(format || '%3.0f', value);
@@ -557,7 +563,9 @@ export function renderScreen(subs, ascii, logParam) {
       let fullHtml = '';
       if (s.type === 'NUM') {
         const value = appState.currentValues[s.key] || s.value;
-        if (appState.currentValues[s.key] === undefined) sendValueDump(s.key); // empty string = confirmed-absent, do not refetch (C1 review)
+        // Same fetch rule as SET/INF/STR — see the graphic-EQ comment
+        // above (#107). Empty string = confirmed-absent, no refetch (C1).
+        if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key);
         const formatStr = s.statement || s.tag || '';
         fullText = formatValue(formatStr, value);
         fullHtml = formatValue(formatStr, value, true, s.key);

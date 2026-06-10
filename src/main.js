@@ -3,7 +3,7 @@ import { WebMidi } from 'webmidi';
 import { CMD, KEY } from './sysex-commands.js';
 import { TIMING, DEFAULT_LOG_CATEGORIES } from './constants.js';
 import { loadConfig, saveConfig, clearConfig, mergeLogCategories } from './config.js';
-import { setupKeypressControls, testKeypress } from './controls.js';
+import { setupKeypressControls, testKeypress, meterPollTick } from './controls.js';
 import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut } from './midi.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
@@ -50,13 +50,9 @@ let pollingInterval = null;
  */
 function startPolling() {
   if (pollingInterval) clearInterval(pollingInterval);
-  pollingInterval = setInterval(() => {
-    const conSubs = appState.currentSubs.filter((s) => s.type === 'CON');
-    conSubs.forEach((sub) => {
-      const key = sub.key;
-      sendValueDump(key);
-    });
-  }, TIMING.METER_POLL_MS);
+  // The tick body (CON fan + the #107 wave-open gate) lives in controls.js
+  // as meterPollTick so the gate is test-pinned; main.js owns the timer.
+  pollingInterval = setInterval(meterPollTick, TIMING.METER_POLL_MS);
 }
 
 /**

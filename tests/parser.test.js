@@ -319,6 +319,9 @@ describe('parseResponse', () => {
       'screen:received',
       expect.objectContaining({ rawBytes: expect.anything() })
     );
+    // #107: the bitmap response is wave-counted (GET_SCREEN recorded the
+    // request; this response drains it).
+    expect(notifyResponse).toHaveBeenCalledWith('screen', null);
   });
 
   test('catches and logs errors on invalid data', () => {

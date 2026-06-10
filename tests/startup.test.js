@@ -127,7 +127,6 @@ import {
   loadFixture,
   extractExpectedFromRoot,
   extractExpectedFromPreset,
-  extractParamKeysFromDump,
 } from './helpers/sysex-fixture.js';
 import {
   resetRecorder,
@@ -187,7 +186,6 @@ describe('startup characterization (roadmap step 5.5)', () => {
   let expected401;
   let expected801;
   let expectedLanded;
-  let landedParamKeys;
 
   beforeAll(() => {
     rootBytes = loadFixture('objectinfo-root.txt');
@@ -202,7 +200,6 @@ describe('startup characterization (roadmap step 5.5)', () => {
     // realistic terminal state (Option B: all values fixture-derived).
     landedMenuBytes = loadFixture('objectinfo-4040001-spaceparams.txt');
     expectedLanded = extractExpectedFromPreset(landedMenuBytes);
-    landedParamKeys = extractParamKeysFromDump(landedMenuBytes);
   });
 
   beforeEach(() => {
@@ -477,25 +474,21 @@ describe('startup characterization (roadmap step 5.5)', () => {
 
       // Step (j) the landed menu's dump — currentKey matches; its children
       // are all params (no COL fan-out), so the parser goes straight to
-      // lastAscii/currentSubs and the synchronous render. The render
-      // fetches a value for every param (none cached yet) between its two
-      // render-pin writes, which is why the pins do NOT coalesce here.
+      // lastAscii/currentSubs and the synchronous render. The params all
+      // carry dump values, so NO per-param value fetches fire (#107: NUM
+      // follows the same !s.value rule as SET/INF/STR — the old
+      // fetch-every-render behavior was the measured self-perpetuating
+      // refetch loop) and the two render-pins coalesce.
       'log:parsedDump:info:Parsed OBJECTINFO_DUMP',
       'state:parser:current-key-ascii:lastAscii',
       'state:parser:current-subs:currentSubs',
       landedRender,
-      'state:renderer:render-pin:currentSubs',
-      ...landedParamKeys.map((k) => `midi:valuedump:${k}`),
-      'state:renderer:render-pin:currentSoftkeys',
+      'state:renderer:render-pin:currentSoftkeys,currentSubs',
 
-      // Step (k) dumpComplete — the settled render + hideLoading. The
-      // param values never arrive in this simulation, so the settled render
-      // re-issues the same value fetches: that is the C1 wave-driven
-      // refetch loop, which converges live once values land.
+      // Step (k) dumpComplete — the settled render + hideLoading. Again no
+      // value refetches (#107): dump values suffice.
       landedRender,
-      'state:renderer:render-pin:currentSubs',
-      ...landedParamKeys.map((k) => `midi:valuedump:${k}`),
-      'state:renderer:render-pin:currentSoftkeys',
+      'state:renderer:render-pin:currentSoftkeys,currentSubs',
       'hideLoading',
 
       // #106: the landing armed the eager loader; the clean drain starts it.

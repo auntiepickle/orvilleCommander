@@ -227,11 +227,26 @@ The planned Phase 3.3 eager loader builds on the same substrate (see
 **Wave lifecycle:**
 
 - A wave **starts** when the `outstanding` request counter transitions `0 → 1`.
-- Each `OBJECTINFO_DUMP` (`0x31`) and `VALUE_DUMP` request (`0x2d`) increments
+- Each `OBJECTINFO_DUMP` (`0x31`), `VALUE_DUMP` request (`0x2d`), and
+  `GET_SCREEN` (`0x18`, counted since #107 — its `0x17` response is ~3.9KB and
+  ~1.2s of link time, which must be visible to the wave model) increments
   `outstanding` (via `recordRequest`). `VALUE_PUT` is **not** counted, although
   the device does echo a `0x2e` for a put (see the `0x2d` section above): with
   no wave in flight the echo is a no-op (`notifyResponse` returns at zero), but
   mid-wave it decrements the counter as an uncounted response.
+- `GET_SCREEN` is additionally **serialized after the open wave** (#107): the
+  device drops requests that collide with its own bitmap transmission
+  (measured live: send=7 recv=4 waves riding to the 10s cap), so a fetch
+  requested mid-wave is deferred and coalesced, fired on a microtask after a
+  drain leaves the link clear. Requests sent by `dumpComplete` handlers take
+  priority — the bitmap re-defers behind them, which on a cold connect means
+  the landing screen fetch waits out the eager loader's walk (accepted: the
+  production walk over the fan-out-cached preset subtree is near-instant, and
+  the virtual LCD is already rendered from structure). Meter polling likewise **skips its tick while a wave is
+  open** (`isWaveOpen`), self-pacing to link capacity — without the gate, the
+  saturation smoke measured ticks joining waves faster than the link drains
+  (44% watchdog ratio, waves merged to the 10s ceiling, settled renders frozen
+  for the duration).
 - Each matching `0x32` / `0x2e` response decrements `outstanding`, via
   `notifyResponse`, which `parser.js` calls at the top of each branch. The
   counter is a pure count — it does not yet correlate responses to requests by
@@ -253,8 +268,11 @@ of `all` vs `watchdog` reasons.
 [`src/constants.js`](../src/constants.js) bound a wave:
 
 - `WATCHDOG_IDLE_MS` (1500 ms) — the watchdog is **rearmed for this interval on
-  every send and every received response** while a wave is in flight. It fires
-  only after this much *silence*, i.e. a genuine stall.
+  every send, every received response, AND every raw inbound packet** (#107)
+  while a wave is in flight. It fires only after this much *silence*, i.e. a
+  genuine stall. The raw-packet rearm matters for the streaming `0x17` bitmap:
+  its partial packets arrive continuously for ~1.2–1.5s before the complete
+  message parses, and rearm-on-parse-only misread that as a stall.
 - `WATCHDOG_MAX_MS` (10000 ms) — an absolute per-wave ceiling measured from wave
   start; a rearm never extends the timer past this, so a pathological wave that
   keeps producing traffic still terminates.

@@ -704,11 +704,24 @@ describe('renderer.js', () => {
         tag: '',
         value: '0',
       },
+      {
+        type: 'NUM',
+        position: '3',
+        key: '10010013',
+        parent: '10010001',
+        statement: 'trim %3.0f',
+        tag: '',
+        value: '',
+      },
     ];
     renderScreen(subs, '', mockLog);
 
-    // The uncached param is fetched; the confirmed-empty one is not.
-    expect(sendValueDump).toHaveBeenCalledWith('10010012');
+    // Only the param with NEITHER a cached nor a dump value is fetched
+    // (#107: NUM now follows the same !s.value rule as SET/INF/STR — a
+    // dump-valued NUM rendering its own line must not open refetch waves
+    // on every settled render). The confirmed-empty cached one is not.
+    expect(sendValueDump).toHaveBeenCalledWith('10010013');
+    expect(sendValueDump).not.toHaveBeenCalledWith('10010012'); // dump value '0' suffices
     expect(sendValueDump).not.toHaveBeenCalledWith('10010011');
   });
 

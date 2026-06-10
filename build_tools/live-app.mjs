@@ -4,7 +4,11 @@
 // drives navigation by dispatching clicks on the rendered LCD and reads the
 // virtual render back. This is the G2 "live self-loop" substrate.
 //
-// Usage: node build_tools/live-app.mjs [walk|stay|load|eager] [settleMs]
+// Usage: node build_tools/live-app.mjs [walk|stay|load|eager|smoke] [settleMs]
+//   smoke (#107): wave-saturation measurement — meter polling (real button,
+//   100ms CON VALUE fan) + a 0x18 bitmap fetch every 2s (stands in for
+//   updateBitmapOnChange traffic) for 3 minutes; reports dumpComplete
+//   reasons/durations against the >5% watchdog escalation criterion.
 
 import { JSDOM } from 'jsdom';
 import midi from '@julusian/midi';
@@ -202,10 +206,100 @@ if (MODE === 'walk') {
   startEagerLoad(KEY.ROOT);
   await sleep(90000);
   console.log('[live] deep-walk window closed (see Eager load complete above for the receipt)');
+} else if (MODE === 'smoke') {
+  // #107 wave-saturation smoke. Needs audio into the device so the CONs
+  // actually move (value-change traffic, not just empty echoes).
+  const { on } = await import('../src/events.js');
+  const { getDumpStats, sendSysEx } = await import('../src/midi.js');
+  const { CMD } = await import('../src/sysex-commands.js');
+  const SMOKE_MS = 180000; // 3 minutes of sustained combined load
+  const BITMAP_EVERY_MS = 2000; // stands in for updateBitmapOnChange traffic
+
+  // 1. Navigate to the heaviest known CON menu: program -> save program
+  // (10020020, two CONs: file size + space left — probed live; the audio
+  // LEVEL meters are device-rendered bitmap, not tree CONs). The poll fan
+  // is what matters for saturation, not whether the values move. Condition
+  // waits, not fixed sleeps: the program subtree's dump backlog (bank
+  // lists) makes fixed settles a race.
+  const hasCons = () => appState.currentSubs.some((s) => s.type === 'CON');
+  const waitFor = async (pred, capMs = 45000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < capMs) {
+      if (pred()) return true;
+      await sleep(200);
+    }
+    return false;
+  };
+  click('.softkey[data-key="10020000"]');
+  await waitFor(() => appState.currentSubs[0]?.key === '10020000');
+  click('.softkey[data-key="10020020"]') || click('[data-key="10020020"]');
+  const settled = await waitFor(() => appState.currentSubs[0]?.key === '10020020' && hasCons());
+  if (!settled) {
+    // Abort on the settle itself: falling through could measure whatever
+    // CON-bearing menu happens to be on screen (review finding).
+    console.log('[live] ABORT: save program never settled; not measuring');
+    process.exit(1);
+  }
+  const conKeys = appState.currentSubs.filter((s) => s.type === 'CON').map((s) => s.key);
+  console.log(
+    `[live] smoke menu: ${appState.currentKey} with ${conKeys.length} CONs (${conKeys.join(',')})`
+  );
+  if (conKeys.length === 0) {
+    console.log('[live] NO CON menu found under levels; aborting smoke');
+  } else {
+    dump('smoke menu before polling');
+    // 2. Collect per-wave stats while polling + bitmap traffic run.
+    const waves = [];
+    const offWave = on('dumpComplete', (p) => waves.push(p));
+    const conValuesSeen = new Map(conKeys.map((k) => [k, new Set()]));
+    const sampler = setInterval(() => {
+      for (const k of conKeys) {
+        const v = appState.currentValues[k];
+        if (v !== undefined) conValuesSeen.get(k).add(v);
+      }
+    }, 500);
+    const bitmapTimer = setInterval(() => sendSysEx(CMD.GET_SCREEN, []), BITMAP_EVERY_MS);
+    click('#toggle-meter-polling'); // the real button path
+    console.log(`[live] polling ON; running ${SMOKE_MS / 1000}s of combined load...`);
+    await sleep(SMOKE_MS);
+    click('#toggle-meter-polling');
+    clearInterval(bitmapTimer);
+    clearInterval(sampler);
+    offWave();
+    await sleep(SETTLE);
+    // 3. Report against the C1 escalation criterion.
+    const stats = getDumpStats();
+    const durations = waves.map((w) => w.durationMs);
+    const maxDur = Math.max(...durations, 0);
+    const avgDur = durations.length
+      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+      : 0;
+    const watchdogs = waves.filter((w) => w.reason === 'watchdog');
+    const ratio = waves.length ? watchdogs.length / waves.length : 0;
+    console.log('\n===== SMOKE REPORT (#107) =====');
+    console.log(`[smoke] waves observed: ${waves.length} in ${SMOKE_MS / 1000}s`);
+    console.log(
+      `[smoke] watchdog: ${watchdogs.length} (${(ratio * 100).toFixed(2)}%) — escalation criterion >5%`
+    );
+    console.log(`[smoke] wave duration: avg ${avgDur}ms, max ${maxDur}ms`);
+    console.log(`[smoke] session dumpStats: ${JSON.stringify(stats)}`);
+    for (const [k, set] of conValuesSeen) {
+      console.log(
+        `[smoke] CON ${k}: ${set.size} distinct values (audio ${set.size > 2 ? 'MOVING' : 'static/absent'})`
+      );
+    }
+    if (watchdogs.length) {
+      console.log('[smoke] watchdog wave details:');
+      for (const w of watchdogs.slice(0, 10)) console.log(`  ${JSON.stringify(w)}`);
+    }
+  }
 }
 
 console.log('\n===== last dumpComplete =====');
 console.log(JSON.stringify(appState.lastDumpComplete));
-input.closePort();
-output.closePort();
+// Exit WITHOUT closePort: WinMM closePort blocked synchronously after the
+// heavy-callback smoke run (the process survived its own report and held
+// the port; a same-thread timer fallback cannot fire through a synchronous
+// native block — review finding). The OS releases the ports on process
+// death, which is also what every TaskStop/kill path has relied on.
 process.exit(0);

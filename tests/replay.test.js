@@ -6,7 +6,6 @@
 
 jest.mock('../src/main.js', () => ({ showLoading: jest.fn(), hideLoading: jest.fn() }));
 jest.mock('../src/logger.js', () => ({ log: jest.fn() }));
-jest.mock('lodash.debounce', () => (fn) => fn);
 
 import { createReplayHarness } from './helpers/replay.js';
 import { loadFixture } from './helpers/sysex-fixture.js';
@@ -29,7 +28,6 @@ describe('offline replay harness', () => {
     appState.dspAName = '';
     appState.dspBName = '';
     appState.autoLoad = false;
-    appState.isLoadingPreset = false;
     appState.paramOffset = 0;
     appState.lastAscii = '';
     appState.updateBitmapOnChange = false;
@@ -43,8 +41,11 @@ describe('offline replay harness', () => {
 
   test('replays an OBJECTINFO_DUMP fixture and renders the LCD', () => {
     h.setCurrentKey('10010000');
+    // Since C1 the bridge renders synchronously on objectinfo:received for
+    // the current key — no timer advance needed for the structure paint.
+    // (The render's own child/value fan-out opens a wave that this test
+    // leaves open; midi.js wave state resets per fresh wave start.)
     h.feed(loadFixture('objectinfo-10010000.txt'));
-    jest.advanceTimersByTime(300); // flush the bridge's 200ms render setTimeout
 
     const html = h.lcdHtml();
     expect(appState.currentSubs.length).toBeGreaterThan(0);

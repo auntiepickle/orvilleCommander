@@ -26,10 +26,11 @@ let sysexListenerHandler = null;
 // a genuine stall (silence longer than the idle window) or the absolute
 // cap. (Earlier this was a fixed 1500ms hard ceiling set once at wave
 // start, which tripped during normal 4-6s enumerations and dropped every
-// response that arrived after.) Existing 200ms parser timers remain in
-// place; consumer migration is Phase 3.1.
+// response that arrived after.) Consumers migrated in Phase 3.1 (C1):
+// event-bridge.js renders the settled paint on dumpComplete.
 let outstanding = 0;
 let waveSends = 0;
+let waveObjectinfoSends = 0;
 let waveReceives = 0;
 let waveStart = 0;
 let waveLastKey = null;
@@ -46,15 +47,20 @@ function rearmWatchdog() {
   watchdogHandle = setTimeout(forceComplete, delay);
 }
 
-function recordRequest(key) {
+function recordRequest(key, isObjectinfo = false) {
   if (outstanding === 0 && watchdogHandle === null) {
     waveStart = Date.now();
     waveSends = 0;
+    waveObjectinfoSends = 0;
     waveReceives = 0;
     waveLastKey = null;
   }
   outstanding++;
   waveSends++;
+  // Per-type accounting: the bridge clears the loading indicator only on
+  // waves that carried OBJECTINFO (structure) requests, so the continuous
+  // value-only meter-poll waves cannot hide a navigation's loading state.
+  if (isObjectinfo) waveObjectinfoSends++;
   waveLastKey = key;
   rearmWatchdog();
 }
@@ -96,6 +102,7 @@ function finishWave(reason) {
   const payload = {
     reason,
     sendCount: waveSends,
+    objectinfoSends: waveObjectinfoSends,
     receiveCount: waveReceives,
     durationMs: Date.now() - waveStart,
     lastKey: waveLastKey,
@@ -103,6 +110,7 @@ function finishWave(reason) {
   dumpStats[reason === 'watchdog' ? 'watchdog' : 'all']++;
   outstanding = 0;
   waveSends = 0;
+  waveObjectinfoSends = 0;
   waveReceives = 0;
   waveStart = 0;
   waveLastKey = null;
@@ -232,7 +240,7 @@ export function sendSysEx(cmd, dataBytes = []) {
  * sendObjectInfoDump('401000b');
  */
 export function sendObjectInfoDump(key) {
-  recordRequest(key);
+  recordRequest(key, true);
   const keyBytes = key.split('').map((c) => c.charCodeAt(0));
   sendSysEx(CMD.OBJECTINFO_DUMP, keyBytes);
 }

@@ -163,7 +163,6 @@ const handleSelectChange = (e) => {
         const loadKey = appState.presetKey.startsWith(KEY_PREFIX.DSP_A)
           ? KEY.LOAD_TRIGGER_A
           : KEY.LOAD_TRIGGER_B;
-        setState({ isLoadingPreset: true }, 'renderer:select-change-load-preset');
         sendValuePut(loadKey, '1');
         log(`Auto-triggered load for ${loadKey} after program change`, 'info', 'general');
         setTimeout(() => {
@@ -226,7 +225,6 @@ const handleParamClick = (e) => {
       } else if (sub.type === 'TRG') {
         showLoading();
         if (key === KEY.LOAD_TRIGGER_A || key === KEY.LOAD_TRIGGER_B) {
-          setState({ isLoadingPreset: true }, 'renderer:param-click-trg-load-preset');
           log('Started loading preset.', 'info', 'general');
         }
         sendValuePut(key, '1');
@@ -398,7 +396,7 @@ export function renderScreen(subs, ascii, logParam) {
     if (graphicEqSubs.length > 0) {
       const formattedParts = graphicEqSubs.map((s) => {
         const value = appState.currentValues[s.key] || s.value;
-        if (!appState.currentValues[s.key]) sendValueDump(s.key);
+        if (appState.currentValues[s.key] === undefined) sendValueDump(s.key); // empty string = confirmed-absent, do not refetch (C1 review)
         // Parse tag like 'v1:%3.0f' for label and format
         const [label, format] = s.tag.split(':');
         const formattedValue = formatValue(format || '%3.0f', value);
@@ -422,7 +420,7 @@ export function renderScreen(subs, ascii, logParam) {
       let fullHtml = '';
       if (s.type === 'NUM') {
         const value = appState.currentValues[s.key] || s.value;
-        if (!appState.currentValues[s.key]) sendValueDump(s.key);
+        if (appState.currentValues[s.key] === undefined) sendValueDump(s.key); // empty string = confirmed-absent, do not refetch (C1 review)
         const formatStr = s.statement || s.tag || '';
         fullText = formatValue(formatStr, value);
         fullHtml = formatValue(formatStr, value, true, s.key);
@@ -525,7 +523,7 @@ export function renderScreen(subs, ascii, logParam) {
           let childFullHtml = '';
           if (cs.type === 'NUM') {
             const value = appState.currentValues[cs.key] || cs.value;
-            if (!appState.currentValues[cs.key]) sendValueDump(cs.key);
+            if (appState.currentValues[cs.key] === undefined) sendValueDump(cs.key); // empty string = confirmed-absent, do not refetch (C1 review)
             const formatStr = cs.statement || cs.tag || '';
             childFullText = formatValue(formatStr, value);
             childFullHtml = formatValue(formatStr, value, true, cs.key);

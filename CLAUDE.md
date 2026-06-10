@@ -22,7 +22,7 @@ index.html
       ├─ controls.js        keypress masks + button → SysEx mapping
       ├─ midi.js            WebMIDI send, SysEx encoding, inbound listener, dump counter
       ├─ parser.js          SysEx byte stream → structured subs & values; emits events
-      ├─ event-bridge.js    subscribes to parser events, owns render timing
+      ├─ event-bridge.js    subscribes to parser/midi events, renders on dumpComplete
       ├─ renderer.js        subs → LCD HTML, event handlers
       ├─ bitmap.js          screen-capture denibble + canvas render
       ├─ navigation.js      toggleDspKey, makeKeyStackEntry
@@ -35,7 +35,7 @@ index.html
       └─ hex-extract.js     debug-file hex parsing
 ```
 
-Data flow: user clicks → `controls.js` sends SysEx via `midi.js` → Orville responds → `midi.js` listener (`addSysexListener` reassembles multi-packet SysEx from `F0` to `F7` before parsing — see below) → `parser.js` parses, writes state via `store.setState`, and emits events on `events.js` → `event-bridge.js` coalesces and calls `renderer.renderScreen` → paints `#lcd`. Bitmap path: `0x17` SysEx → `parser.js` denibbles (`bitmap.js`) → emits `screen:received` → `event-bridge.js` → `renderBitmap` on the canvas.
+Data flow: user clicks → `controls.js` sends SysEx via `midi.js` (every `OBJECTINFO`/`VALUE` request joins a **dump wave** — a per-wave outstanding counter with an idle watchdog) → Orville responds → `midi.js` listener (`addSysexListener` reassembles multi-packet SysEx from `F0` to `F7` before parsing — see below) → `parser.js` parses, writes state via `store.setState`, and emits events on `events.js` → `event-bridge.js` renders (C1/#37): a **progressive paint** the moment the current key's `objectinfo:received` lands, and a **settled paint** when the wave ends (`dumpComplete` — drained, or the idle watchdog fired on a stall); `hideLoading` fires only on waves that carried OBJECTINFO requests or on a watchdog stall, so value-only meter-poll waves cannot clear an unrelated loading state. There are no render timers or debounce; a render that issues new requests (missing values, embed prefetch) opens a new wave whose drain triggers the next settled paint. Bitmap path: `0x17` SysEx → `parser.js` denibbles (`bitmap.js`) → emits `screen:received` → `event-bridge.js` → `renderBitmap` on the canvas.
 
 Inbound SysEx is not necessarily one WebMIDI event per message: a long dump (`0x17` screen, large `0x32` OBJECTINFO like the ~70-name bank list) can be split across packets, so `addSysexListener` buffers from `F0` until `F7` and calls `parseResponse` once per complete message — a pass-through when messages already arrive whole. Applies to every inbound type, not just screens. Re-registration is safe: `addSysexListener` detaches the previously attached listener (from whichever input it was on) before adding a new one, so repeated port selection never stacks listeners. See `docs/protocol.md` §Framing "Inbound reassembly" and tracker FB6/FB7.
 
@@ -59,8 +59,9 @@ Jest config: `jest.config.cjs` → babel-jest transform, jsdom environment.
 
 When writing new tests:
 - Mock `webmidi`, `./src/midi.js`, and `./src/main.js` per the patterns already in `parser.test.js`.
-- Use `jest.useFakeTimers()` — parser and renderer both schedule via `setTimeout` + debounce.
-- `jest.mock('lodash.debounce', () => (fn) => fn)` makes the debounce synchronous.
+- Use `jest.useFakeTimers()` for the renderer's device-settle timers and the midi.js wave watchdog.
+  Renders themselves are synchronous since C1 (no debounce, no coalesce timers): the bridge renders on
+  `objectinfo:received` for the current key and on `dumpComplete`.
 
 ## Protocol quick reference
 
@@ -84,7 +85,7 @@ Sub-object types in the ASCII dump: `COL` (column/menu), `NUM`, `SET`, `CON` (co
 
 - ES modules only (`"type": "module"`).
 - No TypeScript. No JSX. No React.
-- `lodash.debounce` and `webmidi` are the only runtime deps — don't add more without discussion.
+- `webmidi` is the only runtime dep (`lodash.debounce` left with the C1 render rework) — don't add more without discussion.
 - No emoji in code or logs.
 - No magic numbers. A literal with semantic meaning gets a named constant (and a comment when its origin is non-obvious) — never a bare number/string scattered at call sites. Protocol values live in `src/sysex-commands.js`; the reverse-engineered SysEx framing is the cautionary example this rule exists for.
 - Prefer editing existing files; this repo is small enough that splitting should be deliberate (roadmap Step 6+).

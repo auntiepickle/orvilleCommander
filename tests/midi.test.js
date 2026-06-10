@@ -84,6 +84,7 @@ describe('midi.js per-wave counter and watchdog (7c)', () => {
     expect(received[0]).toMatchObject({
       reason: 'all-received',
       sendCount: 2,
+      objectinfoSends: 1, // the OBJECTINFO request only; the VALUE one is not counted
       receiveCount: 2,
       lastKey: 'b',
     });

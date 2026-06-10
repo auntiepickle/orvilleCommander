@@ -29,7 +29,6 @@ describe('parseResponse', () => {
     appState.currentSubs = [];
     appState.currentValues = {};
     appState.childSubs = {};
-    appState.isLoadingPreset = false;
     appState.loadingPresetName = null;
     appState.currentKey = '10010000'; // Use non-root for main test
     appState.deviceId = 0; // Explicit for test data match
@@ -129,7 +128,7 @@ describe('parseResponse', () => {
     const asciiData = asciiString.split('').map((c) => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x2e, ...asciiData, 0xf7];
     parseResponse(data);
-    jest.advanceTimersByTime(200); // Advance for setTimeout (debounce is synchronous)
+    jest.advanceTimersByTime(200); // flush-safety only; renders are synchronous since C1
     expect(mockLog).toHaveBeenCalledWith(
       expect.stringContaining('Parsed VALUE_DUMP for key 10030000'),
       'info',
@@ -255,7 +254,8 @@ describe('parseResponse', () => {
 
   test('handles Favorites re-ordering fix during preset load', () => {
     appState.currentKey = '10020010';
-    appState.isLoadingPreset = true;
+    // Gate is loadingPresetName alone since C4 deleted isLoadingPreset.
+    // (No production code writes loadingPresetName — characterization only.)
     appState.loadingPresetName = 'Target Preset';
     appState.currentValues['10020012'] = '0 Favorites'; // Mock bank value
     // Mock multi-line ASCII for OBJECTINFO_DUMP with subs

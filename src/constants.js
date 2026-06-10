@@ -4,13 +4,11 @@
 // facts (command bytes, framing, keys, screen geometry) live in
 // sysex-commands.js instead.
 
-// Render / MIDI timing, in milliseconds. Several of these are interim timers
-// that the planned dumpComplete-event rework (Phase 3.1) is expected to remove;
-// naming them here keeps the current code readable and tunable in one place.
+// Render / MIDI timing, in milliseconds. The render-coalescing timers were
+// removed by the Phase 3.1 dumpComplete rework (C1); what remains is outbound
+// pacing (device settle/processing time) and the wave watchdog.
 export const TIMING = {
   METER_POLL_MS: 100, // meter polling interval
-  RENDER_DEBOUNCE_MS: 200, // event-bridge render debounce
-  RENDER_COALESCE_MS: 200, // objectinfo/value -> render setTimeout
   MIDI_SETTLE_MS: 200, // wait after a send before refreshing the screen
   PROGRAM_SET_MS: 300, // extra wait to ensure a program value is set
   DEVICE_LOAD_MS: 500, // wait for the device to process a preset load

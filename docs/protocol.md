@@ -186,10 +186,12 @@ tracker B10g.3). The app still issues a value request after a put to reconcile
 rather than trusting an optimistic local write.
 
 `0x2e` response payload is ASCII `"<key> <value…>"`; `parser.js` caches it under
-the key. Keys the loaded subs type `CON` (in the current menu or a stored child
-menu) trigger an immediate re-render, as do child-menu params already on screen;
-everything else — including keys absent from every loaded dump — is coalesced
-(C7; see "Key conventions" below for the `0002` naming note).
+the key and emits `value:received`, classified immediate iff the loaded subs
+type the key `CON` (in the current menu or a stored child menu) or it is a
+child-menu param already on screen (C7; see "Key conventions" below for the
+`0002` naming note). Since the Phase 3.1 rework (C1) the classification is
+observability-only: values paint once per request wave, on `dumpComplete` (see
+"Request/response tracking" below).
 
 ## Key conventions
 
@@ -210,8 +212,9 @@ Structural patterns on otherwise-dynamic keys:
 
 Not part of the wire protocol, but relevant when reading the code: `midi.js`
 groups request/response activity into **dump waves** and emits a `dumpComplete`
-event when a wave finishes. This is the substrate the Phase 3.1 eager loader and
-render-coalescing build on (see
+event when a wave finishes. Since Phase 3.1 (C1) this is the render clock:
+`event-bridge.js` paints the settled state and hides loading on `dumpComplete`.
+The planned Phase 3.3 eager loader builds on the same substrate (see
 [`refactor/phase3-state-model.md`](refactor/phase3-state-model.md)).
 
 **Wave lifecycle:**

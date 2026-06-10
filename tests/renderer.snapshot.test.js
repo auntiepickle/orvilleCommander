@@ -44,7 +44,6 @@ describe('renderScreen golden snapshots', () => {
     appState.dspAName = '';
     appState.dspBName = '';
     appState.autoLoad = false;
-    appState.isLoadingPreset = false;
     appState.paramOffset = 0;
     appState.lastAscii = '';
     appState.updateBitmapOnChange = true;

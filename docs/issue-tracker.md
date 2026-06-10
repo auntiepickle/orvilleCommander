@@ -380,22 +380,24 @@ HUMAN-GATE: none
       [I]: naming convention, not a type guarantee) and protocol.md. Tests: child-CON immediate +
       unknown-key coalesce pinned (the latter fails pre-C7). VALUE_DUMP-coverage precondition was met by
       Batch 0.3's 0x2e characterization.
-- [ ] NEW Persist active DSP (A/B) app-side as view state (default A)
+- [ ] NEW Persist active DSP (A/B) app-side as view state (default A) — FOLDED INTO C2 (Batch 3.3): the
+      landing chooses dspAKey/dspBKey by this view state; do not implement separately (see
+      phase3-state-model.md "C2 design"). Mark [x] when C2 ships.
 HUMAN-GATE: none
 
 ### Batch 3.3 — Connect handshake + eager loader + landing  (replaces the autoLoad timer mechanism)
 DECISION RESOLVED (see phase3-state-model.md): land on the last-active DSP's preset, read authoritatively
 from the root dump (device boots into last-used preset). Cache is a provisional structure-only pre-paint.
-- [~] C2  Remove the PORT_INIT_MS (500ms) timer + autoLoad flag mechanism (main.js); land via
-      rootDumpComplete -> active preset. NOTE: the race SYMPTOM (wrong landing menu) was eliminated by
+- [~] C2  Remove the PORT_INIT_MS (500ms) timer + autoLoad flag mechanism (main.js); land on the root
+      dump's arrival -> active preset. NOTE: the race SYMPTOM (wrong landing menu) was eliminated by
       C1's synchronous root render (Batch 3.1), but the timer-driven mechanism it rode on is still in
       place — this item owns removing it.
-      NEXT: design the rootDumpComplete landing in phase3-state-model.md terms (connect -> request root ->
-      on the root wave's dumpComplete adopt DSP keys/names + land on the active preset, no timer, no
-      autoLoad flag), folding in the two C1-review items that C2 subsumes/validates: the
-      watchdog-mid-navigation autoload edge (Batch 3.1 NEW item) and, while on hardware for the throughput
-      gate, the wave-saturation smoke. Then implement on a branch with the startup characterization
-      updated in the same commit.
+      NEXT: implement per phase3-state-model.md "C2 design — connect/landing without timers" (design
+      written + reviewed): one-shot pendingLanding state replaces the PORT_INIT_MS timer AND the sticky
+      autoLoad flag (renderer autoload branch deleted; click handlers move to the same one-shot descend
+      state); folds in 3.2's persist-active-DSP and the watchdog-mid-nav item's landing case. Startup
+      characterization updated in the same commit. Hardware validation deferred to one consolidated
+      session after 3.3 (landing timing + wave-saturation smoke + eager-load throughput).
 - [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX
 - [ ] NEW `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
 - [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number

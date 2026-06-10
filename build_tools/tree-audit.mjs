@@ -53,9 +53,8 @@ await import('../src/main.js');
 const { appState } = await import('../src/state.js');
 const { setState } = await import('../src/store.js');
 const { updateScreen } = await import('../src/renderer.js');
-const { makeKeyStackEntry } = await import('../src/navigation.js');
+const { deriveKeyStack, getNode, recordDump } = await import('../src/tree.js');
 const { KEY, CMD, SYSEX } = await import('../src/sysex-commands.js');
-const { LAYOUT } = await import('../src/constants.js');
 const { log } = await import('../src/logger.js');
 
 // ---------- real MIDI ------------------------------------------------------
@@ -175,15 +174,10 @@ const outAdapter = {
 setMidiPorts(outAdapter, inAdapter, DEV);
 addSysexListener();
 
-const ancestorsOf = (key) => {
-  const chain = [];
-  let cur = tree.get(key)?.parentKey;
-  while (cur !== null && cur !== undefined) {
-    chain.unshift(cur);
-    cur = tree.get(cur)?.parentKey;
-  }
-  return chain;
-};
+// Seed the app's tree with the phase-1 dumps (production equivalence: a user
+// reaching any audited node has necessarily loaded its ancestors' dumps,
+// which the parser tree-records). Phase 2's live dumps keep updating it.
+for (const [, n] of tree) recordDump(n.subs);
 
 async function settleOn(key) {
   const start = Date.now();
@@ -214,11 +208,11 @@ for (const [key, node] of colNodes) {
     const t0 = Date.now();
     while (Date.now() - lastMsgAt < QUIET_MS && Date.now() - t0 < CAP_MS) await sleep(150);
   }
-  // Navigate with TREE-computed ancestors (the T1 principle): the view we
-  // audit is positioned exactly where the tree says the node lives.
-  const keyStack = ancestorsOf(key).map((aKey) =>
-    makeKeyStackEntry(aKey, tree.get(aKey)?.subs || [])
-  );
+  // Navigate with the APP's tree-derived stack (T1b/#105): phase 2 visits
+  // nodes in BFS order, so every ancestor's dump has already been received
+  // and tree-recorded by the app — the production derivation is exercised,
+  // and violation 4 checks it against the auditor's independent ground truth.
+  const keyStack = deriveKeyStack(key);
   setState(
     { currentKey: key, keyStack, currentSubs: [], pendingLanding: null, pendingDescend: false },
     'audit:navigate'
@@ -238,15 +232,14 @@ for (const [key, node] of colNodes) {
   // 1. Child reachability: every COL child needs a UI affordance.
   const embedCandidate = children.find((s) => s.type === 'COL' && s.position === '0');
   for (const c of children.filter((s) => s.type === 'COL')) {
-    const tag = c.tag.trim();
     const asSoftkey = mainKeys.includes(c.key);
-    const asEmbed = c.key === embedCandidate?.key && (appState.childSubs?.[c.key]?.length || 0) > 0;
+    const asEmbed = c.key === embedCandidate?.key && (getNode(c.key)?.length || 0) > 0;
     if (!asSoftkey && !asEmbed) {
-      const why =
-        !tag || tag.length > LAYOUT.SHORT_TAG_MAX
-          ? `tag ${JSON.stringify(c.tag)} fails the softkey filter`
-          : 'absent despite passing filters';
-      flag(key, 'unreachable-child', `${c.key} '${c.statement}': ${why}`);
+      flag(
+        key,
+        'unreachable-child',
+        `${c.key} '${c.statement}': absent despite the all-COL softkey rule (T1b)`
+      );
     }
   }
 

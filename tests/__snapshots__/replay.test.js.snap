@@ -68,9 +68,9 @@ exports[`offline replay harness replays a screen-dump fixture and decodes the fr
 
 exports[`offline replay harness replays an OBJECTINFO_DUMP fixture and renders the LCD 1`] = `
 "<div class="top-docked"></div><div class="main-content">setup functions
-<span class="softkey" data-key="10010050" data-idx="0">clock     </span><span class="softkey" data-key="10010818" data-idx="1">inputs    </span><span class="softkey" data-key="10010816" data-idx="2">outputs   </span><span class="softkey" data-key="10010817" data-idx="3">format    </span>
-<span class="softkey" data-key="40090000" data-idx="0">tempo     </span><span class="softkey" data-key="40090100" data-idx="1">timer     </span><span class="softkey" data-key="10030300" data-idx="2">pedals    </span><span class="softkey" data-key="10010010" data-idx="3">midi      </span>
-<span class="softkey" data-key="10010100" data-idx="0">external  </span><span class="softkey" data-key="10010400" data-idx="1">dump      </span><span class="softkey" data-key="10010300" data-idx="2">nextprog  </span><span class="softkey" data-key="10010040" data-idx="3">display   </span>
-<span class="softkey" data-key="10010004" data-idx="0">service             </span><span class="softkey" data-key="100100f0" data-idx="1">misc                </span>
+<span class="softkey" data-key="10010050" data-idx="0">clock     </span><span class="softkey" data-key="10010818" data-idx="1">inputs    </span><span class="softkey" data-key="100100d0" data-idx="2">...       </span><span class="softkey" data-key="10010816" data-idx="3">outputs   </span>
+<span class="softkey" data-key="10010817" data-idx="0">format    </span><span class="softkey" data-key="40090000" data-idx="1">tempo     </span><span class="softkey" data-key="40090100" data-idx="2">timer     </span><span class="softkey" data-key="10030300" data-idx="3">pedals    </span>
+<span class="softkey" data-key="10010010" data-idx="0">midi      </span><span class="softkey" data-key="10010100" data-idx="1">external  </span><span class="softkey" data-key="10010400" data-idx="2">dump      </span><span class="softkey" data-key="10010300" data-idx="3">nextprog  </span>
+<span class="softkey" data-key="10010040" data-idx="0">display      </span><span class="softkey" data-key="10010004" data-idx="1">service      </span><span class="softkey" data-key="100100f0" data-idx="2">misc         </span>
 </div><div class="bottom-docked"><span class="softkey" data-key="10020000" data-idx="0">program   </span><span class="softkey" data-key="10010000" data-idx="1">[setup]   </span><span class="softkey" data-key="10030000" data-idx="2">levels    </span><span class="softkey" data-key="10030500" data-idx="3">bypass    </span></div>"
 `;

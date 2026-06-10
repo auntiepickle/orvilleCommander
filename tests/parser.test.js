@@ -21,6 +21,7 @@ import { appState } from '../src/state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, notifyResponse } from '../src/midi.js';
 import { emit } from '../src/events.js';
 import { log as mockLog } from '../src/logger.js';
+import { recordDump, getNode, reset as treeReset } from '../src/tree.js';
 
 describe('parseResponse', () => {
   beforeEach(() => {
@@ -28,7 +29,7 @@ describe('parseResponse', () => {
     // Reset state
     appState.currentSubs = [];
     appState.currentValues = {};
-    appState.childSubs = {};
+    treeReset();
     appState.loadingPresetName = null;
     appState.currentKey = '10010000'; // Use non-root for main test
     appState.deviceId = 0; // Explicit for test data match
@@ -68,57 +69,74 @@ describe('parseResponse', () => {
     );
   });
 
-  test('handles valid OBJECTINFO_DUMP for child sub-menu and stores in childSubs', () => {
-    appState.currentKey = '10010000'; // Set to parent key
-    appState.currentSubs = [
-      { key: '10010000', type: 'COL', parent: '10010000' }, // Main (own line echoes own key in parent slot)
-      { key: '10010010', type: 'COL', parent: '10010000' }, // Child reference in parent menu
-    ];
-    // Mock SysEx: child sub under current. The dump's own line echoes its own
-    // key in the parent slot (device-model.md §3), matching hardware captures.
+  test('a child dump of the on-screen menu is tree-recorded and emits (T1b)', () => {
+    appState.currentKey = '10010000'; // on the parent menu
+    // The tree knows the parent menu lists this child (as it would after the
+    // parent's own dump arrived) — parentage is the T1b correlation.
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010000',
+        parent: '10010000',
+        statement: 'Setup',
+        tag: 'setup',
+      },
+      {
+        type: 'COL',
+        position: '1',
+        key: '10010010',
+        parent: '10010000',
+        statement: 'Child',
+        tag: 'Child',
+      },
+    ]);
+    // The dump's own line echoes its own key in the parent slot
+    // (device-model.md §3), matching hardware captures.
     const asciiString = 'COL 1 10010010 10010010 "Child" "Child"';
     const asciiData = asciiString.split('').map((c) => c.charCodeAt(0));
-    const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
-    parseResponse(data);
-    jest.advanceTimersByTime(300); // Flush any potential timers (safe even if not needed)
-    expect(mockLog).toHaveBeenCalledWith(
-      expect.stringContaining('Stored child subs for key 10010010'),
-      'debug',
-      'parsedDump'
-    );
-    expect(appState.childSubs['10010010']).toBeDefined();
+    parseResponse([0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7]);
+    expect(getNode('10010010')).toBeDefined(); // in the tree
     expect(emit).toHaveBeenCalledWith('objectinfo:received', { key: '10010010' });
   });
 
-  test('late child OBJECTINFO arriving after navigation is dropped, not stored (C8/#44)', () => {
-    // User navigated to the B preset; currentSubs still describes the old
-    // setup menu (it is only replaced when the new menu's dump lands). The
-    // old menu's in-flight child dump must not be stored under the new view.
+  test('late child OBJECTINFO after navigation stays silent but is still cached (T1b/C8)', () => {
+    // User navigated to the B preset; the old menu's in-flight child dump
+    // has a different tree parent, so no child-arrival event fires for the
+    // new view — but the node is cached for when the user returns.
     appState.currentKey = '801000b';
-    appState.currentSubs = [
-      { key: '10010000', type: 'COL', parent: '10010000' },
-      { key: '10010010', type: 'COL', parent: '10010000' },
-    ];
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010000',
+        parent: '10010000',
+        statement: 'Setup',
+        tag: 'setup',
+      },
+      {
+        type: 'COL',
+        position: '1',
+        key: '10010010',
+        parent: '10010000',
+        statement: 'Child',
+        tag: 'Child',
+      },
+    ]);
     const asciiString = 'COL 1 10010010 10010010 "Child" "Child"';
     const asciiData = asciiString.split('').map((c) => c.charCodeAt(0));
     parseResponse([0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7]);
-    expect(appState.childSubs).toEqual({});
-    expect(emit).not.toHaveBeenCalledWith('objectinfo:received', { key: '10010010' });
+    expect(getNode('10010010')).toBeDefined(); // cached
+    expect(emit).not.toHaveBeenCalledWith('objectinfo:received', { key: '10010010' }); // silent
   });
 
-  test('child store requires currentSubs to describe the current menu (C8/#44)', () => {
-    // Defensive pin: even if view state were inconsistent (an entry matching
-    // key+parent inside subs whose own line is NOT the current key — e.g. a
-    // stale re-pin), the guard must fail closed rather than trust it.
+  test('a dump with unknown ancestry stays silent (T1b: tree parentage is the gate)', () => {
     appState.currentKey = '10010000';
-    appState.currentSubs = [
-      { key: 'deadbeef', type: 'COL', parent: 'deadbeef' },
-      { key: '10010010', type: 'COL', parent: '10010000' },
-    ];
+    // Nothing recorded: the tree has never seen a menu listing this key.
     const asciiString = 'COL 1 10010010 10010010 "Child" "Child"';
     const asciiData = asciiString.split('').map((c) => c.charCodeAt(0));
     parseResponse([0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7]);
-    expect(appState.childSubs).toEqual({});
+    expect(emit).not.toHaveBeenCalledWith('objectinfo:received', { key: '10010010' });
   });
 
   test('handles valid VALUE_DUMP and updates currentValues', () => {
@@ -156,14 +174,40 @@ describe('parseResponse', () => {
     );
   });
 
-  test('VALUE_DUMP for a CON sub stored in childSubs emits an immediate render (C7/#43)', () => {
+  test('VALUE_DUMP for a CON sub in a child menu emits an immediate render (C7/#43, T1b tree)', () => {
     appState.currentSubs = []; // meter lives in an embedded child menu, not the top level
-    appState.childSubs = {
-      4040002: [
-        { key: '4040002', type: 'COL' },
-        { key: '4070002', type: 'CON' },
-      ],
-    };
+    appState.currentKey = '4040000';
+    // T1b: the lookup walks the tree — current menu lists the child COL,
+    // whose own dump carries the CON param.
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '4040000',
+        parent: '4040000',
+        statement: 'Levels',
+        tag: 'lvl',
+      },
+      {
+        type: 'COL',
+        position: '1',
+        key: '4040002',
+        parent: '4040000',
+        statement: 'Meters',
+        tag: 'm',
+      },
+    ]);
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '4040002',
+        parent: '4040002',
+        statement: 'Meters',
+        tag: 'm',
+      },
+      { type: 'CON', position: '1', key: '4070002', parent: '4040002', statement: '', tag: 'L' },
+    ]);
     parseResponse(valueDump('4070002 0.5'));
     expect(emit).toHaveBeenCalledWith('value:received', { key: '4070002', immediate: true });
     expect(mockLog).toHaveBeenCalledWith(
@@ -178,7 +222,6 @@ describe('parseResponse', () => {
     // A key absent from every loaded dump has no on-screen line an immediate
     // render could update, and menu keys can end 0002 too; type is the truth.
     appState.currentSubs = [];
-    appState.childSubs = {};
     parseResponse(valueDump('10030002 0.8'));
     expect(appState.currentValues['10030002']).toBe('0.8');
     expect(emit).toHaveBeenCalledWith('value:received', { key: '10030002', immediate: false });
@@ -188,14 +231,50 @@ describe('parseResponse', () => {
     // Pre-C7 the suffix heuristic forced an immediate render even when the
     // loaded sub said the key was not a meter. Menu/param keys can end 0002.
     appState.currentSubs = [{ key: '10010002', type: 'COL' }];
-    appState.childSubs = {};
     parseResponse(valueDump('10010002 5'));
     expect(emit).toHaveBeenCalledWith('value:received', { key: '10010002', immediate: false });
   });
 
   test('VALUE_DUMP for a non-CON child param takes the immediate fallback', () => {
     appState.currentSubs = [];
-    appState.childSubs = { 10010071: [{ key: '10010711', type: 'NUM' }] };
+    appState.currentKey = '10010007';
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010007',
+        parent: '10010007',
+        statement: 'Wrap',
+        tag: 'wrap',
+      },
+      {
+        type: 'COL',
+        position: '1',
+        key: '10010071',
+        parent: '10010007',
+        statement: 'Inner',
+        tag: 'inner',
+      },
+    ]);
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010071',
+        parent: '10010071',
+        statement: 'Inner',
+        tag: 'inner',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10010711',
+        parent: '10010071',
+        statement: 'd %3.0f',
+        tag: '',
+        value: '7',
+      },
+    ]);
     parseResponse(valueDump('10010711 7'));
     expect(emit).toHaveBeenCalledWith('value:received', { key: '10010711', immediate: true });
     expect(mockLog).toHaveBeenCalledWith(

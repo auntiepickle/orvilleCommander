@@ -219,7 +219,7 @@ live connect on the real 31250-baud link (root dump arrival time vs the old
 500ms guess; landing correctness), the wave-saturation smoke (polling +
 bitmap-on-change vs the 10s watchdog ceiling), and eager-load throughput.
 
-## T1b design — tree-derived navigation (implementing; GH #105)
+## T1b design — tree-derived navigation (implemented on refactor/t1b-tree-navigation; GH #105; device-on acceptance pending)
 
 The cure for the R-series bug class: the view derives from the device's
 object tree, not from recorded click history or message-arrival races.
@@ -233,7 +233,7 @@ linkage comes from the PARENT's dump (a dump cannot self-identify its parent —
 wins (structure changes on preset load are absorbed by the per-visit
 refetch). API: `recordDump(subs)`, `getNode(key)`, `parentOf(key)`,
 `ancestorsOf(key)`, `findParamUnder(menuKey, paramKey)`, `labelFor(key)`,
-`reset()` (tests).
+`labelForSub(line)`, `deriveKeyStack(key)`, `reset()` (tests).
 
 **What derives from the tree:**
 
@@ -253,15 +253,21 @@ refetch). API: `recordDump(subs)`, `getNode(key)`, `parentOf(key)`,
   updateScreen stops clearing structure (the tree persists as a cache;
   freshness comes from the per-visit child refetch); it still clears
   currentValues (volatile).
-- **Labels:** `labelFor(key)` = `softkeyLabel` of the node's own main line or
-  of its line in the parent's dump; when BOTH are blank, derive from the
+- **Labels:** `labelFor(key)` = the clipped label of the node's own main line
+  or of its line in the parent's dump; when BOTH are blank, derive from the
   first labeled child (device precedent: the physical SETUP row labels the
   blank container by its child, 'dsp B'), else a `...` placeholder until the
-  children load. Renderer softkey filters move from line-only `softkeyLabel`
-  to tree-aware `labelFor`, so every COL child has an affordance —
-  `unreachable-child` becomes structurally impossible. The parser fan-out
-  fetches ALL COL children (labels no longer gate fetching; blank nodes need
-  their children loaded to be labeled).
+  children load. Long tags CLIP to the column budget instead of excluding
+  the child. Implementation refinement: the renderer labels children it is
+  already holding via `labelForSub(line)` — the in-hand line IS the parent
+  listing, so it is preferred and the tree is consulted only when the line
+  is blank (keeps direct renders tree-independent; snapshots byte-identical).
+  Softkey filters drop label gating entirely (`type === 'COL'`), so every
+  COL child has an affordance — `unreachable-child` becomes structurally
+  impossible. The parser fan-out fetches ALL COL children (labels no longer
+  gate fetching; blank nodes need their children loaded to be labeled);
+  `navigation.js` keeps only `toggleDspKey` (`makeKeyStackEntry` and
+  `softkeyLabel` are deleted, replaced by the tree equivalents).
 
 **Out of scope (stays #106):** cache pre-paint on navigation, the
 unconfirmed-value render guard (R3), the eager loader, and request

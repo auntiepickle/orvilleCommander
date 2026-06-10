@@ -12,7 +12,7 @@
 // is a cache of device-confirmed structure, not view state — view state
 // (currentKey, the derived keyStack) stays on appState.
 
-import { softkeyLabel } from './navigation.js';
+import { LAYOUT } from './constants.js';
 
 // key -> subs array (the node's own dump: main line + direct children).
 const nodes = new Map();
@@ -110,19 +110,58 @@ export function findParamUnder(menuKey, paramKey) {
  * @param {string} key
  * @returns {string}
  */
+// Label from a single sub line: tag, else first statement word — and unlike
+// the line-level softkeyLabel, a LONG tag clips instead of excluding. With
+// the tree, the label is presentation only: every known COL gets an
+// affordance, so 'unreachable-child' is structurally impossible (T1b).
+const clipLine = (line) => {
+  if (!line) return '';
+  const lbl = (line.tag || '').trim() || ((line.statement || '').trim().split(' ')[0] || '').trim();
+  return lbl.slice(0, LAYOUT.SHORT_TAG_MAX);
+};
+
 export function labelFor(key) {
-  const ownLine = nodes.get(key)?.[0];
-  const parentLine = parents.get(key)?.sub;
-  const direct = (ownLine && softkeyLabel(ownLine)) || (parentLine && softkeyLabel(parentLine));
+  const direct = clipLine(nodes.get(key)?.[0]) || clipLine(parents.get(key)?.sub);
   if (direct) return direct;
   const node = nodes.get(key);
   if (node) {
     for (const child of node.slice(1)) {
-      const childLabel = softkeyLabel(child);
+      const childLabel = clipLine(child);
       if (childLabel) return childLabel;
     }
   }
   return '...';
+}
+
+/**
+ * Label for a sub line the caller already holds (a child listed in the menu
+ * being rendered): the line itself is authoritative when it carries a
+ * tag/statement; the tree is consulted only for blank lines (child-derived
+ * label per the physical SETUP precedent, else the '...' placeholder).
+ *
+ * @param {Object} line - A child sub line from the rendered menu's dump.
+ * @returns {string} Non-empty display label.
+ */
+export function labelForSub(line) {
+  return clipLine(line) || labelFor(line?.key);
+}
+
+/**
+ * The derived keyStack for a key (T1b): ancestors computed from tree parent
+ * relations, in the canonical C3 {key, tag, subs} entry shape so every
+ * existing consumer (breadcrumb, sibling check, parent/grandparent rows)
+ * keeps working. Replaces hand-maintained click history; empty when
+ * ancestry is unknown (deep jump before any ancestor's dump loaded).
+ *
+ * @param {string} key - The key being navigated to.
+ * @returns {Array<{key: string, tag: string, subs: Object[]}>}
+ */
+export function deriveKeyStack(key) {
+  return ancestorsOf(key).map((aKey) => ({
+    key: aKey,
+    tag: labelFor(aKey),
+    subs: (nodes.get(aKey) || []).slice(),
+  }));
 }
 
 /** Clears the tree (tests). */

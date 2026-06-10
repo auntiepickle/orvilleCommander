@@ -48,7 +48,7 @@ export const appState = {
   currentSoftkeys: [],
   pollingEnabled: false,
   // isLoadingPreset deleted (C4/#40): hideLoading is driven by dumpComplete.
-  childSubs: {}, // Added for child sub-menu storage
+  // childSubs deleted (T1b/#105): child structure lives in the persistent tree (src/tree.js).
   lastDumpComplete: null, // 7c shadow-fire breadcrumb; written by midi:dump-complete
 };
 

@@ -60,8 +60,14 @@ describe('tree store (T1b)', () => {
   });
 
   test('newest dump wins (preset-load structure changes absorbed)', () => {
-    recordDump([col('401000b', '401000b', 'Black Hole', ''), col('4040001', '401000b', 'space parameters', 'space')]);
-    recordDump([col('401000b', '401000b', 'Wormhole', ''), col('4990001', '401000b', 'warp parameters', 'warp')]);
+    recordDump([
+      col('401000b', '401000b', 'Black Hole', ''),
+      col('4040001', '401000b', 'space parameters', 'space'),
+    ]);
+    recordDump([
+      col('401000b', '401000b', 'Wormhole', ''),
+      col('4990001', '401000b', 'warp parameters', 'warp'),
+    ]);
     expect(getNode('401000b')[0].statement).toBe('Wormhole');
     expect(parentOf('4990001')).toBe('401000b');
     // The old child's linkage survives until overwritten elsewhere — the
@@ -85,12 +91,18 @@ describe('tree store (T1b)', () => {
 
   test('labelFor: own tag, else parent-listing line, else first labeled child, else placeholder', () => {
     // Parent's listing carries the tag before the node's own dump loads.
-    recordDump([col('10030600', '10030600', 'Post D/A Gain', 'outputs'), col('10030601', '10030600', 'Post D/A Gain', '', 'c')]);
+    recordDump([
+      col('10030600', '10030600', 'Post D/A Gain', 'outputs'),
+      col('10030601', '10030600', 'Post D/A Gain', '', 'c'),
+    ]);
     expect(labelFor('10030600')).toBe('outputs');
     expect(labelFor('10030601')).toBe('Post'); // statement-derived via the parent line
     // Fully blank node: labeled by its first labeled child once loaded
     // (device precedent: the physical SETUP row shows 'dsp B').
-    recordDump([col('100100d0', '100100d0', '', ''), col('100100df', '100100d0', 'Dsp B i/p routing', 'dsp B')]);
+    recordDump([
+      col('100100d0', '100100d0', '', ''),
+      col('100100df', '100100d0', 'Dsp B i/p routing', 'dsp B'),
+    ]);
     expect(labelFor('100100d0')).toBe('dsp B');
     // Blank node whose children have not loaded: placeholder, never ''.
     recordDump([col('feed0000', 'feed0000', '', ''), col('feed0001', 'feed0000', '', '')]);

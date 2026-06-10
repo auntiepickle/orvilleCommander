@@ -418,11 +418,23 @@ and arrival races; the cure is view DERIVED from the device tree.
       pure-format INFs match on value; bar CONs match on tag. FIRST FULL RUN (depth 2, 42 nodes,
       41 audited): 4 violations, all real, 0 false positives -> R8 + R9 below. Report:
       logs/tree-audit-report.json (gitignored; rerun to regenerate).
-      NEXT: (b) Fold the audit invariants into the eager loader below: navigation state becomes a KEY
-      into the loaded tree; ancestors are COMPUTED from tree parent relations, not recorded click
-      history (keyStack becomes a derived view or is deleted); softkeys, embed, and breadcrumb all
-      derive from tree relations. The auditor is the acceptance harness for that refactor and the
-      standing regression loop afterward (merges with G2).
+      (b) IMPLEMENTED (branch refactor/t1b-tree-navigation, PR DRAFT — awaiting maintainer review +
+      device-on acceptance run): src/tree.js persistent tree (recordDump on EVERY 0x32; parents map
+      from the parent's dump — a dump cannot self-identify its parent, device-model §3). keyStack is
+      now DERIVED (tree.js:deriveKeyStack from tree ancestry, canonical {key, tag, subs} entries) at
+      every navigation site (renderer x5, bridge landing/descend, controls parameter-nav); childSubs
+      DELETED from appState (embeds/param lookups read getNode/findParamUnder); parser fan-out widened
+      short-tag -> ALL COLs (presets still excluded at root); C8 correlation guard replaced by tree
+      parentage (parentOf === currentKey); R6 renderer embed prefetch deleted (fan-out covers it);
+      navigation.js makeKeyStackEntry + softkeyLabel deleted -> tree.js labelFor/labelForSub (every
+      COL child gets a softkey affordance; blank nodes label from first labeled child per the
+      physical SETUP precedent — 100100d0 shows 'dsp B'-derived label — else '...' placeholder, so
+      'unreachable-child' is structurally impossible). Renderer snapshots byte-identical (render
+      preservation proof); replay snapshot updated intentionally (100100d0 now reachable — the
+      board's last violation). Auditor updated: phase 2 uses the production deriveKeyStack (app tree
+      seeded with phase-1 dumps), embed check reads getNode. ACCEPTANCE PENDING: device-on
+      npm run tree-audit, target ZERO violations. The auditor stays the standing regression loop
+      afterward (merges with G2).
 - [x] R8  (branch feat/str-rendering) STR string-edit fields RENDERED + EDITABLE: put semantics
       confirmed live first (put 10020052 'TestName' -> 0x2e echo + readback; restored after). Renderer
       STR branches (top-level + embedded child): formatted value as a clickable param-value; click

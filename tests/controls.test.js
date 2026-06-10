@@ -16,8 +16,6 @@ jest.mock('../src/logger.js', () => ({
 }));
 
 jest.mock('../src/navigation.js', () => ({
-  // Real makeKeyStackEntry so the 'parameter' nav test exercises the actual
-  // keyStack normalization (C3/#39); only toggleDspKey is stubbed.
   ...jest.requireActual('../src/navigation.js'),
   toggleDspKey: jest.fn(() => '801000b'),
 }));
@@ -27,6 +25,7 @@ import { sendKeypress, sendSysEx } from '../src/midi.js';
 import { updateScreen } from '../src/renderer.js';
 import { toggleDspKey } from '../src/navigation.js';
 import { appState } from '../src/state.js';
+import { recordDump, reset as treeReset } from '../src/tree.js';
 
 const addButton = (id) => {
   const btn = document.createElement('button');
@@ -51,7 +50,17 @@ describe('controls', () => {
         statement: 'ORVILLE ROOT OBJECT',
         tag: 'ORVILLE',
       },
+      {
+        type: 'COL',
+        position: '1',
+        key: '401000b',
+        parent: '0',
+        statement: 'Black Hole',
+        tag: '',
+      },
     ];
+    treeReset();
+    recordDump(appState.currentSubs); // production: the parser recorded the root dump
     appState.pendingDescend = false;
     appState.pendingLanding = null;
     appState.fetchBitmap = true;
@@ -104,8 +113,9 @@ describe('controls', () => {
 
     expect(appState.currentKey).toBe('401000b');
     expect(appState.pendingDescend).toBe(true);
-    // Normalized entry, not a raw string (C3/#39): tag derived from the
-    // root dump's main line, subs snapshotted for breadcrumb/sibling logic.
+    // Derived from tree ancestry (T1b/#105), in the canonical {key, tag,
+    // subs} shape (C3/#39): tag from the root dump's main line, subs from
+    // the recorded root node.
     expect(appState.keyStack).toEqual([{ key: '0', tag: 'ORVILLE', subs: appState.currentSubs }]);
   });
 

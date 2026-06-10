@@ -6,7 +6,8 @@ import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { log } from './logger.js';
-import { toggleDspKey, makeKeyStackEntry } from './navigation.js';
+import { toggleDspKey } from './navigation.js';
+import { deriveKeyStack } from './tree.js';
 
 /**
  * Mapping of key names to their corresponding MIDI keypress mask arrays.
@@ -127,10 +128,7 @@ export function setupKeypressControls() {
               if (appState.currentKey === KEY.ROOT) {
                 setState(
                   {
-                    keyStack: [
-                      ...appState.keyStack,
-                      makeKeyStackEntry(appState.currentKey, appState.currentSubs),
-                    ],
+                    keyStack: deriveKeyStack(appState.presetKey), // T1b: tree ancestors
                     currentKey: appState.presetKey,
                     pendingDescend: true,
                   },

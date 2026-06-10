@@ -5,14 +5,15 @@ import { TIMING, LAYOUT } from './constants.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { showLoading } from './main.js';
-import { makeKeyStackEntry, softkeyLabel } from './navigation.js';
+import { getNode, deriveKeyStack, findParamUnder, labelForSub } from './tree.js';
 import { log } from './logger.js';
 
 /**
  * Updates the current screen by requesting OBJECTINFO_DUMP and VALUE_DUMP for the current key.
- * Clears childSubs and currentValues to refresh data. Optionally clears softkeys at root/top levels.
+ * Clears currentValues to refresh data. Optionally clears softkeys at root/top levels.
  *
- * This is the single clear point for childSubs/currentValues (C8/#44): every
+ * This is the single clear point for currentValues (C8/#44; structure now
+ * lives in the persistent tree — T1b): every
  * navigation path (LCD clicks, keypress controls, sync, connect, polling)
  * funnels through here, so per-handler clears are redundant by construction.
  *
@@ -22,7 +23,7 @@ import { log } from './logger.js';
  * updateScreen(log); // Refresh current menu
  */
 export function updateScreen(logParam = null) {
-  const patch = { childSubs: {}, currentValues: {} };
+  const patch = { currentValues: {} };
   if (
     appState.currentKey === KEY.ROOT ||
     [KEY.SETUP, KEY.PROGRAM, KEY.LEVELS, KEY.BYPASS].includes(appState.currentKey)
@@ -47,17 +48,9 @@ const handleLcdClick = (e) => {
       presetKey: newPresetKey,
       currentKey: newPresetKey,
       pendingDescend: true,
-      currentSoftkeys: [], // Clear softkeys on DSP switch; childSubs cleared by updateScreen below
+      currentSoftkeys: [], // Clear softkeys on DSP switch
+      keyStack: deriveKeyStack(newPresetKey), // T1b: ancestors from the tree
     };
-    if (
-      !appState.currentKey.startsWith(KEY_PREFIX.DSP_A) &&
-      !appState.currentKey.startsWith(KEY_PREFIX.DSP_B)
-    ) {
-      patch.keyStack = [
-        ...appState.keyStack,
-        makeKeyStackEntry(appState.currentKey, appState.currentSubs),
-      ];
-    }
     setState(patch, 'renderer:lcd-click-dsp-toggle');
     updateScreen();
   } else if (e.target.classList.contains('softkey')) {
@@ -81,7 +74,7 @@ const handleLcdClick = (e) => {
       );
       setState(
         {
-          keyStack: [],
+          keyStack: deriveKeyStack(newKey), // T1b: [root entry] once the tree knows root
           currentKey: newKey,
           paramOffset: 0,
           pendingDescend: true,
@@ -106,6 +99,7 @@ const handleLcdClick = (e) => {
             currentKey: newKey,
             paramOffset: 0,
             pendingDescend: true,
+            keyStack: deriveKeyStack(newKey), // T1b: same parent, recomputed
           },
           'renderer:lcd-click-softkey-sibling'
         );
@@ -120,10 +114,7 @@ const handleLcdClick = (e) => {
     );
     setState(
       {
-        keyStack: [
-          ...appState.keyStack,
-          makeKeyStackEntry(appState.currentKey, appState.currentSubs),
-        ],
+        keyStack: deriveKeyStack(newKey), // T1b: ancestors from the tree
         currentKey: newKey,
         paramOffset: 0, // Reset offset for new menu
         pendingDescend: true,
@@ -135,7 +126,7 @@ const handleLcdClick = (e) => {
     const clickedKey = e.target.dataset.key;
     setState(
       {
-        keyStack: appState.keyStack.slice(0, -1),
+        keyStack: deriveKeyStack(clickedKey), // T1b: ancestors from the tree
         currentKey: clickedKey,
         pendingDescend: true,
         currentSoftkeys: [],
@@ -216,12 +207,9 @@ const handleSelectChange = (e) => {
 const handleParamClick = (e) => {
   if (e.target.classList.contains('param-value')) {
     const key = e.target.dataset.key;
-    // Find the sub for title and limits
+    // Find the sub for title and limits (tree lookup for embedded children)
     const sub =
-      appState.currentSubs.find((s) => s.key === key) ||
-      Object.values(appState.childSubs || {})
-        .flat()
-        .find((s) => s.key === key);
+      appState.currentSubs.find((s) => s.key === key) || findParamUnder(appState.currentKey, key);
     if (sub) {
       if (sub.type === 'NUM') {
         const title = sub.statement.replace(/%.*f/, '').trim(); // Clean format specifier
@@ -409,7 +397,6 @@ export function renderScreen(subs, ascii, logParam) {
     const softSubsUsed = subs.filter(
       (s) =>
         s.type === 'COL' &&
-        softkeyLabel(s) &&
         s.key !== KEY.DSP_A_PRESET &&
         s.key !== KEY.DSP_B_PRESET &&
         s.key !== KEY.ROOT_META &&
@@ -421,7 +408,7 @@ export function renderScreen(subs, ascii, logParam) {
       const slice = softSubsUsed.slice(i, i + itemsPerLine);
       const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length);
       const softTags = slice.map((s) => {
-        const t = softkeyLabel(s);
+        const t = labelForSub(s);
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
         return text;
       });
@@ -435,7 +422,7 @@ export function renderScreen(subs, ascii, logParam) {
       const slice = softSubsUsed.slice(i, i + itemsPerLine);
       const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length);
       slice.forEach((s, idx) => {
-        const t = softkeyLabel(s);
+        const t = labelForSub(s);
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
         softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
       });
@@ -559,7 +546,7 @@ export function renderScreen(subs, ascii, logParam) {
     // which made mixed menus like 'program functions' (TRG + 8 position-0
     // COL children) unnavigable — the physical PROGRAM screen shows those
     // softkeys. Only the actually-embedded child is excluded, below.
-    localSoftSubs = subs.slice(1).filter((s) => s.type === 'COL' && softkeyLabel(s));
+    localSoftSubs = subs.slice(1).filter((s) => s.type === 'COL');
     // Deterministic embed (R6, live-validated): only ever the FIRST
     // position-0 child in subs order may embed. The old loop embedded
     // whichever child's dump happened to have arrived — on 'program
@@ -573,20 +560,11 @@ export function renderScreen(subs, ascii, logParam) {
       .filter((s) => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey)
       .slice(0, 1);
     let embeddedKey = null;
-    // Proactively fetch the embed candidate ONLY when the parser's fan-out
-    // will not already fetch it (no derivable label) — otherwise this
-    // duplicated the same request in the same wave on every navigation, and
-    // on 'program functions' the duplicated key is the giant bank list
-    // (R6 review; predicate kept in lockstep with softkeyLabel per R9).
-    if (potentialEmbedSubs.length > 0) {
-      const cand = potentialEmbedSubs[0];
-      const fanOutCovers = Boolean(softkeyLabel(cand));
-      if (!fanOutCovers && !appState.childSubs[cand.key]) {
-        sendObjectInfoDump(cand.key, logParam);
-      }
-    }
+    // T1b: the parser fan-out fetches ALL COL children of the current menu,
+    // so the embed candidate is always covered - the R6/R9 prefetch (which
+    // existed for label-filtered children) is retired.
     for (let local of potentialEmbedSubs) {
-      const childSubs = (appState.childSubs || {})[local.key] || [];
+      const childSubs = getNode(local.key) || [];
       if (childSubs.length > 0 && !embeddedKey) {
         embeddedKey = local.key; // Only embed the first local COL
         paramLines.push(''); // Blank line separator
@@ -682,9 +660,7 @@ export function renderScreen(subs, ascii, logParam) {
     // Set softSubs: local if present, else immediate parent's COLs for leaf menus
     if (appState.keyStack.length > 0) {
       const parentEntry = appState.keyStack[appState.keyStack.length - 1];
-      const parentColSubs = (parentEntry.subs || [])
-        .slice(1)
-        .filter((s) => s.type === 'COL' && softkeyLabel(s));
+      const parentColSubs = (parentEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
       softSubs = localSoftSubs.length > 0 ? localSoftSubs : parentColSubs;
     } else {
       softSubs = localSoftSubs;
@@ -699,7 +675,7 @@ export function renderScreen(subs, ascii, logParam) {
       const slice = softSubs.slice(i, i + itemsPerLine);
       const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
       const softTags = slice.map((s) => {
-        const t = softkeyLabel(s);
+        const t = labelForSub(s);
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
         return text;
       });
@@ -724,16 +700,14 @@ export function renderScreen(subs, ascii, logParam) {
           displayLines.push('');
           ancestorSeparatorAdded = true;
         }
-        const parentSoftSubs = (parentEntry.subs || [])
-          .slice(1)
-          .filter((s) => s.type === 'COL' && softkeyLabel(s));
+        const parentSoftSubs = (parentEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
         const parentHighlightKey = appState.currentKey;
         let parentSoftTextLines = [];
         for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
           const slice = parentSoftSubs.slice(i, i + itemsPerLine);
           const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           const softTags = slice.map((s) => {
-            const t = softkeyLabel(s);
+            const t = labelForSub(s);
             const text = (s.key === parentHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
             return text;
           });
@@ -758,16 +732,14 @@ export function renderScreen(subs, ascii, logParam) {
         !upperEntry.key.startsWith(KEY_PREFIX.DSP_B)
       ) {
         // Skip if grandparent is preset
-        const upperSoftSubs = (upperEntry.subs || [])
-          .slice(1)
-          .filter((s) => s.type === 'COL' && softkeyLabel(s));
+        const upperSoftSubs = (upperEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
         const upperHighlightKey = appState.keyStack[appState.keyStack.length - 1].key;
         let upperSoftTextLines = [];
         for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {
           const slice = upperSoftSubs.slice(i, i + itemsPerLine);
           const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           const softTags = slice.map((s) => {
-            const t = softkeyLabel(s);
+            const t = labelForSub(s);
             const text = (s.key === upperHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
             return text;
           });
@@ -809,7 +781,7 @@ export function renderScreen(subs, ascii, logParam) {
       const slice = softSubs.slice(i, i + itemsPerLine);
       const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
       slice.forEach((s, idx) => {
-        const t = softkeyLabel(s);
+        const t = labelForSub(s);
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
         softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
       });
@@ -828,9 +800,7 @@ export function renderScreen(subs, ascii, logParam) {
           mainHtmlLines.push('');
           ancestorSeparatorAdded = true;
         }
-        const parentSoftSubs = (parentEntry.subs || [])
-          .slice(1)
-          .filter((s) => s.type === 'COL' && softkeyLabel(s));
+        const parentSoftSubs = (parentEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
         const parentHighlightKey = appState.currentKey;
         let parentSoftHtmlLines = [];
         for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
@@ -838,7 +808,7 @@ export function renderScreen(subs, ascii, logParam) {
           const slice = parentSoftSubs.slice(i, i + itemsPerLine);
           const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           slice.forEach((s, idx) => {
-            const t = softkeyLabel(s);
+            const t = labelForSub(s);
             const text = (s.key === parentHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
             softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
           });
@@ -867,9 +837,7 @@ export function renderScreen(subs, ascii, logParam) {
         !upperEntry.key.startsWith(KEY_PREFIX.DSP_B)
       ) {
         // Skip if grandparent is preset
-        const upperSoftSubs = (upperEntry.subs || [])
-          .slice(1)
-          .filter((s) => s.type === 'COL' && softkeyLabel(s));
+        const upperSoftSubs = (upperEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
         const upperHighlightKey = appState.keyStack[appState.keyStack.length - 1].key;
         let upperSoftHtmlLines = [];
         for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {
@@ -877,7 +845,7 @@ export function renderScreen(subs, ascii, logParam) {
           const slice = upperSoftSubs.slice(i, i + itemsPerLine);
           const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           slice.forEach((s, idx) => {
-            const t = softkeyLabel(s);
+            const t = labelForSub(s);
             const text = (s.key === upperHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
             softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
           });

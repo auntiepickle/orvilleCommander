@@ -46,7 +46,7 @@ import { renderBitmap } from './bitmap.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendSysEx } from './midi.js';
-import { makeKeyStackEntry, softkeyLabel } from './navigation.js';
+import { getNode, parentOf, deriveKeyStack } from './tree.js';
 import { CMD, KEY, KEY_PREFIX, PARAM_TYPES } from './sysex-commands.js';
 import { log } from './logger.js';
 
@@ -66,13 +66,12 @@ export function registerEventBridge({ hideLoading }) {
     on('objectinfo:received', ({ key, subs }) => {
       if (key === appState.currentKey) render();
       // Third render trigger (R7, live-validated): a CHILD of the current
-      // menu arrived — the parser stored it in childSubs under the C8 guard,
-      // so its presence proves it belongs to the menu on screen. Without
-      // this, slow child dumps (e.g. the multi-second bank list the program
-      // menu embeds) land AFTER the wave has already watchdogged and
-      // settled, and nothing ever repaints — the embed only appeared after
-      // navigating away and back.
-      else if (appState.childSubs && appState.childSubs[key]) render();
+      // menu arrived — the TREE says it belongs to the on-screen menu (T1b
+      // replaced the childSubs correlation). Without this, slow child dumps
+      // (e.g. the multi-second bank list the program menu embeds) land AFTER
+      // the wave has already watchdogged and settled, and nothing ever
+      // repaints — the embed only appeared after navigating away and back.
+      else if (parentOf(key) === appState.currentKey && getNode(key)) render();
 
       // C2 landing: the root dump arrived while a connect is pending.
       // selectPorts reset currentKey to root, so the progressive root paint
@@ -88,7 +87,7 @@ export function registerEventBridge({ hideLoading }) {
           {
             pendingLanding: 'preset',
             pendingDescend: true,
-            keyStack: [...appState.keyStack, makeKeyStackEntry(KEY.ROOT, appState.currentSubs)],
+            keyStack: deriveKeyStack(landKey), // T1b: [root entry] from the just-recorded root dump
             currentKey: landKey,
             presetKey: landKey,
           },
@@ -110,17 +109,19 @@ export function registerEventBridge({ hideLoading }) {
         setState({ pendingDescend: false, pendingLanding: null }, 'bridge:descend-consume');
         const children = subs.slice(1);
         const hasParams = children.some((s) => PARAM_TYPES.includes(s.type));
-        const softSubsLocal = children.filter((s) => s.type === 'COL' && softkeyLabel(s));
-        if (!hasParams && softSubsLocal.length > 1) {
+        // T1b: every COL child counts (labels no longer gate navigability).
+        const colChildren = children.filter((s) => s.type === 'COL');
+        if (!hasParams && colChildren.length > 1) {
           log(
-            `Auto-loading first menu: ${softSubsLocal[0].key} - ${softkeyLabel(softSubsLocal[0])}`,
+            `Auto-loading first menu: ${colChildren[0].key} - ${colChildren[0].tag || colChildren[0].statement}`,
             'info',
             'general'
           );
           setState(
             {
-              keyStack: [...appState.keyStack, makeKeyStackEntry(appState.currentKey, subs)],
-              currentKey: softSubsLocal[0].key,
+              // The dump just recorded into the tree, so ancestry is fresh.
+              keyStack: deriveKeyStack(colChildren[0].key),
+              currentKey: colChildren[0].key,
             },
             'bridge:descend'
           );

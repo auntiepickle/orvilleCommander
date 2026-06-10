@@ -4,7 +4,7 @@ import { CMD, KEY, KEY_PREFIX, KEY_SUFFIX, SYSEX } from './sysex-commands.js';
 import { TIMING } from './constants.js';
 import { setState } from './store.js';
 import { sendValuePut, sendValueDump, sendObjectInfoDump, notifyResponse } from './midi.js';
-import { softkeyLabel } from './navigation.js';
+import { recordDump, parentOf, findParamUnder } from './tree.js';
 import { log } from './logger.js';
 import { denibble } from './bitmap.js';
 import { emit } from './events.js';
@@ -35,6 +35,9 @@ export function parseResponse(data) {
         'parsedDump'
       );
       const main = subs[0];
+      // T1b: every dump describes a tree node and names its children —
+      // record unconditionally; all navigation state derives from this.
+      recordDump(subs);
       if (main.key === KEY.ROOT) {
         const dspASub = subs.find((s) => s.key.startsWith(KEY_PREFIX.DSP_A));
         const dspBSub = subs.find((s) => s.key.startsWith(KEY_PREFIX.DSP_B));
@@ -63,21 +66,16 @@ export function parseResponse(data) {
         }
       }
       if (main.key === appState.currentKey) {
-        // Fetch child sub-menus for navigable COLs if not already fetched
-        // (softkeyLabel keeps the fan-out in lockstep with what the renderer
-        // shows — R9 made empty-tag, statement-labeled children navigable).
-        // At ROOT the presets are excluded: they render as header tabs, not
-        // softkeys, and the connect landing fetches the active one itself —
-        // prefetching here only duplicated both presets' requests at connect
-        // and re-fired their child fan-outs (R9 review).
+        // Fetch child sub-menus for ALL COL children (T1b: labels no longer
+        // gate fetching — blank nodes need their children loaded to derive a
+        // label, and the tree wants completeness). Per-visit freshness: this
+        // fires once per arrival of the current menu's dump. At ROOT the
+        // presets are excluded: they render as header tabs, not softkeys,
+        // and the connect landing fetches the active one itself (R9 review).
         const localSoftSubs = subs
           .slice(1)
           .filter(
-            (s) =>
-              s.type === 'COL' &&
-              softkeyLabel(s) &&
-              !appState.childSubs[s.key] &&
-              !(main.key === KEY.ROOT && s.key.endsWith(KEY_SUFFIX.PRESET))
+            (s) => s.type === 'COL' && !(main.key === KEY.ROOT && s.key.endsWith(KEY_SUFFIX.PRESET))
           );
         localSoftSubs.forEach((s) => {
           sendObjectInfoDump(s.key);
@@ -92,28 +90,16 @@ export function parseResponse(data) {
         // the event remains for observability.
         emit('objectinfo:received', { key: main.key });
       } else {
-        // Store child sub-menu data only if it's a child of the current menu.
-        // A dump cannot self-identify its parent: the object's own line echoes
-        // its own key in the parent slot (docs/device-model.md §3), so the only
-        // correlation available is the current menu's child list. currentSubs
-        // can lag navigation (it is replaced when the new menu's dump lands and
-        // re-pinned by renders), so first require that it actually describes
-        // currentKey; the membership check then guarantees the arriving dump is
-        // a child of the menu being viewed. Late dumps from a menu navigated
-        // away from fail this and are dropped (fail-closed, C8/#44); the next
-        // updateScreen refetch self-heals any drop. C1's request-correlated
-        // dump events will replace this view-state correlation.
-        const describesCurrentMenu = appState.currentSubs[0]?.key === appState.currentKey;
-        const isChild =
-          describesCurrentMenu &&
-          appState.currentSubs.some((s) => s.key === main.key && s.parent === appState.currentKey);
-        if (isChild) {
-          setState(
-            { childSubs: { ...appState.childSubs, [main.key]: subs } },
-            'parser:child-subs-store'
-          );
+        // T1b: the tree (recordDump above) already stored the node. Emit the
+        // child-arrival event only when the TREE says the dump belongs to the
+        // on-screen menu — parentage learned from the menu's own dump, which
+        // is what navigated us here. This replaces the C8 childSubs
+        // correlation guard (view-state membership checks) entirely: late
+        // dumps from a menu navigated away from have a different tree parent
+        // and stay silent (still cached for when the user returns).
+        if (parentOf(main.key) === appState.currentKey) {
           log(
-            `Stored child subs for key ${main.key} under parent ${appState.currentKey}`,
+            `Tree-recorded child ${main.key} of on-screen menu ${appState.currentKey}`,
             'debug',
             'parsedDump'
           );
@@ -195,9 +181,7 @@ export function parseResponse(data) {
       // loaded has no on-screen line an immediate render could update, so
       // unknown keys take the coalesced path instead. The 0002 naming
       // convention itself stays documented in docs/device-model.md §5.
-      const childSub = Object.values(appState.childSubs || {})
-        .flat()
-        .find((cs) => cs.key === key);
+      const childSub = findParamUnder(appState.currentKey, key);
       if ((sub || childSub)?.type === 'CON') {
         emit('value:received', { key, immediate: true });
         log(

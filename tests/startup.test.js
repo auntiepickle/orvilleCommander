@@ -19,10 +19,11 @@
  *     preset's first menu. Previously the timer-delayed root render consumed
  *     the sticky flag and landed on the first ROOT menu (setup) while the
  *     401000b/801000b dumps were silently dropped.
- *   - (RESOLVED by C3/#39) keyStack used to hold mixed types: main.js
- *     pushed a raw string while the renderer autoload pushed a {key, tag,
- *     subs} object. All pushes now go through makeKeyStackEntry
- *     (navigation.js) and every entry is {key, tag, subs}.
+ *   - (RESOLVED by C3/#39, mechanism replaced by T1b/#105) keyStack used to
+ *     hold mixed types: main.js pushed a raw string while the renderer
+ *     autoload pushed a {key, tag, subs} object. Every entry is {key, tag,
+ *     subs}; since T1b the stack is DERIVED from tree ancestry
+ *     (tree.js:deriveKeyStack), not maintained as click history.
  *   - type=8 sub in root dump (key 10040000, empty tag) lands in
  *     currentSubs via parseSubObject; filtered out of autoload by the
  *     type==='COL' check
@@ -30,7 +31,8 @@
  * Out of scope for this test:
  *   - SHIFT_FIRST_COLUMN top-left artifact (bitmap mocked at renderBitmap
  *     boundary; pixel output not asserted)
- *   - Fan-out response dumps (childSubs population); childSubs stays {}
+ *   - Fan-out response dumps (they would populate the tree; only the dumps
+ *     this flow feeds are recorded — tree reset per test)
  *   - Audit-tool cache-overwrite bug (test uses fresh defaults)
  *
  * Full rationale and seam design are documented inline in this file (the
@@ -133,6 +135,7 @@ import {
   getRenderScreenSnapshots,
   drainAndSort,
 } from './helpers/startup-recorder.js';
+import { reset as treeReset } from '../src/tree.js';
 
 // Log substrings that are semantically load-bearing for startup ordering.
 // All other log messages are non-whitelisted and get filtered out of the
@@ -228,8 +231,8 @@ describe('startup characterization (roadmap step 5.5)', () => {
       updateBitmapOnChange: true,
       currentSoftkeys: [],
       pollingEnabled: false,
-      childSubs: {},
     });
+    treeReset(); // child structure lives in the persistent tree (T1b/#105)
     // menusA/menusB may exist from a prior test; blow them away.
     delete appState.menusA;
     delete appState.menusB;
@@ -283,7 +286,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
     // (g) advance 200ms — still nothing pending.
     jest.advanceTimersByTime(200);
     // (h) feed 801000b — background dump: preset-meta only (gate fails on
-    //     currentKey, and the C8 child-store guard drops it silently).
+    //     currentKey; the dump is tree-recorded silently — T1b).
     parseResponse(preset801Bytes);
     // (i) feed 0x17 bitmap — denibble real, renderBitmap mocked.
     parseResponse(bitmapBytes);
@@ -337,7 +340,6 @@ describe('startup characterization (roadmap step 5.5)', () => {
     expect(appState.presetKey).toBe('401000b');
     expect(appState.pendingLanding).toBe(null);
     expect(appState.pendingDescend).toBe(false);
-    expect(appState.childSubs).toEqual({});
 
     // keyStack normalized to a single shape (C3/#39): every entry is
     // {key, tag, subs}, including the root entry main.js pushes at
@@ -360,7 +362,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
     // preset's first short-tag COL menu, not the first root menu.
     expect(appState.dspAName).toBe(expectedRoot.dspAName);
     expect(appState.dspBName).toBe(expectedRoot.dspBName);
-    expect(appState.currentKey).toBe(expected401.shortTagKeys[0]);
+    expect(appState.currentKey).toBe(expected401.navColKeys[0]);
 
     // menusA/menusB set by the `endsWith('000b')` branches regardless of
     // the currentKey gate — they fire even though 401000b/801000b are
@@ -370,7 +372,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
 
     // currentSubs last written by the landed menu's dump (step j), which
     // passed the gate after the bridge descend landed onto it.
-    expect(appState.currentSubs[0].key).toBe(expected401.shortTagKeys[0]);
+    expect(appState.currentSubs[0].key).toBe(expected401.navColKeys[0]);
     expect(appState.lastAscii.length).toBeGreaterThan(0);
 
     // Bitmap raw-byte length sanity: 13-byte header + 1920 pixel bytes per
@@ -389,16 +391,16 @@ describe('startup characterization (roadmap step 5.5)', () => {
   test('Tier A: ordered event log (coalesced, normalized)', () => {
     simulateSelectPorts();
 
-    const landedKey = expected401.shortTagKeys[0];
+    const landedKey = expected401.navColKeys[0];
     const landedRender = `render:land=-,desc=false,key=${landedKey},subsCount=${expectedLanded.subsCount},subsFirst=${landedKey}`;
     const expected = [
       // Step (b) main.js selectPorts mirror (C2): loading UX, view reset to
       // root + landing armed (one combined setState), then updateScreen —
-      // currentKey === '0' hits the renderer conditional, so all three keys
-      // (childSubs, currentValues, currentSoftkeys) appear in the clear.
+      // currentKey === '0' hits the renderer conditional, so currentSoftkeys
+      // joins currentValues in the clear (childSubs deleted by T1b/#105).
       'showLoading',
       'state:main:select-ports-reset:currentKey,currentSubs,keyStack,pendingDescend,pendingLanding',
-      'state:renderer:update-screen-clear:childSubs,currentSoftkeys,currentValues',
+      'state:renderer:update-screen-clear:currentSoftkeys,currentValues',
       'midi:objectinfo:0',
       'midi:valuedump:0',
 
@@ -411,8 +413,8 @@ describe('startup characterization (roadmap step 5.5)', () => {
       'log:parsedDump:info:Parsed OBJECTINFO_DUMP',
       'state:parser:root-dsp-meta:dspAKey,dspAName,dspBKey,dspBName',
 
-      // Root fan-out (short-tag COLs × 2 MIDI calls each). Order follows
-      // fixture order; derived from rootShortTagKeys for Option B robustness.
+      // Root fan-out (every COL child × 2 MIDI calls each, presets excluded
+      // — T1b/#105). Order follows fixture order for Option B robustness.
       ...expectedRoot.rootFanOutKeys.flatMap((k) => [
         `midi:objectinfo:${k}`,
         `midi:valuedump:${k}`,
@@ -430,7 +432,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
       `render:land=root,desc=false,key=0,subsCount=${expectedRoot.subsCount},subsFirst=0`,
       'state:renderer:render-pin:currentSubs',
       'state:bridge:landing-root:currentKey,keyStack,pendingDescend,pendingLanding,presetKey',
-      'state:renderer:update-screen-clear:childSubs,currentValues',
+      'state:renderer:update-screen-clear:currentValues',
       'midi:objectinfo:401000b',
       'midi:valuedump:401000b',
       'midi:objectinfo:801000b',
@@ -444,24 +446,24 @@ describe('startup characterization (roadmap step 5.5)', () => {
       'log:parsedDump:info:Parsed OBJECTINFO_DUMP',
       'state:parser:preset-meta:dspAName,menusA',
       'state:parser:preset-key:presetKey',
-      ...expected401.shortTagKeys.flatMap((k) => [`midi:objectinfo:${k}`, `midi:valuedump:${k}`]),
+      ...expected401.navColKeys.flatMap((k) => [`midi:objectinfo:${k}`, `midi:valuedump:${k}`]),
       'state:parser:current-key-ascii:lastAscii',
       'state:parser:current-subs:currentSubs',
       `render:land=preset,desc=true,key=401000b,subsCount=${expected401.subsCount},subsFirst=401000b`,
-      // R6 review: the embed prefetch is suppressed when the parser's
-      // short-tag fan-out already fetches the candidate (it does here:
-      // 'space'), so no duplicate request appears and the render-pins
-      // coalesce as before.
+      // T1b: the parser's all-COL fan-out covers every embed candidate (the
+      // R6 renderer prefetch is deleted), so no duplicate request appears
+      // and the render-pins coalesce as before.
       'state:renderer:render-pin:currentSoftkeys,currentSubs',
       'state:bridge:descend-consume:pendingDescend,pendingLanding',
       'log:general:info:Auto-loading first menu',
       'state:bridge:descend:currentKey,keyStack',
-      'state:renderer:update-screen-clear:childSubs,currentValues',
+      'state:renderer:update-screen-clear:currentValues',
       `midi:objectinfo:${landedKey}`,
       `midi:valuedump:${landedKey}`,
 
       // Step (h) 801000b dump — background: preset-meta only. The gate
-      // fails on currentKey and the C8 child-store guard drops it silently.
+      // fails on currentKey; the dump is still tree-recorded (T1b), with no
+      // observable state write or render.
       'log:parsedDump:info:Parsed OBJECTINFO_DUMP',
       'state:parser:preset-meta:dspBName,menusB',
 

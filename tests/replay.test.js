@@ -10,6 +10,7 @@ jest.mock('../src/logger.js', () => ({ log: jest.fn() }));
 import { createReplayHarness } from './helpers/replay.js';
 import { loadFixture } from './helpers/sysex-fixture.js';
 import { appState } from '../src/state.js';
+import { reset as treeReset } from '../src/tree.js';
 
 describe('offline replay harness', () => {
   let h;
@@ -18,7 +19,7 @@ describe('offline replay harness', () => {
     jest.useFakeTimers();
     appState.currentSubs = [];
     appState.currentValues = {};
-    appState.childSubs = {};
+    treeReset(); // child structure lives in the persistent tree (T1b/#105)
     appState.keyStack = [];
     appState.deviceId = 0;
     appState.currentKey = '10010000';

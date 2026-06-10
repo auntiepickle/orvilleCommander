@@ -29,6 +29,7 @@ import { sendObjectInfoDump, sendSysEx } from '../src/midi.js';
 import { CMD } from '../src/sysex-commands.js';
 import { appState } from '../src/state.js';
 import { emit } from '../src/events.js';
+import { recordDump, reset as treeReset } from '../src/tree.js';
 
 describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
   let hideLoading;
@@ -44,7 +45,7 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     appState.currentKey = '10010000';
     appState.currentSubs = [{ key: '10010000', type: 'COL', parent: '10010000' }];
     appState.lastAscii = 'COL 0 10010000 10010000 setup setup';
-    appState.childSubs = {};
+    treeReset();
     appState.pendingLanding = null;
     appState.pendingDescend = false;
     appState.keyStack = [];
@@ -79,9 +80,8 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     // Live-validated: the program menu's embedded 'load new preset' dump
     // (the multi-second bank list) arrives after the wave has watchdogged;
     // without this trigger nothing ever repainted and the embed appeared
-    // only after navigating away and back. The parser stores the child in
-    // childSubs (C8 guard) before emitting, so presence in childSubs proves
-    // it belongs to the on-screen menu.
+    // only after navigating away and back. T1b: the TREE proves the child
+    // belongs to the on-screen menu (parentage from the menu's own dump).
     appState.currentKey = '10020000';
     appState.currentSubs = [
       {
@@ -93,7 +93,34 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
         tag: 'program',
       },
     ];
-    appState.childSubs = { 10020010: [{ key: '10020010', type: 'COL', parent: '10020010' }] };
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020000',
+        parent: '10020000',
+        statement: 'program functions',
+        tag: 'program',
+      },
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020010',
+        parent: '10020000',
+        statement: 'load new preset',
+        tag: 'load',
+      },
+    ]);
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020010',
+        parent: '10020010',
+        statement: 'load new preset',
+        tag: 'load',
+      },
+    ]);
     emit('objectinfo:received', { key: '10020010' }); // bare child emit (parser's shape)
     expect(renderScreen).toHaveBeenCalledTimes(1);
   });
@@ -143,6 +170,12 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
       },
     ];
     appState.pendingLanding = 'root';
+    // T1b: in production the parser records the root dump before emitting;
+    // the bridge derives the landing keyStack from that tree state.
+    recordDump([
+      ...appState.currentSubs,
+      { type: 'COL', position: '1', key: '401000b', parent: '0', statement: 'Black Hole', tag: '' },
+    ]);
     emit('objectinfo:received', { key: '0', subs: appState.currentSubs });
 
     expect(appState.currentKey).toBe('401000b'); // presetKey prefix '4' -> dspAKey
@@ -195,9 +228,9 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
         tag: 'in eq',
       },
     ];
-    // Divergent global: the descend must build its keyStack entry from the
-    // EVENT PAYLOAD's subs, not appState.currentSubs (successor to the C5/#41
-    // staleness pin that lived on the deleted renderer autoload branch).
+    // Divergent global: the descend's keyStack derives from the TREE (which
+    // the parser fed from the dump itself in production), never from a
+    // stale appState.currentSubs (successor to the C5/#41 staleness pin).
     appState.currentSubs = [
       {
         type: 'COL',
@@ -208,6 +241,7 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
         tag: 'stale',
       },
     ];
+    recordDump(subs); // production: the parser records before emitting
     emit('objectinfo:received', { key: '401000b', subs });
 
     expect(appState.currentKey).toBe('4040001');
@@ -215,7 +249,7 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     expect(appState.pendingLanding).toBe(null);
     expect(appState.keyStack).toHaveLength(1);
     expect(appState.keyStack[0]).toMatchObject({ key: '401000b' });
-    expect(appState.keyStack[0].subs.map((s) => s.key)).not.toContain('STALE'); // payload, not global
+    expect(appState.keyStack[0].subs.map((s) => s.key)).not.toContain('STALE'); // tree, not global
     expect(updateScreen).toHaveBeenCalledTimes(1);
 
     // One-shot: the same dump arriving again must not descend further.

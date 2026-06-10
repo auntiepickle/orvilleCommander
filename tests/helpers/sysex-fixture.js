@@ -6,7 +6,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { splitLine } from '../../src/sysex-split.js';
-import { softkeyLabel } from '../../src/navigation.js';
 
 const FIXTURES_DIR = path.join(process.cwd(), 'tests', 'fixtures');
 
@@ -57,19 +56,17 @@ export function extractExpectedFromRoot(rootBytes) {
   const children = subs.slice(1);
   const dspASub = children.find((s) => s.key.startsWith('4'));
   const dspBSub = children.find((s) => s.key.startsWith('8'));
-  // Mirrors the production navigability rule (navigation.js:softkeyLabel),
-  // so fixture-derived expectations track R9's empty-tag label derivation.
-  const shortTagCols = children.filter((s) => s.type === 'COL' && softkeyLabel(s));
+  // Mirrors the production navigability rule (T1b/#105): every COL child is
+  // fanned out and gets a softkey — labels are presentation only (tree.js).
+  const navCols = children.filter((s) => s.type === 'COL');
   return {
     dspAKey: dspASub?.key,
     dspBKey: dspBSub?.key,
     dspAName: dspASub?.statement,
     dspBName: dspBSub?.statement,
-    firstShortTagCOLKey: shortTagCols[0]?.key,
-    rootShortTagKeys: shortTagCols.map((s) => s.key),
     // The parser's ROOT fan-out additionally excludes the presets (header
     // tabs; the connect landing fetches the active one itself — R9 review).
-    rootFanOutKeys: shortTagCols.filter((s) => !s.key.endsWith('000b')).map((s) => s.key),
+    rootFanOutKeys: navCols.filter((s) => !s.key.endsWith('000b')).map((s) => s.key),
     // Full subs array length including main and any non-COL entries (e.g.,
     // the type=8 sub in the current Black Hole/MetallicChamber capture).
     // This is what parser.js passes to renderScreen, so it matches the
@@ -91,15 +88,14 @@ export function extractParamKeysFromDump(bytes) {
 export function extractExpectedFromPreset(presetBytes) {
   const subs = decodeSubs(presetBytes);
   const children = subs.slice(1);
-  const menusCols = children.filter((s) => s.type === 'COL');
-  // Mirrors the production navigability rule (navigation.js:softkeyLabel),
-  // so fixture-derived expectations track R9's empty-tag label derivation.
-  const shortTagCols = children.filter((s) => s.type === 'COL' && softkeyLabel(s));
+  // Mirrors the production navigability rule (T1b/#105): every COL child is
+  // fanned out and gets a softkey — labels are presentation only (tree.js).
+  const navCols = children.filter((s) => s.type === 'COL');
   return {
     mainKey: subs[0]?.key,
     mainStatement: subs[0]?.statement,
-    menusCount: menusCols.length,
-    shortTagKeys: shortTagCols.map((s) => s.key),
+    menusCount: navCols.length,
+    navColKeys: navCols.map((s) => s.key),
     // Full subs array length including main and any non-COL entries. Differs
     // from menusCount, which filters to COL type and excludes the main.
     subsCount: subs.length,

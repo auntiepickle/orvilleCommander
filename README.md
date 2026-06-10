@@ -57,7 +57,7 @@ graph TD
     E --> F["parser.js: Parse Response"]
     F --> G["store.js: Update appState"]
     F --> K["events.js: Emit events"]
-    K --> L["event-bridge.js: Coalesce"]
+    K --> L["event-bridge.js: Render on parser/midi events"]
     L --> H["renderer.js: Render LCD"]
     H --> I["index.html: Display"]
     J["main.js: Init & Config"] --> G
@@ -71,7 +71,11 @@ graph TD
 
 * parser.js: Parses ASCII dumps into subs/objects and emits events. Exports: parseResponse.
 
-* event-bridge.js / events.js: Pub/sub bus + render-timing coalescer between parser and renderer.
+* event-bridge.js / events.js: Pub/sub bus + event-driven render triggers between parser and renderer (renders on dump arrival, child arrival, and dumpComplete — no timers or debounce).
+
+* tree.js: Persistent device object tree; the parser records every OBJECTINFO dump, and navigation (keyStack ancestry, child lookups, softkey labels) derives from it (T1b).
+
+* navigation.js: toggleDspKey (A/B preset key prefix flip).
 
 * renderer.js: Builds HTML for LCD (params, softkeys, breadcrumbs). Handles clicks/changes. Exports: updateScreen, renderScreen.
 
@@ -93,7 +97,7 @@ graph TD
 
 3. parser.js updates appState (store.js) and emits events on events.js.
 
-4. event-bridge.js coalesces and renderer.js re-renders the LCD (index.html).
+4. event-bridge.js renders on dump arrival / dumpComplete and renderer.js re-renders the LCD (index.html).
 
 5. For values: Similar flow with VALUE_DUMP/PUT.
 

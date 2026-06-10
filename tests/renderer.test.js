@@ -3,6 +3,7 @@ import { appState } from '../src/state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from '../src/midi.js';
 import { showLoading } from '../src/main.js';
 import { log as mockLog } from '../src/logger.js';
+import { recordDump, reset as treeReset } from '../src/tree.js';
 
 jest.mock('../src/midi.js', () => ({
   sendObjectInfoDump: jest.fn(),
@@ -30,7 +31,7 @@ describe('renderer.js', () => {
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     appState.currentSubs = [];
     appState.currentValues = {};
-    appState.childSubs = {};
+    treeReset();
     appState.keyStack = [];
     appState.currentKey = '0';
     appState.presetKey = '401000b';
@@ -243,32 +244,41 @@ describe('renderer.js', () => {
     jest.useRealTimers();
   });
 
-  test('lcd click on back-link pops keyStack and refreshes', () => {
+  test('lcd click on back-link navigates to the tree parent with a derived stack (T1b)', () => {
     appState.currentKey = '10010001';
-    appState.keyStack = [
+    const setupSubs = [
       {
+        type: 'COL',
+        position: '0',
         key: '10010000',
+        parent: '10010000',
+        statement: 'Setup',
         tag: 'setup',
-        subs: [
-          {
-            type: 'COL',
-            position: '0',
-            key: '10010000',
-            parent: '0',
-            statement: 'Setup',
-            tag: 'setup',
-          },
-          {
-            type: 'COL',
-            position: '1',
-            key: '10010001',
-            parent: '10010000',
-            statement: 'Input',
-            tag: 'input',
-          },
-        ],
+      },
+      {
+        type: 'COL',
+        position: '1',
+        key: '10010001',
+        parent: '10010000',
+        statement: 'Input',
+        tag: 'input',
       },
     ];
+    // The tree knows setup (and that root lists it) — as it would after a
+    // real click path through those menus.
+    recordDump([
+      { type: 'COL', position: '0', key: '0', parent: '0', statement: 'ORVILLE', tag: 'ORVILLE' },
+      {
+        type: 'COL',
+        position: '1',
+        key: '10010000',
+        parent: '0',
+        statement: 'Setup',
+        tag: 'setup',
+      },
+    ]);
+    recordDump(setupSubs);
+    appState.keyStack = [{ key: '10010000', tag: 'setup', subs: setupSubs }];
     const subs = [
       {
         type: 'COL',
@@ -290,7 +300,6 @@ describe('renderer.js', () => {
       },
     ];
     renderScreen(subs, '', mockLog);
-    appState.childSubs = { 10010011: [{ key: '10010011', type: 'NUM' }] };
 
     const back = document.querySelector('.back-link');
     expect(back).toBeTruthy();
@@ -299,17 +308,16 @@ describe('renderer.js', () => {
     back.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     expect(appState.currentKey).toBe('10010000');
-    expect(appState.keyStack.length).toBe(0);
+    // T1b: the stack is DERIVED from tree ancestry, not popped history.
+    expect(appState.keyStack.map((e) => e.key)).toEqual(['0']);
     expect(appState.pendingDescend).toBe(true);
     expect(appState.currentSoftkeys).toEqual([]);
-    expect(appState.childSubs).toEqual({}); // single clear point in updateScreen (C8/#44)
     expect(sendObjectInfoDump).toHaveBeenCalledWith('10010000', null);
     expect(sendValueDump).toHaveBeenCalledWith('10010000', null);
   });
 
-  test('softkey descend clears childSubs via the updateScreen single clear point (C8/#44)', () => {
+  test('softkey descend derives the keyStack from tree ancestry (T1b)', () => {
     appState.currentKey = '10010000';
-    appState.childSubs = { stale: [{ key: 'stale', type: 'NUM' }] };
     const subs = [
       {
         type: 'COL',
@@ -336,6 +344,9 @@ describe('renderer.js', () => {
         tag: 'output',
       },
     ];
+    // The tree learns the menu's structure as its dump arrives (the parser
+    // calls recordDump in production; tests do it directly).
+    recordDump(subs);
     renderScreen(subs, '', mockLog);
 
     const softkey = document.querySelector('.softkey[data-key="10010010"]');
@@ -343,11 +354,12 @@ describe('renderer.js', () => {
     softkey.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     expect(appState.currentKey).toBe('10010010');
-    expect(appState.keyStack.length).toBe(1);
-    expect(appState.childSubs).toEqual({});
+    // T1b: ancestors computed from the tree, not pushed history.
+    expect(appState.keyStack.map((e) => e.key)).toEqual(['10010000']);
+    expect(appState.keyStack[0].tag).toBe('setup');
   });
 
-  test('sibling softkey navigation clears childSubs via the updateScreen single clear point (C8/#44)', () => {
+  test('sibling softkey navigation keeps the derived parent (T1b)', () => {
     const parentSubs = [
       {
         type: 'COL',
@@ -375,8 +387,8 @@ describe('renderer.js', () => {
       },
     ];
     appState.currentKey = '10010010';
+    recordDump(parentSubs); // tree knows the parent and its children
     appState.keyStack = [{ key: '10010000', tag: 'setup', subs: parentSubs }];
-    appState.childSubs = { stale: [{ key: 'stale', type: 'NUM' }] };
     // Leaf menu: params only, so the parent's COLs render as the softkeys.
     const subs = [
       {
@@ -404,8 +416,7 @@ describe('renderer.js', () => {
     sibling.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     expect(appState.currentKey).toBe('10010020');
-    expect(appState.keyStack.length).toBe(1); // sibling nav does not push
-    expect(appState.childSubs).toEqual({});
+    expect(appState.keyStack.map((e) => e.key)).toEqual(['10010000']); // same derived parent
   });
 
   test('re-clicking the current softkey is a no-op, not a self-push (C3 review)', () => {
@@ -528,8 +539,8 @@ describe('renderer.js', () => {
     // Live-validated: on 'program functions' the first child's dump (the
     // giant bank list) arrives last, so the old first-loaded-wins loop
     // embedded a later sibling ('link program') and the embedded UI varied
-    // run to run. Pin: a later sibling with loaded childSubs must NOT embed
-    // while the first candidate's data is absent.
+    // run to run. Pin: a later sibling with a tree-recorded dump must NOT
+    // embed while the first candidate's data is absent.
     appState.currentKey = '10020000';
     const subs = [
       {
@@ -557,53 +568,49 @@ describe('renderer.js', () => {
         tag: 'link',
       },
     ];
-    appState.childSubs = {
-      // Only the LATER sibling has arrived.
-      10020080: [
-        {
-          type: 'COL',
-          position: '0',
-          key: '10020080',
-          parent: '10020080',
-          statement: 'link program',
-          tag: 'link',
-        },
-        {
-          type: 'TRG',
-          position: '1',
-          key: '10020081',
-          parent: '10020080',
-          statement: '<- link',
-          tag: 'link',
-        },
-      ],
-    };
+    // Only the LATER sibling's dump has arrived (in the tree, T1b).
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020080',
+        parent: '10020080',
+        statement: 'link program',
+        tag: 'link',
+      },
+      {
+        type: 'TRG',
+        position: '1',
+        key: '10020081',
+        parent: '10020080',
+        statement: '<- link',
+        tag: 'link',
+      },
+    ]);
     renderScreen(subs, '', mockLog);
     const lcd = document.getElementById('lcd');
     expect(lcd.textContent).not.toContain('<- link'); // later sibling must not embed
     expect(document.querySelector('.softkey[data-key="10020080"]')).toBeTruthy(); // stays a softkey
 
     // Once the FIRST candidate's data arrives, it embeds (and leaves the row).
-    appState.childSubs = {
-      10020010: [
-        {
-          type: 'COL',
-          position: '0',
-          key: '10020010',
-          parent: '10020010',
-          statement: 'load new preset',
-          tag: 'load',
-        },
-        {
-          type: 'TRG',
-          position: '1',
-          key: '1002001c',
-          parent: '10020010',
-          statement: '<- load program in A',
-          tag: 'load',
-        },
-      ],
-    };
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020010',
+        parent: '10020010',
+        statement: 'load new preset',
+        tag: 'load',
+      },
+      {
+        type: 'TRG',
+        position: '1',
+        key: '1002001c',
+        parent: '10020010',
+        statement: '<- load program in A',
+        tag: 'load',
+      },
+    ]);
     renderScreen(subs, '', mockLog);
     expect(lcd.textContent).toContain('<- load program in A'); // first candidate embeds
     expect(document.querySelector('.softkey[data-key="10020010"]')).toBeFalsy(); // excluded from row
@@ -611,7 +618,22 @@ describe('renderer.js', () => {
 
   test('static root softkeys jump (reset the stack), never descend (R2)', () => {
     // Live-validated: descending grew the keyStack without bound (2 -> 6 in
-    // one walk) and duplicated the previous menu's COL row set.
+    // one walk) and duplicated the previous menu's COL row set. T1b keeps
+    // this as the one non-derived navigation: the tree is seeded with root
+    // here exactly so the assertion proves the jump RESETS instead of
+    // deriving [root] (which would re-render root's children as crumb rows
+    // above the identical static row).
+    recordDump([
+      { type: 'COL', position: '0', key: '0', parent: '0', statement: 'ORVILLE ROOT', tag: '' },
+      {
+        type: 'COL',
+        position: '0',
+        key: '10030000',
+        parent: '0',
+        statement: 'levels menus',
+        tag: 'levels',
+      },
+    ]);
     appState.currentKey = '10010010';
     appState.keyStack = [
       { key: '0', tag: 'ORVILLE', subs: [] },
@@ -765,7 +787,7 @@ describe('renderer.js', () => {
     expect(appState.currentKey).toBe('0');
   });
 
-  test('lcd click on dsp-clickable swaps active preset and pushes keyStack', () => {
+  test('lcd click on dsp-clickable swaps active preset with a derived stack (T1b)', () => {
     appState.currentKey = '0';
     appState.dspAName = 'Reverb';
     appState.dspBName = 'Delay';
@@ -773,19 +795,26 @@ describe('renderer.js', () => {
     appState.dspBKey = '801000b';
     appState.presetKey = '401000b';
     const subs = [
-      { type: 'COL', position: '0', key: '0', parent: '', statement: 'Root', tag: 'root' },
+      { type: 'COL', position: '0', key: '0', parent: '0', statement: 'Root', tag: 'root' },
       {
         type: 'COL',
         position: '1',
+        key: '801000b',
+        parent: '0',
+        statement: 'Delay',
+        tag: '',
+      },
+      {
+        type: 'COL',
+        position: '2',
         key: '10020000',
         parent: '0',
         statement: 'Program',
         tag: 'program',
       },
     ];
+    recordDump(subs); // tree: root lists the B preset
     renderScreen(subs, '', mockLog);
-    // Seed stale entries so the clear assertion below is not vacuous (C8/#44).
-    appState.childSubs = { stale: [{ key: 'stale', type: 'NUM' }] };
 
     const dspB = document.querySelector('.dsp-clickable[data-key="801000b"]');
     expect(dspB).toBeTruthy();
@@ -795,9 +824,8 @@ describe('renderer.js', () => {
     expect(appState.presetKey).toBe('801000b');
     expect(appState.currentKey).toBe('801000b');
     expect(appState.pendingDescend).toBe(true);
-    expect(appState.childSubs).toEqual({});
-    expect(appState.keyStack.length).toBe(1);
-    expect(appState.keyStack[0].key).toBe('0');
+    // T1b: ancestry derived from the tree — root is the preset's parent.
+    expect(appState.keyStack.map((e) => e.key)).toEqual(['0']);
     expect(sendObjectInfoDump).toHaveBeenCalledWith('801000b', null);
   });
 });

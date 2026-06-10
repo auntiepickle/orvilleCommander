@@ -175,7 +175,8 @@ wrong-landing symptom; C2 removes the mechanism — both the timer and the flag.
 2. On `objectinfo:received` with `key === KEY.ROOT` while `pendingLanding ===
    'root'`: the parser has already adopted authoritative DSP keys/names from
    the dump. Land: push the root keyStack entry
-   (`makeKeyStackEntry(KEY.ROOT, currentSubs)`), set `currentKey` to the active
+   (`makeKeyStackEntry(KEY.ROOT, currentSubs)` — since T1b:
+   `deriveKeyStack(landKey)`), set `currentKey` to the active
    DSP's preset key **from the root dump** (`dspAKey`/`dspBKey`, chosen by the
    app-side active-DSP view state — fold Batch 3.2's "persist active DSP
    (default A)" item in here; the cached `presetKey` becomes a pre-paint hint
@@ -183,7 +184,8 @@ wrong-landing symptom; C2 removes the mechanism — both the timer and the flag.
    the other-DSP prefetch and optional `0x18`, as today.
 3. On `objectinfo:received` for the preset while `pendingLanding ===
    'preset'`: clear `pendingLanding`; if the preset top has no params and >1
-   short-tag COL menus, descend once into the first (exactly what the
+   COL menus (short-tag-gated until T1b removed the label gate), descend
+   once into the first (exactly what the
    autoload branch did, but triggered by explicit landing state, not a sticky
    flag read by every render). The renderer autoload branch and the
    `autoLoad` field are then deleted — every writer migrates to the same
@@ -218,6 +220,76 @@ autoload branch (fail-on-old via the deleted flag).
 live connect on the real 31250-baud link (root dump arrival time vs the old
 500ms guess; landing correctness), the wave-saturation smoke (polling +
 bitmap-on-change vs the 10s watchdog ceiling), and eager-load throughput.
+
+## T1b design — tree-derived navigation (implemented on refactor/t1b-tree-navigation; GH #105; device-on acceptance PASSED 2026-06-10: zero audit violations)
+
+The cure for the R-series bug class: the view derives from the device's
+object tree, not from recorded click history or message-arrival races.
+
+**Tree store (`src/tree.js`, module state like logger.js).** Every OBJECTINFO
+dump describes one node and names its direct children, so the parser records
+every dump unconditionally: `nodes[key] = subs`, and for each child line
+`parents[childKey] = { parentKey: main.key, sub: childLine }`. The parent
+linkage comes from the PARENT's dump (a dump cannot self-identify its parent —
+§3), which every click-path navigation has necessarily loaded. Newest dump
+wins (structure changes on preset load are absorbed by the per-visit
+refetch). API: `recordDump(subs)`, `getNode(key)`, `parentOf(key)`,
+`ancestorsOf(key)`, `findParamUnder(menuKey, paramKey)`, `labelFor(key)`,
+`labelForSub(line)`, `deriveKeyStack(key)`, `reset()` (tests).
+
+**What derives from the tree:**
+
+- **keyStack becomes a derived view** (same `{key, tag, subs}` C3 shape, so
+  renderer consumers and test shapes hold): every navigation sets
+  `keyStack: deriveKeyStack(newKey)` = `ancestorsOf(newKey)` mapped through
+  `labelFor`/`getNode`. No handler pushes or pops history; the back-link
+  targets `parentOf(currentKey)`. Unknown ancestry (deep jump before the
+  parent's dump ever loaded) renders no breadcrumb — honest, and click paths
+  always have it. One deliberate exception (R2, live-validated): the static
+  bottom-row jump RESETS the stack to `[]` instead of deriving — the bottom
+  row is itself the root affordance, and a derived `[root]` entry would
+  re-render root's children (presets included) as crumb/fallback rows above
+  the identical static row, the duplicate-row class R2 removed.
+- **childSubs is deleted.** Its three read sites move to the tree: the embed
+  reads `getNode(candidate)`; the param-click lookup and the parser's C7
+  CON-classification use `findParamUnder(currentKey, key)`; the R7 bridge
+  trigger becomes `parentOf(key) === currentKey && getNode(key)`. The C8
+  correlation guard — childSubs' reason to exist — is replaced by tree
+  parentage: a dump is "a child of the current menu" iff the tree says so.
+  updateScreen stops clearing structure (the tree persists as a cache;
+  freshness comes from the per-visit child refetch); it still clears
+  currentValues (volatile).
+- **Labels:** `labelFor(key)` = the clipped label of the node's own main line
+  or of its line in the parent's dump; when BOTH are blank, derive from the
+  first labeled child (device precedent: the physical SETUP row labels the
+  blank container by its child, 'dsp B'), else a `...` placeholder until the
+  children load. Long tags CLIP to the column budget instead of excluding
+  the child. Implementation refinement: the renderer labels children it is
+  already holding via `labelForSub(line)` — the in-hand line IS the parent
+  listing, so it is preferred and the tree is consulted only when the line
+  is blank (keeps direct renders tree-independent; snapshots byte-identical).
+  Softkey filters drop label gating entirely (`type === 'COL'`), so every
+  COL child has an affordance — `unreachable-child` becomes structurally
+  impossible. The parser fan-out fetches ALL COL children (presets excluded
+  at root — they render as header tabs and the landing fetches the active
+  one; labels no longer gate fetching, and blank nodes need their children
+  loaded to be labeled);
+  `navigation.js` keeps only `toggleDspKey` (`makeKeyStackEntry` and
+  `softkeyLabel` are deleted, replaced by the tree equivalents).
+
+**Out of scope (stays #106):** cache pre-paint on navigation, the
+unconfirmed-value render guard (R3), the eager loader, and request
+scheduling. Known open notes (#105): duplicate derived sibling labels
+('Post'/'Post'), clipped-label bracket overflow.
+
+**Acceptance:** offline suite green; then a device-on `npm run tree-audit`
+reporting ZERO violations (the last standing class — blank-node reachability
+— is resolved by the label policy). PASSED 2026-06-10: depth 2 at stock
+defaults, 42 nodes fetched, 41 audited, zero violations. (The auditor's
+settle window is now bounded by link idleness rather than wall-clock — the
+old fixed 15s cap flagged one spurious no-render while the program
+subtree's bank-list backlog was still draining, the R5 congestion class;
+app-side request scheduling stays with #106.)
 
 ## Validation / open items
 

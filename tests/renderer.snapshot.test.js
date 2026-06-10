@@ -8,6 +8,7 @@ import { appState } from '../src/state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from '../src/midi.js';
 import { showLoading } from '../src/main.js';
 import { log as mockLog } from '../src/logger.js';
+import { recordDump, reset as treeReset } from '../src/tree.js';
 
 jest.mock('../src/midi.js', () => ({
   sendObjectInfoDump: jest.fn(),
@@ -35,7 +36,7 @@ describe('renderScreen golden snapshots', () => {
     consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     appState.currentSubs = [];
     appState.currentValues = {};
-    appState.childSubs = {};
+    treeReset();
     appState.keyStack = [];
     appState.currentKey = '0';
     appState.presetKey = '401000b';
@@ -633,28 +634,27 @@ describe('renderScreen golden snapshots', () => {
         ],
       },
     ];
-    appState.childSubs = {
-      10010071: [
-        {
-          type: 'COL',
-          position: '0',
-          key: '10010071',
-          parent: '10010007',
-          statement: 'Inner',
-          tag: 'inner',
-        },
-        {
-          type: 'NUM',
-          position: '1',
-          key: '10010711',
-          parent: '10010071',
-          statement: 'Depth %3.0f',
-          tag: 'depth',
-          value: '7',
-          options: [],
-        },
-      ],
-    };
+    // T1b: child structure lives in the tree, not appState.childSubs.
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010071',
+        parent: '10010071',
+        statement: 'Inner',
+        tag: 'inner',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10010711',
+        parent: '10010071',
+        statement: 'Depth %3.0f',
+        tag: 'depth',
+        value: '7',
+        options: [],
+      },
+    ]);
 
     const subs = [
       {

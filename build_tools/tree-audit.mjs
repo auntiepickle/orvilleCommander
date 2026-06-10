@@ -7,7 +7,7 @@
 // Violations are emitted as JSON lines and summarized; report saved to
 // logs/tree-audit-report.json.
 //
-// Usage: node build_tools/tree-audit.mjs [maxDepth=2] [quietMs=1500] [capMs=15000]
+// Usage: node build_tools/tree-audit.mjs [maxDepth=2] [quietMs=1500] [capMs=120000]
 
 import { JSDOM } from 'jsdom';
 import midi from '@julusian/midi';
@@ -15,7 +15,18 @@ import fs from 'node:fs';
 
 const MAX_DEPTH = parseInt(process.argv[2] || '2', 10);
 const QUIET_MS = parseInt(process.argv[3] || '1500', 10);
-const CAP_MS = parseInt(process.argv[4] || '15000', 10);
+// Hard per-node runaway ceiling ONLY. Settling is bounded by link IDLENESS,
+// not wall-clock: while messages keep arriving the backlog is draining and
+// the auditor keeps waiting (the program subtree's bank-list dumps can back
+// the 31250-baud link up past any reasonable fixed cap — R5; a 15s cap
+// produced a spurious no-render at 10030000 whose dump arrived moments
+// after the window expired).
+const CAP_MS = parseInt(process.argv[4] || '120000', 10);
+// Give up on a node only after the link has been COMPLETELY silent this
+// long without its dump pinning. Generous multiple of the longest observed
+// single-response gap (the ~70-bank list takes ~1.2s of link time and
+// arrives whole): 8s of pure silence means the response is not coming.
+const GIVE_UP_IDLE_MS = 8000;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- DOM + app boot (same recipe as live-app.mjs) ------------------
@@ -53,9 +64,8 @@ await import('../src/main.js');
 const { appState } = await import('../src/state.js');
 const { setState } = await import('../src/store.js');
 const { updateScreen } = await import('../src/renderer.js');
-const { makeKeyStackEntry } = await import('../src/navigation.js');
+const { deriveKeyStack, getNode, recordDump } = await import('../src/tree.js');
 const { KEY, CMD, SYSEX } = await import('../src/sysex-commands.js');
-const { LAYOUT } = await import('../src/constants.js');
 const { log } = await import('../src/logger.js');
 
 // ---------- real MIDI ------------------------------------------------------
@@ -130,7 +140,12 @@ function awaitDump(forKey, timeoutMs = 12000) {
 }
 
 console.log(`[audit] phase 1: fetching tree (depth <= ${MAX_DEPTH})...`);
-const tree = new Map(); // key -> { subs, depth, parentKey }
+const tree = new Map(); // key -> { subs, depth, parentKey } (parentKey = BFS-first lister)
+// key -> Set of EVERY fetched node that lists it. The device cross-lists
+// nodes (setup's dump lists pedals/tempo, resident in other subtrees), and
+// the app's parentOf is last-dump-wins — so a breadcrumb is correct if it
+// targets ANY listing parent, not just the BFS-first one.
+const listingParents = new Map();
 const queue = [{ key: KEY.ROOT, depth: 0, parentKey: null }];
 const visited = new Set();
 while (queue.length) {
@@ -144,11 +159,12 @@ while (queue.length) {
     continue;
   }
   tree.set(key, { subs, depth, parentKey });
-  if (depth < MAX_DEPTH) {
-    for (const s of subs.slice(1)) {
-      if (s.type === 'COL' && !visited.has(s.key)) {
-        queue.push({ key: s.key, depth: depth + 1, parentKey: key });
-      }
+  for (const s of subs.slice(1)) {
+    if (s.type !== 'COL') continue;
+    if (!listingParents.has(s.key)) listingParents.set(s.key, new Set());
+    listingParents.get(s.key).add(key);
+    if (depth < MAX_DEPTH && !visited.has(s.key)) {
+      queue.push({ key: s.key, depth: depth + 1, parentKey: key });
     }
   }
   await sleep(120); // polite gap; keeps the link drained between nodes
@@ -175,22 +191,21 @@ const outAdapter = {
 setMidiPorts(outAdapter, inAdapter, DEV);
 addSysexListener();
 
-const ancestorsOf = (key) => {
-  const chain = [];
-  let cur = tree.get(key)?.parentKey;
-  while (cur !== null && cur !== undefined) {
-    chain.unshift(cur);
-    cur = tree.get(cur)?.parentKey;
-  }
-  return chain;
-};
+// Seed the app's tree with the phase-1 dumps (production equivalence: a user
+// reaching any audited node has necessarily loaded its ancestors' dumps,
+// which the parser tree-records). Phase 2's live dumps keep updating it.
+for (const [, n] of tree) recordDump(n.subs);
 
 async function settleOn(key) {
   const start = Date.now();
   while (Date.now() - start < CAP_MS) {
     const onNode = appState.currentSubs?.[0]?.key === key;
-    const quiet = Date.now() - lastMsgAt >= QUIET_MS;
-    if (onNode && quiet) return true;
+    const idle = Date.now() - lastMsgAt;
+    if (onNode && idle >= QUIET_MS) return true;
+    // Idle-bounded give-up: only when the link has gone fully silent
+    // without the node pinning. Mere slowness (backlog still draining,
+    // messages still flowing) keeps the window open.
+    if (!onNode && idle >= GIVE_UP_IDLE_MS) return false;
     await sleep(150);
   }
   return appState.currentSubs?.[0]?.key === key;
@@ -214,11 +229,11 @@ for (const [key, node] of colNodes) {
     const t0 = Date.now();
     while (Date.now() - lastMsgAt < QUIET_MS && Date.now() - t0 < CAP_MS) await sleep(150);
   }
-  // Navigate with TREE-computed ancestors (the T1 principle): the view we
-  // audit is positioned exactly where the tree says the node lives.
-  const keyStack = ancestorsOf(key).map((aKey) =>
-    makeKeyStackEntry(aKey, tree.get(aKey)?.subs || [])
-  );
+  // Navigate with the APP's tree-derived stack (T1b/#105): phase 2 visits
+  // nodes in BFS order, so every ancestor's dump has already been received
+  // and tree-recorded by the app — the production derivation is exercised,
+  // and violation 4 checks it against the auditor's independent ground truth.
+  const keyStack = deriveKeyStack(key);
   setState(
     { currentKey: key, keyStack, currentSubs: [], pendingLanding: null, pendingDescend: false },
     'audit:navigate'
@@ -235,18 +250,21 @@ for (const [key, node] of colNodes) {
   const mainKeys = [...(main?.querySelectorAll('[data-key]') || [])].map((e) => e.dataset.key);
   const children = node.subs.slice(1);
 
-  // 1. Child reachability: every COL child needs a UI affordance.
-  const embedCandidate = children.find((s) => s.type === 'COL' && s.position === '0');
+  // 1. Child reachability: every COL child needs a UI affordance. The embed
+  // candidate mirrors the renderer's rule exactly (COL, position 0, parent
+  // field naming this menu — cross-listed children don't embed).
+  const embedCandidate = children.find(
+    (s) => s.type === 'COL' && s.position === '0' && s.parent === key
+  );
   for (const c of children.filter((s) => s.type === 'COL')) {
-    const tag = c.tag.trim();
     const asSoftkey = mainKeys.includes(c.key);
-    const asEmbed = c.key === embedCandidate?.key && (appState.childSubs?.[c.key]?.length || 0) > 0;
+    const asEmbed = c.key === embedCandidate?.key && (getNode(c.key)?.length || 0) > 0;
     if (!asSoftkey && !asEmbed) {
-      const why =
-        !tag || tag.length > LAYOUT.SHORT_TAG_MAX
-          ? `tag ${JSON.stringify(c.tag)} fails the softkey filter`
-          : 'absent despite passing filters';
-      flag(key, 'unreachable-child', `${c.key} '${c.statement}': ${why}`);
+      flag(
+        key,
+        'unreachable-child',
+        `${c.key} '${c.statement}': absent despite the all-COL softkey rule (T1b)`
+      );
     }
   }
 
@@ -274,13 +292,19 @@ for (const [key, node] of colNodes) {
   const dupes = softkeyKeys.filter((k, i) => softkeyKeys.indexOf(k) !== i);
   if (dupes.length) flag(key, 'duplicate-softkeys', [...new Set(dupes)].join(','));
 
-  // 4. Breadcrumb = real tree parent.
+  // 4. Breadcrumb targets a real listing parent (any of them — cross-listed
+  // nodes have several, and the app's last-dump-wins parentOf may point at a
+  // later lister than phase 1's BFS-first parentKey).
   const back = document.querySelector('.back-link');
-  const treeParent = node.parentKey;
-  if (treeParent && back && back.dataset.key !== treeParent) {
-    flag(key, 'wrong-breadcrumb', `back-link -> ${back.dataset.key}, tree parent is ${treeParent}`);
-  } else if (treeParent && !back) {
-    flag(key, 'no-breadcrumb', `expected back-link to ${treeParent}`);
+  const okParents = listingParents.get(key) || new Set(node.parentKey ? [node.parentKey] : []);
+  if (okParents.size && back && !okParents.has(back.dataset.key)) {
+    flag(
+      key,
+      'wrong-breadcrumb',
+      `back-link -> ${back.dataset.key}, listing parents: ${[...okParents].join(',')}`
+    );
+  } else if (okParents.size && !back) {
+    flag(key, 'no-breadcrumb', `expected back-link to one of ${[...okParents].join(',')}`);
   }
 }
 

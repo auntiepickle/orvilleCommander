@@ -380,14 +380,16 @@ HUMAN-GATE: none
       [I]: naming convention, not a type guarantee) and protocol.md. Tests: child-CON immediate +
       unknown-key coalesce pinned (the latter fails pre-C7). VALUE_DUMP-coverage precondition was met by
       Batch 0.3's 0x2e characterization.
-- [ ] NEW Persist active DSP (A/B) app-side as view state (default A)
+- [ ] NEW Persist active DSP (A/B) app-side as view state (default A) — FOLDED INTO C2 (Batch 3.3): the
+      landing chooses dspAKey/dspBKey by this view state; do not implement separately (see
+      phase3-state-model.md "C2 design"). Mark [x] when C2 ships.
 HUMAN-GATE: none
 
 ### Batch 3.3 — Connect handshake + eager loader + landing  (replaces the autoLoad timer mechanism)
 DECISION RESOLVED (see phase3-state-model.md): land on the last-active DSP's preset, read authoritatively
 from the root dump (device boots into last-used preset). Cache is a provisional structure-only pre-paint.
-- [~] C2  Remove the PORT_INIT_MS (500ms) timer + autoLoad flag mechanism (main.js); land via
-      rootDumpComplete -> active preset. NOTE: the race SYMPTOM (wrong landing menu) was eliminated by
+- [~] C2  Remove the PORT_INIT_MS (500ms) timer + autoLoad flag mechanism (main.js); land on the root
+      dump's arrival -> active preset. NOTE: the race SYMPTOM (wrong landing menu) was eliminated by
       C1's synchronous root render (Batch 3.1), but the timer-driven mechanism it rode on is still in
       place — this item owns removing it.
       NEXT: implement per phase3-state-model.md "C2 design — connect/landing without timers" (design

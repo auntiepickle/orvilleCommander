@@ -533,12 +533,16 @@ export function renderScreen(subs, ascii, logParam) {
       .filter((s) => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey)
       .slice(0, 1);
     let embeddedKey = null;
-    // Proactively fetch the embed candidate (covers long/empty-tag children
-    // the parser's short-tag fan-out skips; a no-op when already cached).
-    if (potentialEmbedSubs.length === 1) {
-      const embedKey = potentialEmbedSubs[0].key;
-      if (!appState.childSubs[embedKey]) {
-        sendObjectInfoDump(embedKey, logParam);
+    // Proactively fetch the embed candidate ONLY when the parser's short-tag
+    // fan-out will not already fetch it (long/empty tag) — otherwise this
+    // duplicated the same request in the same wave on every navigation, and
+    // on 'program functions' the duplicated key is the giant bank list
+    // (R6 review).
+    if (potentialEmbedSubs.length > 0) {
+      const cand = potentialEmbedSubs[0];
+      const fanOutCovers = cand.tag.trim() && cand.tag.trim().length <= LAYOUT.SHORT_TAG_MAX;
+      if (!fanOutCovers && !appState.childSubs[cand.key]) {
+        sendObjectInfoDump(cand.key, logParam);
       }
     }
     for (let local of potentialEmbedSubs) {

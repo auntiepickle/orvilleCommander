@@ -421,11 +421,22 @@ in logs/ (program-screen.png).
       new preset' renders BOTH SET dropdowns (70 banks / 28 programs) + the load-into-A/B TRGs — the
       full program-set UI works end to end on hardware. Renderer test pins the shape (fails pre-fix);
       no existing snapshot changed (none covered the mixed shape).
-- [ ] R2  Duplicate softkey row sets (maintainer report): the static bottom root softkeys take the
-      DESCEND branch, so the keyStack grows without bound (2 -> 6 in one four-click walk) and the
-      previous menu becomes the "parent" entry — its COL row set renders twice (once from stale
-      currentSubs as the current row, once as the parent row). FIX: root-level jumps (ROOT_SOFTKEYS keys
-      and root children) should reset the stack like the Sync button, not push; pair with R3's guard.
+- [x] R2  (branch fix/deterministic-embed-root-jump) Duplicate softkey row sets FIXED: the static bottom
+      root softkeys now JUMP — reset the keyStack — instead of descending (which grew the stack without
+      bound, 2 -> 6 in one walk, and rendered the previous menu's COL row set twice). pendingDescend
+      stays set on the jump (matches the front panel: function keys land on a parameter page, not a bare
+      listing). NOTE (review): after a jump the root view has no breadcrumb — root is reachable via
+      Sync/reconnect and everything it offers stays docked (A/B tabs + static row); revisit if root
+      needs a first-class affordance. Test pins jump-resets-stack (fails pre-fix).
+- [x] R6  (same branch; maintainer screenshots) NONDETERMINISTIC EMBED FIXED: the embed loop took
+      whichever position-0 child's dump had arrived first — on 'program functions' the first child's
+      response (the giant bank list) is slowest, so 'link program' won the race and the embedded UI
+      varied run to run (sometimes nothing, sometimes the wrong child's selectors). Only the FIRST
+      position-0 child in subs order may embed now (the physical PROGRAM page shows 'load new preset' as
+      the menu's default view); while its dump is in flight the children stay navigable softkeys (R1).
+      Review hardening: the embed prefetch fires only when the parser's short-tag fan-out will NOT fetch
+      the candidate (long/empty tag) — the unconditional version duplicated the heaviest dump on the
+      wire once per navigation. Two-phase test pins arrival-order independence (fails pre-fix).
 - [ ] R3  Stale-menu render: clicking a menu renders the OLD menu under the NEW key (wrong title and
       breadcrumb, e.g. "[program] program functions" while currentKey=10030000) until the new dump
       lands — on a backed-up link that is seconds. This is the "never render an unconfirmed value"

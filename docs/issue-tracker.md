@@ -415,7 +415,7 @@ in logs/ (program-screen.png).
 - [x] R1  (branch fix/softkey-position-filter) CRITICAL UX FIXED (maintainer: "can't set the machine's
       program"): deleted the holdover that dropped ALL position-0 COL children from the softkey row
       whenever the menu had any param — 'program functions' (one TRG + 8 position-0 COLs) rendered with
-      no navigation at all. The embed flow's own embeddedKey filter is the only exclusion needed.
+      no access to its own children. The embed flow's own embeddedKey filter is the only exclusion needed.
       VERIFIED LIVE with the headless harness: program menu now shows load/save/update/card/delete/
       savebank/del bank/link (matching the physical PROGRAM screen capture), and descending into 'load
       new preset' renders BOTH SET dropdowns (70 banks / 28 programs) + the load-into-A/B TRGs — the

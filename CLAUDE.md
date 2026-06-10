@@ -79,7 +79,7 @@ Wire format in [`docs/protocol.md`](docs/protocol.md); how the device behaves (o
 
 Keypress masks are hex-encoded button state; `system_commands.txt` at the repo root is the canonical source — `controls.js:keypressMasks` must match it. If they diverge, `system_commands.txt` wins.
 
-Sub-object types in the ASCII dump: `COL` (column/menu), `NUM`, `SET`, `CON` (continuous/meter), `TRG`, `INF`. See `parseSubObject` for field order.
+Sub-object types in the ASCII dump: `COL` (column/menu), `NUM`, `SET`, `CON` (continuous/meter), `TRG`, `INF`, `STR` (string-edit, live-discovered). See `parseSubObject` for field order and `docs/device-model.md` §3 for semantics.
 
 ## Conventions
 
@@ -102,6 +102,8 @@ Sub-object types in the ASCII dump: `COL` (column/menu), `NUM`, `SET`, `CON` (co
 - `build_tools/combine.cjs` — concatenates `src/*.js` (no CSS) into 20KB chunks under `combine/`. Output is for pasting into LLM contexts.
 - `build_tools/zip.js` — archives the working tree (minus `.git`, `node_modules`, zips) via `archiver`. Used by `npm run push`.
 - `build_tools/apply_diff.js` — applies a named `.diff` with `git apply --reject`; falls back to a hand-rolled hunk parser. Creates a `.bak` before applying.
+- `build_tools/live-app.mjs` (`npm run live-app`) — runs the REAL app module graph headless (jsdom + `@julusian/midi` adapters into `setMidiPorts`) against the powered Orville. No browser, no WebMIDI permission, no port contention with Chrome (close any app tab first — WinMM is single-client). The substrate for session-driven live validation.
+- `build_tools/tree-audit.mjs` (`npm run tree-audit [depth] [quietMs] [capMs]`) — fetches the device object tree raw (ground truth), then audits every COL node's render against its own dump: child reachability (softkey/embed/unreachable), params rendered exactly once, duplicate softkeys, breadcrumb vs tree parent. Machine-readable report at `logs/tree-audit-report.json`. The acceptance gate for T1b (#105) and the standing render-regression loop.
 
 ## Where state lives
 

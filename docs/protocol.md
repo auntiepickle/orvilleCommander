@@ -161,6 +161,7 @@ Field order per line — `type position key parent statement tag …`:
 | `CON` | continuous / meter | `value`                                                    |
 | `TRG` | trigger / action   | —                                                          |
 | `INF` | info / read-only   | `value`                                                    |
+| `STR` | string-edit field  | `value` (live-discovered 2026-06-10; device-model.md §3)    |
 
 On the dump's first line (the queried object itself), `parent` echoes the
 object's **own key**, not its real parent; only the child lines carry a real
@@ -184,6 +185,12 @@ possibly clamped — value, even when the value is unchanged (live-probed; this
 corrects an earlier "no ack" note here — see `device-model.md` §6/§9 and
 tracker B10g.3). The app still issues a value request after a put to reconcile
 rather than trusting an optimistic local write.
+
+String puts (`STR` fields, live-probed 2026-06-10): the value bytes may contain
+spaces — the device accepts a multi-word value and **quotes it in dumps**
+(`put 'Two Words'` → echo `10020052 'Two Words'`), so `splitLine` readback keeps
+it one token. An **empty-string put is ignored** (the value is unchanged); there
+is no clear-to-empty semantic.
 
 `0x2e` response payload is ASCII `"<key> <value…>"`; `parser.js` caches it under
 the key and emits `value:received`, classified immediate iff the loaded subs

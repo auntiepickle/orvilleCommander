@@ -437,6 +437,22 @@ describe('renderer.js', () => {
             statement: 'ORVILLE ROOT OBJECT',
             tag: 'ORVILLE',
           },
+          {
+            type: 'COL',
+            position: '1',
+            key: '10010000',
+            parent: '0',
+            statement: 'setup functions',
+            tag: 'setup',
+          },
+          {
+            type: 'COL',
+            position: '2',
+            key: '10020000',
+            parent: '0',
+            statement: 'program functions',
+            tag: 'program',
+          },
         ],
       },
     ];
@@ -466,6 +482,12 @@ describe('renderer.js', () => {
     expect(lcd.innerHTML).not.toContain('undefined');
     const back = document.querySelector('.back-link');
     expect(back.dataset.key).toBe('0');
+
+    // Behavior change vs the raw-string entry (which yielded no parent
+    // softkeys): a depth-1 leaf menu now falls back to the root entry's
+    // tagged COLs as its softkey row, mirroring the device display.
+    expect(document.querySelector('.softkey[data-key="10010000"]')).toBeTruthy();
+    expect(document.querySelector('.softkey[data-key="10020000"]')).toBeTruthy();
 
     back.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(appState.currentKey).toBe('0');

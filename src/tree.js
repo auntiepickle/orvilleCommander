@@ -6,13 +6,15 @@
 // line echoes its own key in the parent slot, device-model.md §3); every
 // click-path navigation has necessarily loaded the parent, so ancestry is
 // available wherever the user actually is. Newest dump wins: structure
-// changes (e.g. a preset load) are absorbed by the per-visit child refetch.
+// changes (e.g. a preset load) are absorbed by the per-visit child refetch
+// — except in stable subtrees (#113), where the refetch is skipped for
+// fresh keys and mutation chokepoints mark staleness instead.
 //
 // Module state, like logger.js (see CLAUDE.md "Where state lives"): the tree
 // is a cache of device-confirmed structure, not view state — view state
 // (currentKey, the derived keyStack) stays on appState.
 
-import { LAYOUT } from './constants.js';
+import { LAYOUT, CACHE } from './constants.js';
 
 // key -> subs array (the node's own dump: main line + direct children).
 const nodes = new Map();
@@ -31,6 +33,7 @@ export function recordDump(subs) {
   const main = subs?.[0];
   if (!main?.key) return;
   nodes.set(main.key, subs);
+  staleKeys.delete(main.key); // a re-recorded node is fresh by definition (#113)
   for (const s of subs.slice(1)) {
     if (s.key) parents.set(s.key, { parentKey: main.key, sub: s });
   }
@@ -166,8 +169,63 @@ export function deriveKeyStack(key) {
   }));
 }
 
+// --- Stable-subtree freshness (#113) -------------------------------------
+// Per-KEY staleness for nodes under CACHE.STABLE_SUBTREE_PREFIXES. Marking
+// stales every CACHED key under the prefix; a key becomes fresh again only
+// when recordDump actually re-records IT (the delete in recordDump). This
+// is drop-tolerant by construction: a refetch whose response never arrives
+// leaves the key stale, so the next visit retries — and a deep visit can
+// never launder staleness into siblings it did not re-record.
+const staleKeys = new Set();
+
+const stablePrefixOf = (key) => CACHE.STABLE_SUBTREE_PREFIXES.find((p) => key.startsWith(p));
+
+/**
+ * Whether a key's cached dump may be trusted across visits: tree-cached,
+ * under a stable prefix, and not marked stale. The parser's per-visit
+ * child fan-out skips the OBJECTINFO refetch for fresh keys (#113) —
+ * param VALUES are still refreshed every visit.
+ *
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function isFresh(key) {
+  return stablePrefixOf(key) !== undefined && nodes.has(key) && !staleKeys.has(key);
+}
+
+/**
+ * Stales every cached key under the given key's stable prefix, if any.
+ * Called by sendValuePut (every in-app put — TRG/STR/SET/NUM, including
+ * bank selects, which change the device's program list) — one of the two
+ * in-app mutation chokepoints (the other is sendKeypress).
+ *
+ * @param {string} key
+ */
+export function markDirtyIfStable(key) {
+  const p = stablePrefixOf(key);
+  if (!p) return;
+  for (const k of nodes.keys()) {
+    if (k.startsWith(p)) staleKeys.add(k);
+  }
+}
+
+/**
+ * Stales every cached key under every stable prefix — explicit re-reads
+ * (Sync-to-Hardware, reconnect) and virtual front-panel keypresses (which
+ * drive the real device UI, so any press could be part of a mutating
+ * sequence the app cannot interpret).
+ */
+export function markAllStableDirty() {
+  for (const p of CACHE.STABLE_SUBTREE_PREFIXES) {
+    for (const k of nodes.keys()) {
+      if (k.startsWith(p)) staleKeys.add(k);
+    }
+  }
+}
+
 /** Clears the tree (tests). */
 export function reset() {
   nodes.clear();
   parents.clear();
+  staleKeys.clear();
 }

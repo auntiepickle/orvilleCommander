@@ -48,6 +48,7 @@ import {
 import { parseResponse } from '../src/parser.js';
 import { on } from '../src/events.js';
 import { appState } from '../src/state.js';
+import { recordDump, isFresh, reset as treeReset } from '../src/tree.js';
 
 describe('midi.js per-wave counter and watchdog (7c)', () => {
   let received;
@@ -214,6 +215,44 @@ describe('midi.js SysEx byte contract', () => {
   test('sendObjectInfoDump emits cmd 0x31 with the key as ASCII bytes', () => {
     sendObjectInfoDump('0');
     expect(output.sendSysex).toHaveBeenCalledWith([0x1c, 0x70], [0x00, 0x31, 0x30]);
+  });
+
+  test('sendValuePut marks the stable subtree dirty — the invalidation chokepoint (#113)', () => {
+    treeReset();
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020010',
+        parent: '10020010',
+        statement: 'load new preset',
+        tag: 'load',
+      },
+    ]);
+    expect(isFresh('10020010')).toBe(true);
+    sendValuePut('1002001c', '1'); // the load trigger — any program-subtree put
+    expect(isFresh('10020010')).toBe(false);
+    treeReset();
+  });
+
+  test('sendKeypress distrusts the stable caches — the other mutation chokepoint (#113)', () => {
+    // Virtual front-panel keys drive the REAL device UI; a save/delete
+    // sequence can mutate the program subtree without any put.
+    treeReset();
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020010',
+        parent: '10020010',
+        statement: 'load new preset',
+        tag: 'load',
+      },
+    ]);
+    expect(isFresh('10020010')).toBe(true);
+    sendKeypress([0xff, 0xff, 0xff, 0xef]); // any press
+    expect(isFresh('10020010')).toBe(false);
+    treeReset();
   });
 
   test('GET_SCREEN (0x18) is wave-counted; the 0x17 response drains it (#107)', () => {

@@ -12,7 +12,7 @@ import { denibble, renderBitmap } from './bitmap.js';
 import { log, setLogLevel, setLogCategories, getLogCategories } from './logger.js';
 import { registerEventBridge } from './event-bridge.js';
 import { extractNibblesFromHex } from './hex-extract.js';
-import { deriveKeyStack } from './tree.js';
+import { deriveKeyStack, markAllStableDirty } from './tree.js';
 
 const lcdEl = document.getElementById('lcd');
 const logArea = document.getElementById('log-area');
@@ -148,6 +148,9 @@ function selectPorts() {
   // itself — adopt DSP keys/names, navigate to the active preset, prefetch
   // the other DSP, optional screen fetch — fires in event-bridge.js when the
   // root dump arrives. No timer, no autoLoad flag.
+  // A (re)connect is an explicit re-read: distrust every stable-subtree
+  // cache (#113 — front-panel changes may have happened while disconnected).
+  markAllStableDirty();
   setState(
     {
       currentKey: KEY.ROOT,
@@ -213,6 +216,9 @@ testKeypressBtn.addEventListener('click', () => {
 syncBtn.addEventListener('click', () => {
   // Root has no ancestors, so the derived stack is [] by definition; set it
   // explicitly so a sync never leaves a previous menu's stack behind (T1b).
+  // Sync is the explicit "re-read the device" affordance: distrust every
+  // stable-subtree cache (#113 — the front-panel-changes answer).
+  markAllStableDirty();
   setState({ currentKey: KEY.ROOT, keyStack: [] }, 'main:sync-root');
   updateScreen(log);
   log('Synced to root', 'info', 'general');

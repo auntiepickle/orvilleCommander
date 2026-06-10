@@ -591,11 +591,32 @@ in logs/ (program-screen.png).
       SETs) monopolizes the link for seconds and starves subsequent navigation (watchdog send=2
       recv=0). System self-heals in all observed cases (next wave drains all-received). The (b)
       per-visit-refetch cost is now the subject of #113 below (program-subtree caching).
-- [~] NEW (GH #113) Program-subtree caching (maintainer report, 2026-06-10 hands-on: "loading
-      program takes a ton of time... only a handful of actions can cause a change to program").
-      NEXT: design note in phase3-state-model.md (per-subtree freshness policy + invalidation
-      hooks), then implement the fan-out skip + dirty-marking; acceptance = live before/after of a
-      program-menu visit + tree audit. Maintainer-agreed next item (2026-06-10):
+- [x] NEW (GH #113) (branch feat/program-subtree-cache) Program-subtree caching SHIPPED
+      (maintainer report, 2026-06-10 hands-on: "loading program takes a ton of time... only a
+      handful of actions can cause a change to program"). Stable-subtree freshness policy
+      (design: phase3-state-model.md "Stable-subtree caching"): CACHE.STABLE_SUBTREE_PREFIXES
+      (program prefix 10020) — the parser's per-visit child fan-out skips the STRUCTURE refetch
+      for tree.js isFresh() children; the visited menu's OWN dump always refetches, and a skipped
+      child's PARAM VALUES still refresh (small VALUE requests over its cached lines), so value
+      volatility holds on the warm path — only the heavy OBJECTINFO option lists are trusted.
+      Staleness is PER-KEY (review-hardened): marking stales every cached key under the prefix;
+      a key is fresh again only when recordDump re-records IT — drop-tolerant (a lost refetch
+      response leaves the key stale and the next visit retries) and launder-proof by construction.
+      Invalidation chokepoints: sendValuePut (TRG/STR/SET/NUM puts incl. bank selects, which
+      change the device's program list) + sendKeypress (virtual front-panel keys drive the real
+      device UI — any press may be a mutating sequence) + Sync/selectPorts markAllStableDirty
+      (device-side mutations the app cannot observe: physical panel, card swap, external MIDI
+      program changes). FUTURE HOOK: the device's uncaptured bank-change SysEx (§12) would give
+      automatic invalidation. RESIDUAL (GH #121, low): an in-flight dump racing a mutating put can
+      record pre-mutation structure as fresh — bounded recovery; generation-counter fix sketched
+      in the issue.
+      LIVE ACCEPTANCE (2026-06-10, logs/live-prog-113b.log, live-app 'prog' mode): COLD visit
+      (stale = pre-#113 behavior) 17 waves / 41 sends / settled 17919ms; WARM visit 1 wave /
+      27 sends (1 objectinfo + the small per-param VALUE refreshes) / settled 646ms — ~28x,
+      embeds render identically from cache. Tree audit: zero violations. 7 new tests (per-key
+      freshness semantics incl. re-record-only un-staling, parser skip + value-refresh +
+      stale-retry-until-rerecord + non-stable scope, sendValuePut + sendKeypress chokepoints).
+      Original report context:
       every visit re-fans-out all 8 program children incl. the bank-list dump (multi-second on the
       31250-baud link) even though the tree already holds them — structure renders from cache
       (T1b/R3) but the refetch wave keeps the loading state + link busy. Design sketch (in the GH

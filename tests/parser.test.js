@@ -21,7 +21,12 @@ import { appState } from '../src/state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, notifyResponse } from '../src/midi.js';
 import { emit } from '../src/events.js';
 import { log as mockLog } from '../src/logger.js';
-import { recordDump, getNode, reset as treeReset } from '../src/tree.js';
+import { recordDump, getNode, markDirtyIfStable, reset as treeReset } from '../src/tree.js';
+
+const parseAscii = (ascii) => {
+  const bytes = ascii.split('').map((c) => c.charCodeAt(0));
+  parseResponse([0xf0, 0x1c, 0x70, 0x00, 0x32, ...bytes, 0xf7]);
+};
 
 describe('parseResponse', () => {
   beforeEach(() => {
@@ -303,6 +308,108 @@ describe('parseResponse', () => {
     mockLog.mockClear();
     parseResponse(valueDump('10030011 new'));
     expect(mockLog).toHaveBeenCalledWith('Value did not change, still new', 'debug', 'noChange');
+  });
+
+  test('stable-subtree children skip the STRUCTURE refetch but still refresh param values (#113)', () => {
+    appState.currentKey = '10020000'; // visiting the program menu
+    // The heavy bank-list child is already tree-cached from a prior visit,
+    // params included.
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020010',
+        parent: '10020010',
+        statement: 'load new preset',
+        tag: 'load',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10020011',
+        parent: '10020010',
+        statement: 'program: %2.0f',
+        tag: 'pgm',
+        value: '0',
+      },
+      {
+        type: 'TRG',
+        position: '2',
+        key: '1002001c',
+        parent: '10020010',
+        statement: '<- load',
+        tag: 'load',
+      },
+    ]);
+    parseAscii(
+      'COL 0 10020000 10020000 "program functions" "program"\n' +
+        ' COL 0 10020010 10020000 "load new preset" "load"\n' +
+        ' COL 0 10020020 10020000 "save program" "save"'
+    );
+    // Cached stable child: no structure refetch, no COL value fetch...
+    expect(sendObjectInfoDump).not.toHaveBeenCalledWith('10020010');
+    expect(sendValueDump).not.toHaveBeenCalledWith('10020010');
+    // ...but its PARAM values refresh (the per-visit value-volatility
+    // contract holds on the warm path; TRGs carry no value).
+    expect(sendValueDump).toHaveBeenCalledWith('10020011');
+    expect(sendValueDump).not.toHaveBeenCalledWith('1002001c');
+    // Uncached sibling: fetched as always.
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('10020020');
+  });
+
+  test('a mutating put stales the subtree; refetch repeats until the child RE-RECORDS (#113)', () => {
+    appState.currentKey = '10020000';
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020010',
+        parent: '10020010',
+        statement: 'load new preset',
+        tag: 'load',
+      },
+    ]);
+    markDirtyIfStable('1002001c'); // a save/load/delete put happened
+
+    const programDump =
+      'COL 0 10020000 10020000 "program functions" "program"\n' +
+      ' COL 0 10020010 10020000 "load new preset" "load"';
+    parseAscii(programDump);
+    // Stale: the cached child is refetched like pre-#113.
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('10020010');
+
+    // The refetch's response is DROPPED (busy link): the key stays stale,
+    // so the next visit retries — staleness cannot be laundered by the
+    // request having merely gone out.
+    sendObjectInfoDump.mockClear();
+    parseAscii(programDump);
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('10020010');
+
+    // The child's own dump finally arrives (re-recorded by this parser):
+    // the key is fresh again and the next visit skips.
+    parseAscii('COL 0 10020010 10020010 "load new preset" "load"');
+    sendObjectInfoDump.mockClear();
+    parseAscii(programDump);
+    expect(sendObjectInfoDump).not.toHaveBeenCalledWith('10020010');
+  });
+
+  test('non-stable menus keep the per-visit child refetch even when cached (#113)', () => {
+    appState.currentKey = '10010000'; // setup is NOT a stable subtree
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010010',
+        parent: '10010010',
+        statement: 'MIDI configuration',
+        tag: 'midi',
+      },
+    ]);
+    parseAscii(
+      'COL 0 10010000 10010000 "setup functions" "setup"\n' +
+        ' COL 0 10010010 10010000 "MIDI configuration" "midi"'
+    );
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('10010010'); // freshness = per-visit
   });
 
   test('handles screen dump (bitmap) and calls renderBitmap', () => {

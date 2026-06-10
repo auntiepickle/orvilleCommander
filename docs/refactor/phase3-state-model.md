@@ -342,6 +342,50 @@ traffic behind the connect overlay the landing already shows, and blocking
 the UI on a warm-up would invert its purpose. `appState.eagerLoad`
 (midiConfig-persisted, default on) gates the arm.
 
+## Stable-subtree caching — #113 (branch feat/program-subtree-cache)
+
+Maintainer report: "loading program takes a ton of time... only a handful
+of actions can cause a change to program." The program subtree's dumps are
+the heaviest on the link (the ~70-name bank list is multi-second at 31250
+baud) yet its STRUCTURE changes only via an enumerable set of actions — so
+per-visit child refetch (the default freshness policy) is almost always
+wasted there.
+
+**Policy (lives with the cache, `tree.js`):**
+`CACHE.STABLE_SUBTREE_PREFIXES` (one entry today: the program prefix
+`10020`) declares subtrees whose cached child dumps may be trusted across
+visits. Staleness is **per-key** (review-hardened design): marking stales
+every CACHED key under the prefix, and a key becomes fresh again only when
+`recordDump` actually re-records IT. Drop-tolerant by construction — a
+refetch whose response never arrives leaves the key stale and the next
+visit retries — and a deep visit can never launder staleness into siblings
+it did not re-record. The parser's per-visit child fan-out skips the
+STRUCTURE refetch for `isFresh(key)` children; the visited menu's OWN dump
+always refetches (`updateScreen` untouched), and a skipped child's **param
+values are still refreshed** (small VALUE requests over its cached lines),
+so the per-visit value-volatility contract holds on the warm path too —
+only the heavy OBJECTINFO option lists are trusted.
+
+**Invalidation (two in-app chokepoints + explicit re-reads):**
+
+- `sendValuePut` stales the key's stable prefix: TRG loads/saves/deletes/
+  card ops, STR name edits, AND SET selects — bank selection matters
+  because changing the bank changes the program list the device returns.
+- `sendKeypress` stales ALL stable caches: the virtual front-panel keys
+  drive the real device UI, and the app cannot interpret which presses are
+  part of a mutating sequence. Conservative; costs at most one refetch.
+- Sync-to-Hardware and selectPorts (reconnect) stale ALL stable caches —
+  the answer to device-side mutations the app cannot observe: physical
+  front panel, card insertion/removal, external MIDI program changes.
+  (Future structural hook: the device emits a bank-change SysEx whose
+  format is uncaptured — device-model §12; capturing it would give an
+  automatic invalidation signal.)
+
+Eager loader unaffected (it already skips cached nodes). Acceptance: live
+before/after of a program-menu visit (cold 41 sends / 17.9s settled vs
+warm 27 sends / 646ms — 1 OBJECTINFO plus the small per-param VALUE
+refreshes; logs/live-prog-113b.log) plus a zero-violation tree audit.
+
 ## Validation / open items
 
 - (RESOLVED 2026-06-10) Eager-load throughput on real hardware: production

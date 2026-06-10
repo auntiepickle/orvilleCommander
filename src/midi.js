@@ -6,6 +6,7 @@ import { log } from './logger.js';
 import { emit } from './events.js';
 import { CMD, SYSEX } from './sysex-commands.js';
 import { TIMING } from './constants.js';
+import { markDirtyIfStable, markAllStableDirty } from './tree.js';
 
 let selectedOutput = null;
 let selectedInput = null;
@@ -346,6 +347,11 @@ export function sendValueDump(key) {
  * sendValuePut('1002001c', '1'); // Trigger preset load
  */
 export function sendValuePut(key, value) {
+  // #113: a put is the single chokepoint every in-app mutating action
+  // funnels through (TRG loads/saves/deletes, STR name edits, SET bank
+  // selects) — mark the key's stable subtree dirty so the next visit
+  // refetches instead of trusting the cache.
+  markDirtyIfStable(key);
   const keyBytes = key.split('').map((c) => c.charCodeAt(0));
   const valueBytes = value.split('').map((c) => c.charCodeAt(0));
   sendSysEx(CMD.VALUE, [...keyBytes, SYSEX.VALUE_SEPARATOR, ...valueBytes]);
@@ -372,6 +378,12 @@ function nibble(mask) {
  * sendKeypress(keypressMasks['enter']);
  */
 export function sendKeypress(mask) {
+  // #113 review: the virtual front-panel keys drive the REAL device UI —
+  // a save/delete/rename sequence can mutate the program subtree without
+  // any put the app can see. The app cannot interpret which presses
+  // mutate, so every press distrusts the stable caches (conservative: at
+  // worst one extra refetch on the next program visit).
+  markAllStableDirty();
   const nibbled = nibble(mask);
   sendSysEx(CMD.KEYPRESS, nibbled);
 }

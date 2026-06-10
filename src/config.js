@@ -23,7 +23,8 @@ export function loadConfig(
   deviceIdInput,
   logLevelSelect,
   fetchBitmapCheckbox,
-  updateBitmapOnChangeCheckbox
+  updateBitmapOnChangeCheckbox,
+  eagerLoadCheckbox
 ) {
   const config = localStorage.getItem(STORAGE_KEY);
   if (config) {
@@ -32,6 +33,7 @@ export function loadConfig(
     logLevelSelect.value = parsed.logLevel || DEFAULT_LOG_LEVEL;
     fetchBitmapCheckbox.checked = parsed.fetchBitmap !== false;
     updateBitmapOnChangeCheckbox.checked = parsed.updateBitmapOnChange !== false;
+    if (eagerLoadCheckbox) eagerLoadCheckbox.checked = parsed.eagerLoad !== false; // default on (#106)
     log(
       `Loaded cached config: Output ID ${parsed.outputId}, Input ID ${parsed.inputId}, Device ID ${parsed.deviceId}, Log Level ${parsed.logLevel}, Log Categories ${JSON.stringify(parsed.logCategories)}, Fetch Bitmap ${parsed.fetchBitmap}, Update Bitmap on Change ${parsed.updateBitmapOnChange}, Preset Key ${parsed.presetKey}`,
       'info',
@@ -66,7 +68,8 @@ export function saveConfig(
   logCategories,
   fetchBitmap,
   updateBitmapOnChange,
-  presetKey
+  presetKey,
+  eagerLoad
 ) {
   const config = {
     outputId,
@@ -77,6 +80,7 @@ export function saveConfig(
     fetchBitmap,
     updateBitmapOnChange,
     presetKey,
+    eagerLoad,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   log('Config saved to localStorage.', 'info', 'general');

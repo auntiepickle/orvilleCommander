@@ -475,10 +475,27 @@ and arrival races; the cure is view DERIVED from the device tree.
       fully-blank nodes (setup's 100100d0 — statement AND tag empty, children are DSP A/B i/p routing)
       stay unlabeled and audit-flagged; label policy (derive from children? device shows 'dsp B') is a
       T1b question. Position 'c' added to device-model §3.
-- [ ] NEW (GH #106) Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX. Subordinate to T1's tree model; R5's pacing data (bitmap-in-wave stalls; bank-list fan-out starvation) constrains the request scheduling.
-- [ ] NEW (GH #106) `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
+- [x] NEW (GH #106) (branch feat/eager-loader) Eager loader SHIPPED as a serialized STRUCTURE walk:
+      src/eager-loader.js traverses the active preset tree breadth-first (OBJECTINFO each COL),
+      bounded by EAGER.MAX_DEPTH=3 + a visited set, exactly ONE request in flight (advanced by its
+      own objectinfo:received; a watchdog skips the pending node) — the R5-constrained scheduling.
+      Cached nodes cost no request, so the parser's per-menu fan-out (depth 1) is never duplicated:
+      the bridge arms the load at the C2 landing and starts it on the first CLEAN drain after it
+      (live finding: with fetchBitmap on the landing wave routinely watchdogs on the ~1.2s bitmap
+      transfer, R5a — the arm survives stalls and fires on the self-healed next wave).
+      DEVIATION (decided with T1b in place): VALUE_DUMP prefetch dropped — currentValues is
+      per-visit volatile by design (updateScreen clears it, C8), so eager values would be discarded
+      unseen; structure is the durable half and is what R3 pre-paints. No loading UX: the walk is
+      background traffic behind the connect overlay the landing already shows.
+      LIVE ACCEPTANCE (2026-06-10, logs/live-eager-acceptance2.log): armed through the R5a stall
+      (watchdog send=21 recv=13), started on the next clean drain, 4 nodes walked 0 fetched (fan-out
+      had cached the shallow Black Hole subtree — zero duplicate requests), warmth 3/3 children;
+      cold-click pre-paint then served structure from cache mid-flight. Startup Tier A pins the
+      one-in-flight scheduling; 6 unit tests cover skip/serial/depth/watchdog/supersede/stop.
+- [x] NEW (GH #106) (same branch) `eagerLoad` config flag: persisted in midiConfig (default on,
+      pre-#106 caches stay eager), checkbox in index.html, appState.eagerLoad gates the bridge arm.
 - [x] NEW (GH #106) Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number — shipped with R3 below (branch fix/r3-render-guard)
-HUMAN-GATE: needs-hardware (eager-load throughput on the real unit; offline parse/render half covered by replay harness)
+HUMAN-GATE: none remaining (eager-load throughput validated live 2026-06-10)
 
 ### Batch 3.3b — Live-loop findings (headless live session, 2026-06-09; maintainer-confirmed symptoms)
 Discovered by running the REAL app module graph headless (jsdom + @julusian/midi adapters feeding the

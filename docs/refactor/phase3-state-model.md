@@ -221,7 +221,7 @@ live connect on the real 31250-baud link (root dump arrival time vs the old
 500ms guess; landing correctness), the wave-saturation smoke (polling +
 bitmap-on-change vs the 10s watchdog ceiling), and eager-load throughput.
 
-## T1b design — tree-derived navigation (implemented on refactor/t1b-tree-navigation; GH #105; device-on acceptance PASSED 2026-06-10: zero audit violations)
+## T1b design — tree-derived navigation (SHIPPED: PR #109 merged 2026-06-10; GH #105 closed; device-on acceptance passed with zero audit violations)
 
 The cure for the R-series bug class: the view derives from the device's
 object tree, not from recorded click history or message-arrival races.

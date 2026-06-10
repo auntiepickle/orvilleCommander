@@ -434,6 +434,56 @@ describe('renderer.js', () => {
     expect(sendObjectInfoDump).not.toHaveBeenCalled(); // no refetch churn
   });
 
+  test('a menu with params keeps its position-0 COL softkeys (R1: program functions navigable)', () => {
+    // Live-validated bug: 'program functions' is one TRG + eight position-0
+    // COL children. A holdover filter dropped ALL position-0 COLs from the
+    // softkey row whenever any param was present, leaving the menu with no
+    // navigation at all — the load-new-preset UI (bank/program selection)
+    // was unreachable. The physical PROGRAM screen shows those softkeys
+    // (load/save/update/delete...). Embedding still excludes only the
+    // actually-embedded child, handled separately by the embeddedKey filter.
+    appState.currentKey = '10020000';
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020000',
+        parent: '10020000',
+        statement: 'program functions',
+        tag: 'program',
+      },
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020010',
+        parent: '10020000',
+        statement: 'load new preset',
+        tag: 'load',
+      },
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020020',
+        parent: '10020000',
+        statement: 'save program',
+        tag: 'save',
+      },
+      {
+        type: 'TRG',
+        position: '0',
+        key: '10020090',
+        parent: '10020000',
+        statement: '<- compare program',
+        tag: 'compare',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    expect(document.querySelector('.softkey[data-key="10020010"]')).toBeTruthy(); // load
+    expect(document.querySelector('.softkey[data-key="10020020"]')).toBeTruthy(); // save
+    expect(document.querySelector('.param-value[data-key="10020090"]')).toBeTruthy(); // TRG still renders
+  });
+
   test('a confirmed-empty NUM value is not refetched on render (C1 refetch convergence)', () => {
     // The device can answer a VALUE request with an empty value, which the
     // parser caches as ''. The render-driven refetch must treat that as

@@ -1,6 +1,6 @@
 // renderer.js
 import { appState } from './state.js';
-import { CMD, KEY, KEY_PREFIX, PARAM_TYPES, ROOT_SOFTKEYS } from './sysex-commands.js';
+import { CMD, KEY, KEY_PREFIX, ROOT_SOFTKEYS } from './sysex-commands.js';
 import { TIMING, LAYOUT } from './constants.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
@@ -484,16 +484,17 @@ export function renderScreen(subs, ascii, logParam) {
         paramHtmlLines.push(fullHtml);
       }
     });
-    // Append only the first child sub-menu inline if available
-    const hasNonColParams = subs.slice(1).some((s) => PARAM_TYPES.includes(s.type));
+    // Append only the first child sub-menu inline if available.
+    // NOTE (R1, live-validated): an earlier filter here dropped ALL
+    // position-0 COLs from the softkeys whenever the menu had any param,
+    // which made mixed menus like 'program functions' (TRG + 8 position-0
+    // COL children) unnavigable — the physical PROGRAM screen shows those
+    // softkeys. Only the actually-embedded child is excluded, below.
     localSoftSubs = subs
       .slice(1)
       .filter(
         (s) => s.type === 'COL' && s.tag.trim().length <= LAYOUT.SHORT_TAG_MAX && s.tag.trim()
       );
-    if (hasNonColParams) {
-      localSoftSubs = localSoftSubs.filter((s) => s.position !== '0');
-    }
     let potentialEmbedSubs = subs
       .slice(1)
       .filter((s) => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey);

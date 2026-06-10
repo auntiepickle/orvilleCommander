@@ -800,6 +800,62 @@ describe('renderer.js', () => {
     expect(appState.currentKey).toBe('0');
   });
 
+  test('CON values render in display units; the format spec may live in the tag (live-probed)', () => {
+    // Live ground truth: pedal monitors are statement '' / tag '%2.1f%%' /
+    // value 70.705 (percent, NOT a 0-1 fraction), and assign monitors
+    // report 0-100 against a '%%' statement format. The old renderer sent
+    // pedal CONs down the bar path with the literal format string as their
+    // label, and *100-inflated percent values ('monitor = 10003.00%').
+    appState.currentKey = '10030301';
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10030301',
+        parent: '10030301',
+        statement: 'Pedal 1 setup',
+        tag: 'pedals',
+      },
+      {
+        type: 'CON',
+        position: '10',
+        key: '1003030a',
+        parent: '10030301',
+        statement: '',
+        tag: '%2.1f%%',
+        value: '70.705',
+      },
+      {
+        type: 'CON',
+        position: '1',
+        key: '1001007a',
+        parent: '10030301',
+        statement: 'monitor = %2.2f%%',
+        tag: '%2.1f%%',
+        value: '100.03',
+      },
+      {
+        type: 'CON',
+        position: '2',
+        key: '40090004',
+        parent: '10030301',
+        statement: '',
+        tag: 'Beat',
+        value: '0',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    const text = document.getElementById('lcd').textContent;
+    expect(text).toContain('70.7%'); // tag format applied to the display-unit value
+    expect(text).not.toContain('%2.1f'); // the format string is never a label
+    expect(text).toContain('monitor = 100.03%'); // no *100 inflation
+    expect(text).not.toContain('10003');
+    // A spec-less indicator CON still gets the bar.
+    expect(document.querySelector('.meter-bar')).toBeTruthy();
+    expect(text).toContain('Beat');
+  });
+
   test('render guard: a stale dump never paints under the new key — cached pre-paint (R3/#106)', () => {
     // Live bug: clicking levels while the link is backed up rendered the OLD
     // program menu titled/breadcrumbed as levels for seconds. The guard

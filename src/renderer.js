@@ -597,13 +597,28 @@ export function renderScreen(subs, ascii, logParam) {
         if (isNaN(meterValue)) {
           meterValue = 0; // Default to 0 if invalid value
         }
-        if (/%.*[fs]/.test(s.statement)) {
-          let displayValue = meterValue;
-          if (s.statement.includes('%%')) displayValue *= 100;
-          fullText = formatValue(s.statement, displayValue);
+        // CON display semantics (probed live, device-model §3/§12): values
+        // arrive in DISPLAY units (assign monitors 0-100 with a '%%'
+        // format; file sizes in raw bytes), and the format spec can live
+        // in the TAG when the statement is blank (the pedal monitors:
+        // statement '', tag '%2.1f%%'). The old statement-only check sent
+        // pedal monitors down the bar path with the literal format string
+        // as their label, and the old *100 "percent inflation" assumed 0-1
+        // fractions — live values disprove it ('monitor = %2.2f%%' at
+        // 100.03 rendered as 10003.00%).
+        const conFormat = /%.*[fs]/.test(s.statement)
+          ? s.statement
+          : /%.*[fs]/.test(s.tag)
+            ? s.tag
+            : null;
+        if (conFormat) {
+          fullText = formatValue(conFormat, meterValue);
           if (fullText.includes('%%')) fullText = fullText.replace('%%', '%');
           fullHtml = fullText;
         } else {
+          // No format spec anywhere: an indicator CON (the Tempo 'Beat'
+          // flasher is the only live-observed case) — render the bar,
+          // treating the value as a 0-1 fraction, clamped.
           const tagLength = s.tag.length;
           const barSpace = LAYOUT.LCD_COLUMNS - tagLength - 1;
           let barLength = Math.round(meterValue * barSpace);
@@ -715,10 +730,16 @@ export function renderScreen(subs, ascii, logParam) {
             if (isNaN(meterValue)) {
               meterValue = 0; // Default to 0 if invalid value
             }
-            if (/%.*[fs]/.test(cs.statement)) {
-              let displayValue = meterValue;
-              if (cs.statement.includes('%%')) displayValue *= 100;
-              childFullText = formatValue(cs.statement, displayValue);
+            // Same CON display semantics as the top-level branch (probed
+            // live): format spec may live in the tag; values are display
+            // units, never *100-inflated.
+            const conFormat = /%.*[fs]/.test(cs.statement)
+              ? cs.statement
+              : /%.*[fs]/.test(cs.tag)
+                ? cs.tag
+                : null;
+            if (conFormat) {
+              childFullText = formatValue(conFormat, meterValue);
               if (childFullText.includes('%%')) childFullText = childFullText.replace('%%', '%');
               childFullHtml = childFullText;
             } else {

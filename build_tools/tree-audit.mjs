@@ -276,6 +276,10 @@ for (const [key, node] of colNodes) {
     const valFrag = (p.value || '').trim().slice(0, 20);
     if (!stmtFrag && !tagFrag && !valFrag) continue; // blank spacers: render-skip by design
     if (p.type === 'INF' && !stmtFrag && !valFrag) continue; // pure-format INF, value arrives later
+    // Format-only CON (statement blank, tag IS the format spec — the pedal
+    // monitors): renders as pure formatted value with no stable literal to
+    // match and no data-key (CON display-semantics fix).
+    if (p.type === 'CON' && !stmtFrag && /%.*[fs]/.test(tagFrag)) continue;
     const textHit =
       (stmtFrag && mainText.includes(stmtFrag)) ||
       (p.type === 'INF' && valFrag && mainText.includes(valFrag)) || // INF renders its value

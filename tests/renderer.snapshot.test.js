@@ -394,7 +394,10 @@ describe('renderScreen golden snapshots', () => {
         parent: '10010001',
         statement: 'Level %3.0f%%',
         tag: 'lvl',
-        value: '0.5',
+        // Display units, as the device sends them (probed live: assign
+        // monitors report 0-100 against a '%%' format) — the old synthetic
+        // 0.5 relied on the deleted *100 inflation.
+        value: '50',
         options: [],
       },
     ];

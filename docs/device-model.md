@@ -160,11 +160,17 @@ After the six common fields, trailing fields depend on TYPE:
   options become the choice list; `currentIndex` is **hex** and **0-based** —
   the Programming Manual's `textknob`: "if the 1st selection is made the output
   = 0, if the 3rd, = 2". `[V/D]`
-- **CON** — `value` (continuous; rendered as a bar; meter keys observed to end
+- **CON** — `value` (continuous, read-only; meter keys observed to end
   `0002` — naming convention only, see §5).
   Maps to the documented `monitor`/`hmonitor`/`vmonitor`/`meter` modules, which
-  have their own min/max display specifiers `[D]`; the absolute value range is
-  still `[?]` (we treat ≈0..1).
+  have their own min/max display specifiers `[D]`. **Values arrive in DISPLAY
+  units, not normalized fractions** `[V]` (probed live 2026-06-10): assign/MIDI
+  monitors report `0.033`–`100.03` against a `%%` format (percent, 0–100), file
+  sizes report raw byte counts (`2714`), the sample-rate monitor reports Hz
+  (`48000.398`). **The format spec may live in the TAG slot when the statement
+  is blank** `[V]` — the pedal monitors are `statement ''`, `tag '%2.1f%%'`. A
+  CON with no format spec in either slot is an indicator (only live example:
+  Tempo `Beat`, value `0`), which the app renders as a bar.
 - **TRG** — no value field; fire by `VALUE_PUT <key> 1`. `[V]` (no direct
   documented module — a runtime momentary).
 - **INF** — `value` (read-only). Maps to `monitor`/`tmonitor`/`textblock`. `[V/D]`
@@ -425,9 +431,12 @@ Still open — needs a hardware session or more captures (all minor):
 
 - A *dedicated* read for the active DSP (we can drive/detect it via §8, but no
   single "which DSP" value key has been found).
-- **CON** absolute value range — live meters read ~0 at rest (need an audio
-  signal through the unit to see a non-zero meter), so the wire range is still
-  unconfirmed (we treat ≈0..1).
+- ~~**CON** absolute value range~~ — RESOLVED (2026-06-10 live probe): values
+  are display-unit floats, not normalized fractions — percent monitors span
+  0–100, file sizes raw bytes, sample rate Hz; see §3. (Note the AUDIO level
+  meters on the LEVELS screen are not tree CONs at all — the device draws
+  them straight into the LCD framebuffer; the bitmap path is the only way to
+  see them in the app, probed to depth 3.)
 - The **bank-change SysEx** message format (deferred to the Programming Manual,
   which doesn't spell it out) — capture by watching what the unit emits.
 

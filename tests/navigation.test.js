@@ -1,12 +1,30 @@
 // tests/navigation.test.js
 // Covers toggleDspKey and the C3/#39 keyStack-entry normalization helper.
 
-import { toggleDspKey, makeKeyStackEntry } from '../src/navigation.js';
+import { toggleDspKey, makeKeyStackEntry, softkeyLabel } from '../src/navigation.js';
 
 describe('toggleDspKey', () => {
   test('flips the DSP prefix both ways', () => {
     expect(toggleDspKey('401000b')).toBe('801000b');
     expect(toggleDspKey('801000b')).toBe('401000b');
+  });
+});
+
+describe('softkeyLabel', () => {
+  test('uses the tag when present and within the column budget', () => {
+    expect(softkeyLabel({ tag: 'space', statement: 'space parameters' })).toBe('space');
+  });
+  test('long tags still exclude the child (returns empty)', () => {
+    expect(softkeyLabel({ tag: 'a-very-long-tag', statement: 'x' })).toBe('');
+  });
+  test('derives from the first statement word when the tag is blank (R9)', () => {
+    // Live-validated: the Post D/A Gain wrapper pages have empty tags but
+    // real statements; the device shows them, the old filter dropped them.
+    expect(softkeyLabel({ tag: '', statement: 'Post D/A Gain' })).toBe('Post');
+    expect(softkeyLabel({ tag: '  ', statement: 'MetallicChamber' })).toBe('MetallicCh'); // clipped
+  });
+  test('fully blank nodes stay unlabeled', () => {
+    expect(softkeyLabel({ tag: '', statement: '' })).toBe('');
   });
 });
 

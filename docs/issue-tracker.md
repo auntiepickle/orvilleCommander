@@ -428,12 +428,19 @@ and arrival races; the cure is view DERIVED from the device tree.
       users cannot name anything when saving. Renderer needs an STR branch (text input -> VALUE_PUT of
       the string; confirm put semantics on hardware first). Spec updated: device-model §3 TYPE table now
       documents STR.
-- [ ] R9  (from the tree audit) Empty-tag children are UNREACHABLE: setup's unnamed 100100d0 and
-      'Post D/A Gain' wrapper 10030601 (single empty-tag position-0 child wrapping the actual gain
-      params — the likely home of the missing level meters the maintainer reported). The softkey filter
-      requires a nonempty tag and the embed didn't trigger for 10030601 during the audit (investigate:
-      embed prefetch fired? childSubs arrival timing?). FIX direction: empty-tag single-child wrappers
-      should reliably embed (or get a derived label); audit rerun is the acceptance check.
+- [x] R9  (branch fix/empty-tag-softkey-labels) Empty-tag children UNREACHABLE — FIXED with derived
+      labels: probing showed 10030601 is position 'c' (a new position code, like 'e'), so it was never
+      an embed candidate, and the tag-only softkey filter dropped it; its children (the per-output gain
+      NUM pages, 1003006b/1003006c) were unreachable — the maintainer's missing level params. PHYSICAL
+      GROUND TRUTH: the LEVELS and SETUP screens both show these pages as softkeys (the device derives
+      labels). New navigation.js:softkeyLabel — tag, else first statement word ('Post D/A Gain' ->
+      'Post'); used by the renderer's softkey filters/labels, the bridge descend predicate, the parser
+      fan-out (lockstep: prefetch = navigability), and the fixture helper (Option B expectations track
+      the rule). Side effect: root's fan-out now also prefetches the two presets (statement-labeled).
+      ACCEPTANCE: tree audit rerun — the 10030601 violation is GONE (4 -> 3 violations). RESIDUAL:
+      fully-blank nodes (setup's 100100d0 — statement AND tag empty, children are DSP A/B i/p routing)
+      stay unlabeled and audit-flagged; label policy (derive from children? device shows 'dsp B') is a
+      T1b question. Position 'c' added to device-model §3.
 - [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX. Subordinate to T1's tree model; R5's pacing data (bitmap-in-wave stalls; bank-list fan-out starvation) constrains the request scheduling.
 - [ ] NEW `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
 - [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number

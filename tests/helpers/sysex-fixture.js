@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { splitLine } from '../../src/sysex-split.js';
+import { softkeyLabel } from '../../src/navigation.js';
 
 const FIXTURES_DIR = path.join(process.cwd(), 'tests', 'fixtures');
 
@@ -56,9 +57,9 @@ export function extractExpectedFromRoot(rootBytes) {
   const children = subs.slice(1);
   const dspASub = children.find((s) => s.key.startsWith('4'));
   const dspBSub = children.find((s) => s.key.startsWith('8'));
-  const shortTagCols = children.filter(
-    (s) => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim()
-  );
+  // Mirrors the production navigability rule (navigation.js:softkeyLabel),
+  // so fixture-derived expectations track R9's empty-tag label derivation.
+  const shortTagCols = children.filter((s) => s.type === 'COL' && softkeyLabel(s));
   return {
     dspAKey: dspASub?.key,
     dspBKey: dspBSub?.key,
@@ -88,9 +89,9 @@ export function extractExpectedFromPreset(presetBytes) {
   const subs = decodeSubs(presetBytes);
   const children = subs.slice(1);
   const menusCols = children.filter((s) => s.type === 'COL');
-  const shortTagCols = children.filter(
-    (s) => s.type === 'COL' && s.tag.trim().length <= 10 && s.tag.trim()
-  );
+  // Mirrors the production navigability rule (navigation.js:softkeyLabel),
+  // so fixture-derived expectations track R9's empty-tag label derivation.
+  const shortTagCols = children.filter((s) => s.type === 'COL' && softkeyLabel(s));
   return {
     mainKey: subs[0]?.key,
     mainStatement: subs[0]?.statement,

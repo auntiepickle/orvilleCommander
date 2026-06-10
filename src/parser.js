@@ -1,9 +1,10 @@
 // parser.js
 import { appState } from './state.js';
 import { CMD, KEY, KEY_PREFIX, KEY_SUFFIX, SYSEX } from './sysex-commands.js';
-import { TIMING, LAYOUT } from './constants.js';
+import { TIMING } from './constants.js';
 import { setState } from './store.js';
 import { sendValuePut, sendValueDump, sendObjectInfoDump, notifyResponse } from './midi.js';
+import { softkeyLabel } from './navigation.js';
 import { log } from './logger.js';
 import { denibble } from './bitmap.js';
 import { emit } from './events.js';
@@ -62,16 +63,12 @@ export function parseResponse(data) {
         }
       }
       if (main.key === appState.currentKey) {
-        // Fetch child sub-menus for local COLs if not already fetched
+        // Fetch child sub-menus for navigable COLs if not already fetched
+        // (softkeyLabel keeps the fan-out in lockstep with what the renderer
+        // shows — R9 made empty-tag, statement-labeled children navigable).
         const localSoftSubs = subs
           .slice(1)
-          .filter(
-            (s) =>
-              s.type === 'COL' &&
-              s.tag.trim().length <= LAYOUT.SHORT_TAG_MAX &&
-              s.tag.trim() &&
-              !appState.childSubs[s.key]
-          );
+          .filter((s) => s.type === 'COL' && softkeyLabel(s) && !appState.childSubs[s.key]);
         localSoftSubs.forEach((s) => {
           sendObjectInfoDump(s.key);
           sendValueDump(s.key);

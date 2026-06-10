@@ -1,3 +1,5 @@
+import { LAYOUT } from './constants.js';
+
 /**
  * Toggles a DSP key between '4' (A) and '8' (B) prefixes.
  *
@@ -27,6 +29,25 @@ export function toggleDspKey(key) {
  * makeKeyStackEntry('10010000', setupSubs); // { key: '10010000', tag: 'setup', subs: [...] }
  * makeKeyStackEntry('0', []); // { key: '0', tag: '0', subs: [] }
  */
+/**
+ * Softkey label for a COL child (R9, live-validated): its tag, else the
+ * first word of its statement. Empty-tag children are real, navigable pages
+ * on the device — the physical LEVELS screen shows the Post D/A Gain pages
+ * the old tag-only filter dropped, which made the gain params unreachable in
+ * the app. A long tag (over the softkey column budget) still excludes the
+ * child, as before. Returns '' when nothing can be derived (fully blank
+ * nodes like setup's 100100d0 — a T1b policy question; the tree audit keeps
+ * flagging those).
+ *
+ * @param {Object} s - A parsed sub-object.
+ * @returns {string} Display label, or '' when the child has no usable label.
+ */
+export function softkeyLabel(s) {
+  const tag = (s.tag || '').trim();
+  if (tag) return tag.length <= LAYOUT.SHORT_TAG_MAX ? tag : '';
+  return ((s.statement || '').trim().split(' ')[0] || '').slice(0, LAYOUT.SHORT_TAG_MAX);
+}
+
 export function makeKeyStackEntry(key, subs) {
   const main = (subs && subs[0]) || null;
   const tag =

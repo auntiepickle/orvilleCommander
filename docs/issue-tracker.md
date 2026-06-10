@@ -477,7 +477,7 @@ and arrival races; the cure is view DERIVED from the device tree.
       T1b question. Position 'c' added to device-model §3.
 - [ ] NEW (GH #106) Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX. Subordinate to T1's tree model; R5's pacing data (bitmap-in-wave stalls; bank-list fan-out starvation) constrains the request scheduling.
 - [ ] NEW (GH #106) `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
-- [ ] NEW (GH #106) Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number
+- [x] NEW (GH #106) Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number — shipped with R3 below (branch fix/r3-render-guard)
 HUMAN-GATE: needs-hardware (eager-load throughput on the real unit; offline parse/render half covered by replay harness)
 
 ### Batch 3.3b — Live-loop findings (headless live session, 2026-06-09; maintainer-confirmed symptoms)
@@ -519,10 +519,17 @@ in logs/ (program-screen.png).
       it belongs to the on-screen menu; condition since T1b/#105: tree parentage, parentOf(key) ===
       currentKey) repaints. The embed now appears the moment its data arrives.
       Bridge test pins it (fails pre-fix).
-- [ ] R3  (owned by GH #106, the render guard) Stale-menu render: clicking a menu renders the OLD menu under the NEW key (wrong title and
-      breadcrumb, e.g. "[program] program functions" while currentKey=10030000) until the new dump
-      lands — on a backed-up link that is seconds. This is the "never render an unconfirmed value"
-      invariant violation the 3.3 render guard owns; live evidence captured.
+- [x] R3  (branch fix/r3-render-guard; the GH #106 render-guard half) Stale-menu render FIXED: clicking a
+      menu rendered the OLD menu under the NEW key (wrong title and breadcrumb, e.g. "[program]
+      program functions" while currentKey=10030000) until the new dump landed — seconds on a backed-up
+      link. renderScreen now guards: when subs[0].key !== currentKey it never paints those subs;
+      instead it PRE-PAINTS the tree's cached structure for the navigated-to key (params as inert
+      placeholder lines — format specifiers -> '...', no clickables, no value refetches; COL children
+      stay live softkeys; embeds deferred to the real render), or an honest 'loading ...' title when
+      the tree has never seen the key. The pre-paint pass writes NO state (currentSubs/currentSoftkeys
+      pins stay device-confirmed — also keeps the tree-audit settle honest: it waits for the real
+      dump, never a cache paint). Renderer tests pin both guard paths (fail pre-fix); snapshots
+      unchanged. The eager loader + eagerLoad flag remain the open #106 half.
 - [x] R4  NEW PROTOCOL TYPE observed live: `STR` (string-edit field) — `STR 0 10020052 10020050
       name:%-22s name Favorites` under 'save bank'. SPEC HALF DONE: device-model §3 TYPE table documents
       STR (shipped with the T1a harness PR). The rendering half is R8 below.

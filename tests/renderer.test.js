@@ -787,6 +787,97 @@ describe('renderer.js', () => {
     expect(appState.currentKey).toBe('0');
   });
 
+  test('render guard: a stale dump never paints under the new key — cached pre-paint (R3/#106)', () => {
+    // Live bug: clicking levels while the link is backed up rendered the OLD
+    // program menu titled/breadcrumbed as levels for seconds. The guard
+    // pre-paints the tree's cached structure for the navigated-to key:
+    // params as inert placeholder lines, COL children as live softkeys.
+    appState.currentKey = '10030000';
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10030000',
+        parent: '10030000',
+        statement: 'level functions',
+        tag: 'level',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10030001',
+        parent: '10030000',
+        statement: 'in gain %3.0f dB',
+        tag: '',
+        value: '6',
+      },
+      {
+        type: 'COL',
+        position: '2',
+        key: '10030045',
+        parent: '10030000',
+        statement: 'meter setup',
+        tag: 'meter',
+      },
+    ]);
+    const staleSubs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020000',
+        parent: '10020000',
+        statement: 'program functions',
+        tag: 'program',
+      },
+      {
+        type: 'TRG',
+        position: '1',
+        key: '10020001',
+        parent: '10020000',
+        statement: '<- load program in A',
+        tag: 'load',
+      },
+    ];
+    appState.currentSubs = staleSubs;
+    renderScreen(staleSubs, '', mockLog);
+
+    const lcd = document.getElementById('lcd');
+    // The old menu's content is nowhere in the paint.
+    expect(lcd.textContent).not.toContain('program functions');
+    expect(lcd.textContent).not.toContain('load program');
+    // The cached structure is: title, placeholder param (stale cached value
+    // 6 must NOT render as if confirmed), navigable COL softkey.
+    expect(lcd.textContent).toContain('level functions');
+    expect(lcd.textContent).toContain('in gain ... dB');
+    expect(lcd.textContent).not.toMatch(/in gain\s+6/);
+    expect(document.querySelector('.softkey[data-key="10030045"]')).toBeTruthy();
+    // Placeholder params are inert: no clickable value span for the NUM.
+    expect(document.querySelector('.param-value[data-key="10030001"]')).toBeFalsy();
+    // The pre-paint pass writes no state and fetches nothing: currentSubs
+    // stays device-confirmed (the stale dump) and no value refetch fires.
+    expect(appState.currentSubs).toBe(staleSubs);
+    expect(sendValueDump).not.toHaveBeenCalled();
+  });
+
+  test('render guard: an unknown key pre-paints an honest loading view, never the old menu (R3/#106)', () => {
+    appState.currentKey = '10030000'; // tree has never seen this key
+    const staleSubs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020000',
+        parent: '10020000',
+        statement: 'program functions',
+        tag: 'program',
+      },
+    ];
+    renderScreen(staleSubs, '', mockLog);
+
+    const lcd = document.getElementById('lcd');
+    expect(lcd.textContent).not.toContain('program functions');
+    expect(lcd.textContent).toContain('loading ...');
+  });
+
   test('lcd click on dsp-clickable swaps active preset with a derived stack (T1b)', () => {
     appState.currentKey = '0';
     appState.dspAName = 'Reverb';

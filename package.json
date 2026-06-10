@@ -14,7 +14,9 @@
     "test": "jest",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "tree-audit": "node build_tools/tree-audit.mjs",
+    "live-app": "node build_tools/live-app.mjs"
   },
   "repository": {
     "type": "git",

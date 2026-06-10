@@ -409,16 +409,31 @@ unit" — not one-off handler fixes. R1/R2/R6 were symptoms of view state assemb
 and arrival races; the cure is view DERIVED from the device tree.
 - [~] T1  Tree audit + tree-derived navigation (the maintainer's audit ask: "render the html and audit
       whether we have odd behavior that doesn't get us the full state of a tree and its leaves").
-      NEXT: (a) build the TREE AUDITOR on the headless live harness (logs/live-app.mjs -> promote to
-      build_tools/): walk every COL node bounded by depth + a visited set; at each node compare the
-      rendered LCD against the node's own dump — every tagged COL child present as a softkey or the
-      embed, every param rendered exactly once, no duplicated row sets, breadcrumb = the real ancestor
-      chain; emit violations as a machine-readable report. Run it against the device; file each
-      violation as an R-item. (b) Fold the audit invariants into the eager loader below: navigation
-      state becomes a KEY into the loaded tree; ancestors are COMPUTED from tree parent relations, not
-      recorded click history (keyStack becomes a derived view or is deleted); softkeys, embed, and
-      breadcrumb all derive from tree relations. The auditor then becomes the standing regression
-      harness (merges with G2).
+      (a) DONE — TREE AUDITOR SHIPPED: build_tools/tree-audit.mjs (npm run tree-audit) on the headless
+      harness build_tools/live-app.mjs (both promoted from prototypes). Phase 1 fetches the ground-truth
+      tree raw (sequential OBJECTINFO, one in flight); phase 2 navigates the real app to every COL node
+      with TREE-COMPUTED ancestors and diffs the DOM against the node's dump (child reachability, params
+      rendered exactly once, duplicate softkeys, breadcrumb vs tree parent), draining the link between
+      nodes so backlog can't starve the next audit. Detector exceptions: blank spacers skipped;
+      pure-format INFs match on value; bar CONs match on tag. FIRST FULL RUN (depth 2, 42 nodes,
+      41 audited): 4 violations, all real, 0 false positives -> R8 + R9 below. Report:
+      logs/tree-audit-report.json (gitignored; rerun to regenerate).
+      NEXT: (b) Fold the audit invariants into the eager loader below: navigation state becomes a KEY
+      into the loaded tree; ancestors are COMPUTED from tree parent relations, not recorded click
+      history (keyStack becomes a derived view or is deleted); softkeys, embed, and breadcrumb all
+      derive from tree relations. The auditor is the acceptance harness for that refactor and the
+      standing regression loop afterward (merges with G2).
+- [ ] R8  (from the tree audit; upgrades R4's rendering half) STR string-edit fields are not rendered:
+      'save program' name field (STR 10020023 'name:%-19s') and 'save bank' name field (STR 10020052) —
+      users cannot name anything when saving. Renderer needs an STR branch (text input -> VALUE_PUT of
+      the string; confirm put semantics on hardware first). Spec updated: device-model §3 TYPE table now
+      documents STR.
+- [ ] R9  (from the tree audit) Empty-tag children are UNREACHABLE: setup's unnamed 100100d0 and
+      'Post D/A Gain' wrapper 10030601 (single empty-tag position-0 child wrapping the actual gain
+      params — the likely home of the missing level meters the maintainer reported). The softkey filter
+      requires a nonempty tag and the embed didn't trigger for 10030601 during the audit (investigate:
+      embed prefetch fired? childSubs arrival timing?). FIX direction: empty-tag single-child wrappers
+      should reliably embed (or get a derived label); audit rerun is the acceptance check.
 - [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX. Subordinate to T1's tree model; R5's pacing data (bitmap-in-wave stalls; bank-list fan-out starvation) constrains the request scheduling.
 - [ ] NEW `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
 - [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number

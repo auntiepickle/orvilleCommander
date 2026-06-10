@@ -39,6 +39,19 @@ export const RENDER = {
   LOADING_STATEMENT: 'loading ...',
 };
 
+// Stable-subtree cache policy (#113). Subtrees whose STRUCTURE changes only
+// via enumerable in-app actions may trust cached child dumps across visits;
+// the parser skips their per-visit child fan-out while clean (tree.js owns
+// the dirty state). The program subtree is the one entry: its dumps are the
+// heaviest on the link (the ~70-name bank list is multi-second at 31250
+// baud) and mutate only via save/delete/card/link/name/bank-select puts.
+// `prefix` covers every key in the subtree; `rootKey` is the menu whose
+// child fan-out carries the heavy dumps — clearing dirtiness requires its
+// refetch, so a deep visit while dirty cannot launder staleness.
+export const CACHE = {
+  STABLE_SUBTREES: [{ prefix: '10020', rootKey: '10020000' }],
+};
+
 // Eager structure loader (#106). MAX_DEPTH bounds the breadth-first walk
 // from the active preset: the deepest observed preset menu nesting is 2
 // (menu -> sub-page, e.g. levels -> Post D/A Gain pages); 3 adds one level

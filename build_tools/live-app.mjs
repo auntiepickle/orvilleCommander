@@ -4,7 +4,10 @@
 // drives navigation by dispatching clicks on the rendered LCD and reads the
 // virtual render back. This is the G2 "live self-loop" substrate.
 //
-// Usage: node build_tools/live-app.mjs [walk|stay|load|eager|smoke] [settleMs]
+// Usage: node build_tools/live-app.mjs [walk|stay|load|eager|smoke|prog] [settleMs]
+//   prog (#113): cold-vs-warm program-menu visit measurement — the connect
+//   marks stable subtrees dirty so visit 1 refetches everything (pre-#113
+//   behavior); visit 2 must trust the cache (expect ~2 sends, sub-second).
 //   smoke (#107): wave-saturation measurement — meter polling (real button,
 //   100ms CON VALUE fan) + a 0x18 bitmap fetch every 2s (stands in for
 //   updateBitmapOnChange traffic) for 3 minutes; reports dumpComplete
@@ -95,9 +98,11 @@ const outAdapter = {
 };
 
 // --- connect: mirror main.js selectPorts (not exported) ------------------
+const { markAllStableDirty } = await import('../src/tree.js');
 setMidiPorts(outAdapter, inAdapter, 1);
 addSysexListener();
 document.getElementById('lcd').innerText = 'Connected. Fetching root screen...';
+markAllStableDirty(); // #113: a connect is an explicit re-read
 setState(
   {
     currentKey: KEY.ROOT,
@@ -206,6 +211,47 @@ if (MODE === 'walk') {
   startEagerLoad(KEY.ROOT);
   await sleep(90000);
   console.log('[live] deep-walk window closed (see Eager load complete above for the receipt)');
+} else if (MODE === 'prog') {
+  // #113 acceptance. Measures a visit as: click program, then wait until no
+  // new wave has completed for QUIET_GAP_MS with the menu pinned; report
+  // total sends and elapsed-to-last-wave.
+  const { on } = await import('../src/events.js');
+  const QUIET_GAP_MS = 3000;
+  const VISIT_CAP_MS = 45000;
+  let waves = [];
+  const offWave = on('dumpComplete', (p) => waves.push({ ...p, at: Date.now() }));
+
+  const measureVisit = async (label) => {
+    waves = [];
+    const t0 = Date.now();
+    click('.softkey[data-key="10020000"]') || click('[data-key="10020000"]');
+    while (Date.now() - t0 < VISIT_CAP_MS) {
+      await sleep(250);
+      const lastWaveAt = waves.length ? waves[waves.length - 1].at : t0;
+      if (
+        appState.currentSubs[0]?.key === '10020000' &&
+        waves.length > 0 &&
+        Date.now() - lastWaveAt > QUIET_GAP_MS
+      ) {
+        break;
+      }
+    }
+    const sends = waves.reduce((a, w) => a + w.sendCount, 0);
+    const objectinfos = waves.reduce((a, w) => a + (w.objectinfoSends || 0), 0);
+    const settledMs = waves.length ? waves[waves.length - 1].at - t0 : -1;
+    console.log(
+      `[prog] ${label}: waves=${waves.length} sends=${sends} (objectinfo=${objectinfos}) settled=${settledMs}ms`
+    );
+    const embedSelects = document.querySelectorAll('select.param-select').length;
+    console.log(`[prog] ${label}: embed dropdowns rendered: ${embedSelects}`);
+  };
+
+  await measureVisit('COLD (connect marked the subtree dirty — full refetch)');
+  // Leave via the A preset tab, then return.
+  click(`.dsp-clickable[data-key="${appState.dspAKey}"]`);
+  await sleep(SETTLE * 2);
+  await measureVisit('WARM (clean cache — child fan-out skipped)');
+  offWave();
 } else if (MODE === 'smoke') {
   // #107 wave-saturation smoke. Needs audio into the device so the CONs
   // actually move (value-change traffic, not just empty echoes).

@@ -4,7 +4,7 @@ import { CMD, KEY, KEY_PREFIX, KEY_SUFFIX, SYSEX } from './sysex-commands.js';
 import { TIMING } from './constants.js';
 import { setState } from './store.js';
 import { sendValuePut, sendValueDump, sendObjectInfoDump, notifyResponse } from './midi.js';
-import { recordDump, parentOf, findParamUnder } from './tree.js';
+import { recordDump, parentOf, findParamUnder, isFresh, clearDirtyOnRootRefetch } from './tree.js';
 import { log } from './logger.js';
 import { denibble } from './bitmap.js';
 import { emit } from './events.js';
@@ -78,9 +78,20 @@ export function parseResponse(data) {
             (s) => s.type === 'COL' && !(main.key === KEY.ROOT && s.key.endsWith(KEY_SUFFIX.PRESET))
           );
         localSoftSubs.forEach((s) => {
+          // #113 stable-subtree cache: skip the refetch for children whose
+          // cached dump may be trusted (tree-cached, stable prefix, not
+          // dirty) — the program children include the multi-second bank
+          // list. The dirty path and non-stable subtrees behave as before.
+          if (isFresh(s.key)) {
+            log(`Skipping refetch of fresh stable child ${s.key} (#113)`, 'debug', 'parsedDump');
+            return;
+          }
           sendObjectInfoDump(s.key);
           sendValueDump(s.key);
         });
+        // The subtree root's heavy children were just (re)requested — the
+        // dirty mark, if any, is satisfied. No-op for non-root keys.
+        clearDirtyOnRootRefetch(main.key);
         setState({ lastAscii: ascii }, 'parser:current-key-ascii');
         setState({ currentSubs: subs }, 'parser:current-subs');
         emit('objectinfo:received', { key: main.key, subs, ascii });

@@ -12,7 +12,7 @@
 // is a cache of device-confirmed structure, not view state — view state
 // (currentKey, the derived keyStack) stays on appState.
 
-import { LAYOUT } from './constants.js';
+import { LAYOUT, CACHE } from './constants.js';
 
 // key -> subs array (the node's own dump: main line + direct children).
 const nodes = new Map();
@@ -166,8 +166,63 @@ export function deriveKeyStack(key) {
   }));
 }
 
+// --- Stable-subtree freshness (#113) -------------------------------------
+// Prefixes from CACHE.STABLE_SUBTREES currently marked dirty (a mutating
+// put happened, or an explicit re-read was requested). While a prefix is
+// dirty, isFresh() is false for everything under it — visits refetch as if
+// the policy did not exist — until the subtree ROOT's fan-out re-requests
+// the heavy children and clears it.
+const dirtyStablePrefixes = new Set();
+
+const stableSubtreeOf = (key) => CACHE.STABLE_SUBTREES.find((t) => key.startsWith(t.prefix));
+
+/**
+ * Whether a key's cached dump may be trusted across visits: tree-cached,
+ * under a stable subtree, and that subtree not marked dirty. The parser's
+ * per-visit child fan-out skips OBJECTINFO+VALUE for fresh keys (#113).
+ *
+ * @param {string} key
+ * @returns {boolean}
+ */
+export function isFresh(key) {
+  const t = stableSubtreeOf(key);
+  return t !== undefined && !dirtyStablePrefixes.has(t.prefix) && nodes.has(key);
+}
+
+/**
+ * Marks the key's stable subtree dirty, if it is in one. Called by
+ * sendValuePut — the single chokepoint every in-app mutating action
+ * (TRG/STR/SET/NUM puts) funnels through.
+ *
+ * @param {string} key
+ */
+export function markDirtyIfStable(key) {
+  const t = stableSubtreeOf(key);
+  if (t) dirtyStablePrefixes.add(t.prefix);
+}
+
+/** Marks every stable subtree dirty — explicit re-reads (Sync, reconnect). */
+export function markAllStableDirty() {
+  for (const t of CACHE.STABLE_SUBTREES) dirtyStablePrefixes.add(t.prefix);
+}
+
+/**
+ * Clears the dirty mark for the subtree whose ROOT menu this is — called by
+ * the parser right after that root's child fan-out goes out (the heavy
+ * children are now being re-fetched; newest-dump-wins records them). A
+ * non-root key clears nothing: a deep visit while dirty must not launder
+ * staleness into the rest of the subtree.
+ *
+ * @param {string} key - The menu whose fan-out just ran.
+ */
+export function clearDirtyOnRootRefetch(key) {
+  const t = CACHE.STABLE_SUBTREES.find((s) => s.rootKey === key);
+  if (t) dirtyStablePrefixes.delete(t.prefix);
+}
+
 /** Clears the tree (tests). */
 export function reset() {
   nodes.clear();
   parents.clear();
+  dirtyStablePrefixes.clear();
 }

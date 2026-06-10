@@ -7,6 +7,10 @@ import {
   ancestorsOf,
   findParamUnder,
   labelFor,
+  isFresh,
+  markDirtyIfStable,
+  markAllStableDirty,
+  clearDirtyOnRootRefetch,
   reset,
 } from '../src/tree.js';
 
@@ -107,5 +111,44 @@ describe('tree store (T1b)', () => {
     // Blank node whose children have not loaded: placeholder, never ''.
     recordDump([col('feed0000', 'feed0000', '', ''), col('feed0001', 'feed0000', '', '')]);
     expect(labelFor('feed0000')).toBe('...');
+  });
+
+  describe('stable-subtree freshness (#113 — policy: program prefix 10020, root 10020000)', () => {
+    test('isFresh requires cached + stable + clean; only the subtree ROOT clears dirtiness', () => {
+      expect(isFresh('10020010')).toBe(false); // uncached
+      recordDump([
+        col('10020010', '10020010', 'load new preset', 'load'),
+        num('10020011', '10020010', 'program: %s'),
+      ]);
+      expect(isFresh('10020010')).toBe(true); // cached + stable + clean
+
+      // Cached but NOT in a stable subtree: never fresh (per-visit refetch).
+      recordDump([col('10010000', '10010000', 'setup functions', 'setup')]);
+      expect(isFresh('10010000')).toBe(false);
+
+      // A mutating put anywhere under the prefix dirties the whole subtree.
+      markDirtyIfStable('1002001c'); // the load trigger
+      expect(isFresh('10020010')).toBe(false);
+
+      // A DEEP visit's fan-out must not launder staleness — only the
+      // subtree root's refetch clears.
+      clearDirtyOnRootRefetch('10020010');
+      expect(isFresh('10020010')).toBe(false);
+      clearDirtyOnRootRefetch('10020000');
+      expect(isFresh('10020010')).toBe(true);
+
+      // Puts outside any stable subtree mark nothing.
+      markDirtyIfStable('4070001');
+      expect(isFresh('10020010')).toBe(true);
+    });
+
+    test('markAllStableDirty (Sync/reconnect) distrusts every stable cache; reset clears marks', () => {
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
+      markAllStableDirty();
+      expect(isFresh('10020010')).toBe(false);
+      reset();
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
+      expect(isFresh('10020010')).toBe(true); // reset cleared the dirty mark
+    });
   });
 });

@@ -342,6 +342,44 @@ traffic behind the connect overlay the landing already shows, and blocking
 the UI on a warm-up would invert its purpose. `appState.eagerLoad`
 (midiConfig-persisted, default on) gates the arm.
 
+## Stable-subtree caching — #113 (branch feat/program-subtree-cache)
+
+Maintainer report: "loading program takes a ton of time... only a handful
+of actions can cause a change to program." The program subtree's dumps are
+the heaviest on the link (the ~70-name bank list is multi-second at 31250
+baud) yet its STRUCTURE changes only via an enumerable set of actions — so
+per-visit child refetch (the default freshness policy) is almost always
+wasted there.
+
+**Policy (lives with the cache, `tree.js`):** `CACHE.STABLE_SUBTREES` (one
+entry today: prefix `10020`, root `10020000`) declares subtrees whose
+cached child dumps may be trusted across visits. The parser's per-visit
+child fan-out skips OBJECTINFO+VALUE for a child that `isFresh(key)` —
+tree-cached, under a stable prefix, and the prefix not marked dirty. The
+visited menu's OWN dump is still always refetched (`updateScreen` is
+untouched), so the on-screen menu stays device-fresh; only the heavy child
+prefetch is policy-gated.
+
+**Invalidation (one chokepoint + explicit re-reads):**
+
+- `sendValuePut` marks the key's stable prefix dirty. This covers every
+  in-app mutating action at once: TRG loads/saves/deletes/card ops, STR
+  name edits, AND SET selects — bank selection matters because changing
+  the bank changes the program list the device returns for `10020010`.
+- Sync-to-Hardware and selectPorts (reconnect) mark ALL stable subtrees
+  dirty — the documented answer to front-panel changes made outside the
+  app (the known observability gap).
+- While dirty, every visit under the prefix behaves exactly as today
+  (full child refetch). The prefix is cleared only when the SUBTREE
+  ROOT's fan-out runs (its children are the heavy dumps), so a deep visit
+  while dirty cannot launder staleness into the rest of the subtree.
+
+Values stay per-visit volatile everywhere (C8 semantics unchanged); this
+policy governs structure dumps only. Eager loader unaffected (it already
+skips cached nodes). Acceptance: live before/after of a warm program-menu
+visit (expect ~2 sends and a sub-second wave vs ~18 sends with the
+multi-second bank list), plus a zero-violation tree audit.
+
 ## Validation / open items
 
 - (RESOLVED 2026-06-10) Eager-load throughput on real hardware: production

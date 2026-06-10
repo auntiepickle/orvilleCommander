@@ -185,6 +185,15 @@ describe('parseResponse', () => {
     expect(emit).toHaveBeenCalledWith('value:received', { key: '10030002', immediate: false });
   });
 
+  test('VALUE_DUMP for a loaded non-CON key ending 0002 coalesces (C7/#43)', () => {
+    // Pre-C7 the suffix heuristic forced an immediate render even when the
+    // loaded sub said the key was not a meter. Menu/param keys can end 0002.
+    appState.currentSubs = [{ key: '10010002', type: 'COL' }];
+    appState.childSubs = {};
+    parseResponse(valueDump('10010002 5'));
+    expect(emit).toHaveBeenCalledWith('value:received', { key: '10010002', immediate: false });
+  });
+
   test('VALUE_DUMP for a non-CON child param takes the immediate fallback', () => {
     appState.currentSubs = [];
     appState.childSubs = { 10010071: [{ key: '10010711', type: 'NUM' }] };

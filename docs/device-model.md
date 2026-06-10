@@ -191,10 +191,11 @@ decimal (omit the `.` → 6 decimals); a `textknob`/string field uses `%s`. The
 handles `%-Ns` (left-justified) and `%%` (literal percent) — consistent with
 this family. (Updates the `[V]` in §3 STATEMENT/TAG to `[D]`.)
 
-## 5. Keys & conventions `[V]`
+## 5. Keys & conventions `[V/I]`
 
 Keys are firmware-defined and stable per object; discover them dynamically
-(don't hardcode beyond the handful named in `src/sysex-commands.js`).
+(don't hardcode beyond the handful named in `src/sysex-commands.js`). Items
+below are `[V]` unless marked otherwise.
 
 - `0` — root (`'ORVILLE ROOT OBJECT'`).
 - First char selects the DSP: `4…` = DSP A, `8…` = DSP B.

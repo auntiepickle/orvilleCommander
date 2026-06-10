@@ -184,8 +184,10 @@ tracker B10g.3). The app still issues a value request after a put to reconcile
 rather than trusting an optimistic local write.
 
 `0x2e` response payload is ASCII `"<key> <value…>"`; `parser.js` caches it under
-the key. `CON` values and meter keys trigger an immediate re-render; others are
-coalesced.
+the key. Keys the loaded subs type `CON` (in the current menu or a stored child
+menu) trigger an immediate re-render, as do child-menu params already on screen;
+everything else — including keys absent from every loaded dump — is coalesced
+(C7; see "Key conventions" below for the `0002` naming note).
 
 ## Key conventions
 

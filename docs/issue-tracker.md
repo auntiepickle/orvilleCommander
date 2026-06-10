@@ -157,12 +157,14 @@ reviewer agents swept all of src/; findings consolidated below.
       Covers every inbound SysEx type, not just the screen. Tested (complete pass-through, split reassembly,
       buffer reset on new F0, Uint8Array data). NOT yet verified whether Chrome actually chunks on this device
       (would need an in-browser test against the unit); the fix is correct either way (defensive + matches FB5).
-- [ ] FB7 (NEW, from FB6 review) midi.js addSysexListener can double-register: selectPorts() (main.js) is wired
-      to a button and also auto-runs on cached-config load, and nothing removes the prior 'sysex' listener, so
-      re-selecting ports attaches a second listener -> parseResponse fires twice per message (over-decrements
-      the dump-wave counter, can cause a premature all-received). PRE-EXISTING (the old one-line listener
-      double-fired too); FB6 only carried it forward. FIX: guard re-registration (track an attached flag, or
-      selectedInput.removeListener before re-adding). CODE, low priority.
+- [x] FB7 RESOLVED (branch fix/sysex-listener-reregister): midi.js addSysexListener now tracks the input +
+      handler it attached and removes the previous 'sysex' listener (from whichever input it was on) before
+      adding a new one, so repeated selectPorts runs (button + cached-config auto-run) and input switches
+      can no longer stack listeners -> parseResponse fires exactly once per message and the dump-wave
+      counter decrements once per response (no premature all-received). Done ahead of C1 because C1's
+      dumpComplete consumers depend on accurate wave counting. Tests: re-registration replaces (not stacks)
+      + input-switch detaches from the old input; both fail pre-fix (verified). midi.test mock input now
+      tracks add/removeListener.
 - [x] FB4 RESOLVED (branch fix/dump-watchdog-idle-reset): the midi.js dump watchdog was a fixed 1500ms hard
       ceiling that fired mid-response on large enumerations like the bank list (OBJECTINFO 10020012, ~70 names,
       ~4-6s). Replaced with an idle/silence watchdog (WATCHDOG_IDLE_MS 1500, rearmed on every send and receive)

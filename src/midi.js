@@ -10,6 +10,12 @@ import { TIMING } from './constants.js';
 let selectedOutput = null;
 let selectedInput = null;
 
+// FB7: the input + handler the current 'sysex' listener is attached to, so a
+// re-registration can detach the previous one (selectPorts runs both from the
+// button and from the cached-config auto-run, and may target a new input).
+let sysexListenerInput = null;
+let sysexListenerHandler = null;
+
 // Per-wave request counter and idle-reset watchdog. A wave begins when
 // outstanding transitions 0->1. The watchdog is an idle/silence timer:
 // it is rearmed for WATCHDOG_IDLE_MS on every send AND every received
@@ -149,8 +155,20 @@ export function setMidiPorts(output, input, devId) {
  */
 export function addSysexListener() {
   if (!selectedInput) {
+    // Deliberately does NOT detach the previous listener here: with no new
+    // input to serve, keeping the old one live is the lesser evil, and the
+    // tracked pair is not cleared, so the next successful registration still
+    // detaches it (no leak).
     log('Error: MIDI input not set; cannot add listener', 'error', 'error');
     return;
+  }
+  // FB7: detach the previous listener (from whichever input it was attached
+  // to) before adding a new one. Without this, every selectPorts run stacked
+  // another listener, so parseResponse fired N times per message — each
+  // duplicate decremented the dump-wave counter again (premature
+  // 'all-received') and re-ran the full parse/state fan-out.
+  if (sysexListenerInput && sysexListenerHandler) {
+    sysexListenerInput.removeListener('sysex', sysexListenerHandler);
   }
   // Reassemble multi-packet SysEx before parsing. Chrome's Web MIDI normally
   // delivers a complete F0..F7 message in one event, but a long SysEx can be
@@ -161,7 +179,7 @@ export function addSysexListener() {
   // this is a pass-through. (Matches the CLI capture tool; see
   // docs/protocol.md "Capturing screens (HIL)".)
   let sysexBuffer = [];
-  selectedInput.addListener('sysex', (e) => {
+  const handler = (e) => {
     const data = Array.from(e.data);
     if (data[0] === SYSEX.START) sysexBuffer = data;
     else sysexBuffer = sysexBuffer.concat(data);
@@ -171,7 +189,10 @@ export function addSysexListener() {
       parseResponse(sysexBuffer);
       sysexBuffer = [];
     }
-  });
+  };
+  selectedInput.addListener('sysex', handler);
+  sysexListenerInput = selectedInput;
+  sysexListenerHandler = handler;
 }
 
 /**

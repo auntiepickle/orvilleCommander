@@ -41,8 +41,10 @@ likely to fragment. Both inbound paths therefore reassemble from `F0`
 (`SYSEX.START`) until the `F7` terminator before parsing, and feed the parser one
 complete message — start a new buffer on `F0`, append continuation packets, parse
 on `F7`. When a message already arrives whole this is a pass-through. The browser
-app does this in `midi.js:addSysexListener` (tracker FB6); the CLI capture tool
-does the same (tracker FB5; see **Capturing screens (HIL)** for the
+app does this in `midi.js:addSysexListener` (tracker FB6; exactly one such
+listener is ever attached — re-registration detaches the prior one first,
+tracker FB7); the CLI capture tool does the same (tracker FB5; see
+**Capturing screens (HIL)** for the
 hardware-specific chunk sizes/timing). This applies to *all* inbound types
 (`0x17`, `0x2e`, `0x32`), not just screens.
 
@@ -223,7 +225,11 @@ render-coalescing build on (see
 - Each matching `0x32` / `0x2e` response decrements `outstanding`, via
   `notifyResponse`, which `parser.js` calls at the top of each branch. The
   counter is a pure count — it does not yet correlate responses to requests by
-  key or type.
+  key or type. It therefore depends on each response being parsed exactly once:
+  `addSysexListener` detaches any previously attached `'sysex'` listener before
+  adding a new one, so re-selecting or switching ports cannot stack listeners
+  and double-decrement the counter toward a premature `all-received`
+  (tracker FB7).
 - A wave **ends** one of two ways, both emitting `dumpComplete` with a `reason`:
   - `all-received` — `outstanding` returns to `0` (the healthy path).
   - `watchdog` — the timeout fires (a stall or a runaway wave).

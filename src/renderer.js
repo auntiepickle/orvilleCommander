@@ -277,8 +277,20 @@ const handleParamClick = (e) => {
         // payload is key SPACE value — see the ledger R8 note).
         const title = sub.statement.replace(/%.*s/, '').trim() || sub.tag;
         const currentValue = appState.currentValues[key] ?? sub.value ?? '';
-        const newValue = prompt(`Enter new value for ${title}:`, currentValue);
-        if (newValue !== null && newValue !== '') {
+        const rawValue = prompt(`Enter new value for ${title}:`, currentValue);
+        // Empty string is rejected like prompt-cancel: whether the device
+        // accepts an empty-string PUT (clear semantics) is untested — see
+        // the ledger R8 needs-hardware note.
+        if (rawValue !== null && rawValue !== '') {
+          // SysEx data bytes must be 7-bit: reject non-ASCII rather than
+          // throwing mid-flow with the loading overlay up. Clamp to the
+          // field width from the format (e.g. %-22s) when one is declared.
+          if (!/^[\x20-\x7e]*$/.test(rawValue)) {
+            alert('Only printable ASCII characters can be sent to the device.');
+            return;
+          }
+          const widthMatch = (sub.statement || '').match(/%-?(\d+)s/);
+          const newValue = widthMatch ? rawValue.slice(0, parseInt(widthMatch[1], 10)) : rawValue;
           showLoading();
           sendValuePut(key, newValue);
           setState(

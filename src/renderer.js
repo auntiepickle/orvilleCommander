@@ -1,7 +1,7 @@
 // renderer.js
 import { appState } from './state.js';
 import { CMD, KEY, KEY_PREFIX, ROOT_SOFTKEYS } from './sysex-commands.js';
-import { TIMING, LAYOUT } from './constants.js';
+import { TIMING, LAYOUT, RENDER } from './constants.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { showLoading } from './main.js';
@@ -314,9 +314,14 @@ const handleParamClick = (e) => {
  * formatValue('%3.0f dB', 5.5); // '  6 dB'
  * formatValue('%-10s', 'test', true, 'key123'); // '<span class="param-value" data-key="key123">test      </span>'
  */
+// Every value format specifier the device's statement strings use (%f and %s
+// families plus the literal '%%'); shared by formatValue and the R3
+// pre-paint placeholder substitution.
+const FORMAT_SPEC_RE = /%(-)?(\d*)(\.\d*)?f|%(-)?(\d*)s|%/g;
+
 function formatValue(statement, value, isHtml = false, key = '') {
   return statement.replace(
-    /%(-)?(\d*)(\.\d*)?f|%(-)?(\d*)s|%/g,
+    FORMAT_SPEC_RE,
     (match, fLeftFlag, fWidthStr, precStr, sLeftFlag, sWidthStr) => {
       if (match === '%') return '%';
       if (fLeftFlag !== undefined || fWidthStr !== undefined || precStr !== undefined) {
@@ -356,13 +361,72 @@ function formatValue(statement, value, isHtml = false, key = '') {
  * @example
  * renderScreen(parsedSubs, asciiDump, log);
  */
+// R3 (#106): true while renderScreen is repainting from the tree cache
+// because the navigated-to key's live dump has not landed yet. The pre-paint
+// pass renders structure (title, breadcrumb, COL softkeys) but inert
+// placeholder lines for params — no clickable values, no value refetches
+// (the real render issues those), and NO currentSubs render-pin, so
+// currentSubs stays device-confirmed (and the tree audit settles on the
+// real dump, never on a cache paint).
+let prePainting = false;
+
+// A param line with every value slot blanked to the placeholder: the
+// statement (else the tag) with format specifiers substituted; '%%'
+// collapses to a literal '%' (each '%' matches the bare-% alternative
+// individually, so the pair needs the same explicit collapse the CON
+// render path applies).
+const placeholderLine = (s) =>
+  (s.statement || s.tag || '')
+    .replace(FORMAT_SPEC_RE, (m) => (m === '%' ? '%' : RENDER.VALUE_PLACEHOLDER))
+    .replace('%%', '%');
+
 export function renderScreen(subs, ascii, logParam) {
   const lcdEl = document.getElementById('lcd');
   if (!subs || subs.length === 0) {
     log('Skipping render: no subs available', 'debug', 'renderScreen');
     return;
   }
-  setState({ currentSubs: subs }, 'renderer:render-pin');
+  // R3 render guard (#106): these subs describe a DIFFERENT node than the
+  // one navigated to — the new key's dump is still in flight. Never paint
+  // the old menu under the new key (live bug: "[program] program functions"
+  // titled as levels for seconds on a backed-up link). Pre-paint the tree's
+  // cached structure instead, or an honest loading title when the tree has
+  // never seen the key.
+  if (!prePainting && subs[0]?.key !== appState.currentKey) {
+    // Root with no cached dump: the ROOT render branch never displays a
+    // title and filters the main sub out of its softkey rows, so the
+    // synthetic loading node would paint a blank screen. Keeping the old
+    // DOM beats painting nothing — skip the paint entirely (the root dump
+    // is always the connect flow's first fetch, so this is a cold-start
+    // corner only).
+    if (appState.currentKey === KEY.ROOT && !getNode(KEY.ROOT)) {
+      log('Render guard (R3): root not cached yet; skipping paint', 'debug', 'renderScreen');
+      return;
+    }
+    const cached = getNode(appState.currentKey) || [
+      {
+        type: 'COL',
+        position: '0',
+        key: appState.currentKey,
+        parent: appState.currentKey,
+        statement: RENDER.LOADING_STATEMENT,
+        tag: '',
+      },
+    ];
+    log(
+      `Render guard (R3): dump for ${subs[0]?.key} != current ${appState.currentKey}; pre-painting ${getNode(appState.currentKey) ? 'cached structure' : 'loading view'}`,
+      'debug',
+      'renderScreen'
+    );
+    prePainting = true;
+    try {
+      renderScreen(cached, '', logParam);
+    } finally {
+      prePainting = false;
+    }
+    return;
+  }
+  if (!prePainting) setState({ currentSubs: subs }, 'renderer:render-pin');
   const main = subs[0];
   if (!main) {
     log('Skipping render: main sub undefined', 'debug', 'renderScreen');
@@ -441,11 +505,19 @@ export function renderScreen(subs, ascii, logParam) {
       titleHtml = `<span class="back-link" data-key="${parent.key}">[${parent.tag}]</span> ${titleText.replace(`[${parent.tag}] `, '')}`;
     }
     displayLines.push(titleText);
-    // Group graphic EQ NUMs with position 'a'
+    // Group graphic EQ NUMs with position 'a'. The pre-paint pass keeps the
+    // grouped one-line layout (placeholder values, no fetches) so the real
+    // render doesn't collapse N lines into one when the dump lands (R3).
     const graphicEqSubs = subs.slice(1).filter((s) => s.type === 'NUM' && s.position === 'a');
     let graphicEqLine;
     let graphicEqHtml;
-    if (graphicEqSubs.length > 0) {
+    if (graphicEqSubs.length > 0 && prePainting) {
+      const line = graphicEqSubs
+        .map((s) => `${s.tag.split(':')[0]}: ${RENDER.VALUE_PLACEHOLDER}`)
+        .join(' ');
+      paramLines.push(line);
+      paramHtmlLines.push(line);
+    } else if (graphicEqSubs.length > 0) {
       const formattedParts = graphicEqSubs.map((s) => {
         const value = appState.currentValues[s.key] || s.value;
         if (appState.currentValues[s.key] === undefined) sendValueDump(s.key); // empty string = confirmed-absent, do not refetch (C1 review)
@@ -467,6 +539,19 @@ export function renderScreen(subs, ascii, logParam) {
       paramHtmlLines.push(graphicEqHtml);
     }
     subs.slice(1).forEach((s) => {
+      if (prePainting) {
+        // R3: one inert placeholder line per param — no clickable spans,
+        // no selects, and no value refetches (the real render issues those
+        // when the live dump lands). 'a'-positioned NUMs already rendered
+        // as the grouped graphic-EQ placeholder line above.
+        if (s.type === 'COL' || s.type === '8' || s.position === 'a') return;
+        const text = placeholderLine(s);
+        if (text) {
+          paramLines.push(text);
+          paramHtmlLines.push(text);
+        }
+        return;
+      }
       if (s.position === 'a') return; // Skip individual 'a' after grouping
       let fullText = '';
       let fullHtml = '';
@@ -556,10 +641,15 @@ export function renderScreen(subs, ascii, logParam) {
     // and the embedded UI varied run to run. The physical PROGRAM page is
     // the ground truth: the first child ('load new preset') is the menu's
     // default view.
-    let potentialEmbedSubs = subs
-      .slice(1)
-      .filter((s) => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey)
-      .slice(0, 1);
+    // Embeds are a real-render concern: the pre-paint pass keeps every COL
+    // child a softkey (no embedded child params, whose values would also be
+    // unconfirmed) — R3.
+    let potentialEmbedSubs = prePainting
+      ? []
+      : subs
+          .slice(1)
+          .filter((s) => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey)
+          .slice(0, 1);
     let embeddedKey = null;
     // T1b: the parser fan-out fetches ALL COL children of the current menu,
     // so the embed candidate is always covered - the R6/R9 prefetch (which
@@ -666,7 +756,12 @@ export function renderScreen(subs, ascii, logParam) {
     } else {
       softSubs = localSoftSubs;
     }
-    if (softSubs.length > 0) {
+    // Pre-paint passes write no state at all (R3): the softkey pin, like
+    // the currentSubs pin, records only device-confirmed renders. (Note:
+    // currentSoftkeys currently has no reader in src — clicks resolve via
+    // data-key attributes — so during a pre-paint window the DOM's softkeys
+    // intentionally lead this pin; revisit if a consumer is ever added.)
+    if (softSubs.length > 0 && !prePainting) {
       setState({ currentSoftkeys: softSubs }, 'renderer:render-pin');
     }
     // Build current/sibling soft text lines (lower level first)

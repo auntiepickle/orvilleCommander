@@ -30,6 +30,15 @@ export const LAYOUT = {
   SHORT_TAG_MAX: 10, // max tag length treated as a softkey-eligible COL
 };
 
+// R3 render guard (#106): pre-paint presentation for nodes whose live dump
+// has not landed yet. The placeholder substitutes for every value format
+// specifier ('...' matches the tree's blank-label placeholder); the loading
+// statement is the synthetic title when the tree has never seen the key.
+export const RENDER = {
+  VALUE_PLACEHOLDER: '...',
+  LOADING_STATEMENT: 'loading ...',
+};
+
 // Canvas presentation for the bitmap screen (CSS, cosmetic only).
 export const CANVAS = {
   CSS_WIDTH: '480px',

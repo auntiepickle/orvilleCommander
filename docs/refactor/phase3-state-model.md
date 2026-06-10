@@ -291,6 +291,24 @@ old fixed 15s cap flagged one spurious no-render while the program
 subtree's bank-list backlog was still draining, the R5 congestion class;
 app-side request scheduling stays with #106.)
 
+## R3 render guard — pre-paint from the tree (#106 first half; branch fix/r3-render-guard)
+
+The "never render unconfirmed state as confirmed" invariant, made concrete:
+`renderScreen` refuses to paint subs whose main key differs from
+`currentKey` (a stale dump while the navigated-to key's response is in
+flight). It pre-paints instead: the tree's cached node for `currentKey` —
+title + breadcrumb real, COL children as live softkeys, every param line
+inert with format specifiers replaced by `RENDER.VALUE_PLACEHOLDER` (no
+clickable spans/selects, no value refetches — the real render owns those) —
+or a synthetic `RENDER.LOADING_STATEMENT` node when the tree has never seen
+the key. Pre-paint passes write no state: the `currentSubs`/
+`currentSoftkeys` render-pins record device-confirmed renders only, which
+also keeps the tree-audit settle condition honest (it waits for the real
+dump, never a cache paint). Embeds are deferred to the real render (their
+child params would also be unconfirmed). The remaining #106 half — eager
+loader, `eagerLoad` flag, request scheduling from R5's data — is unchanged
+by this and builds on the same tree.
+
 ## Validation / open items
 
 - Eager-load throughput on real hardware (many `OBJECTINFO`/`VALUE` round

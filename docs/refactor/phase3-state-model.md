@@ -148,6 +148,59 @@ the wave to drain. The replay test asserts the synchronous structure paint
 and deliberately leaves its wave open (wave state resets on the next fresh
 wave start).
 
+## C2 design — connect/landing without timers (next to implement)
+
+What C2 replaces (main.js `selectPorts` today): request root, then a
+`PORT_INIT_MS` (500ms) `setTimeout` that blindly flips `currentKey` to the
+*cached* preset and sets the sticky global `autoLoad=true` flag, which the
+renderer's autoload branch later consumes to descend one menu. C1 removed the
+wrong-landing symptom; C2 removes the mechanism — both the timer and the flag.
+
+**Landing flow (event-driven, one-shot):**
+
+1. `selectPorts`: set ports + listener, `showLoading`, request root
+   (`OBJECTINFO('0')` + `VALUE('0')`). Set a one-shot app-view landing state
+   (e.g. `pendingLanding = 'root'`). No timer, no `autoLoad` write.
+2. On `objectinfo:received` with `key === '0'` while `pendingLanding ===
+   'root'`: the parser has already adopted authoritative DSP keys/names from
+   the dump. Land: push the root keyStack entry
+   (`makeKeyStackEntry('0', currentSubs)`), set `currentKey` to the active
+   DSP's preset key **from the root dump** (`dspAKey`/`dspBKey`, chosen by the
+   app-side active-DSP view state — fold Batch 3.2's "persist active DSP
+   (default A)" item in here; the cached `presetKey` becomes a pre-paint hint
+   only), advance `pendingLanding = 'preset'`, `updateScreen()`. Then issue
+   the other-DSP prefetch and optional `0x18`, as today.
+3. On `objectinfo:received` for the preset while `pendingLanding ===
+   'preset'`: clear `pendingLanding`; if the preset top has no params and >1
+   short-tag COL menus, descend once into the first (exactly what the
+   autoload branch did, but triggered by explicit landing state, not a sticky
+   flag read by every render). The renderer autoload branch and the
+   `autoLoad` field are then deleted; the remaining `autoLoad=true` writers
+   (LCD click handlers) switch to the same one-shot descend-on-next-dump
+   state.
+4. Failure path (folds in the C1-review watchdog item): if `dumpComplete`
+   fires `reason='watchdog'` while a landing is pending, do NOT land from
+   stale state — clear `pendingLanding`, keep the "Connected. Fetching root…"
+   text, log the stall. Sync/reconnect retries. With no sticky `autoLoad`
+   flag there is nothing for a stall render to mis-consume; this subsumes the
+   "watchdog dumpComplete mid-navigation autoload" ledger item for the
+   navigation case too once the flag is gone.
+5. Out of scope for C2 (stays in 3.3): the cached structure-only pre-paint,
+   the eager loader, `eagerLoad` flag, and the unconfirmed-value render
+   guard.
+
+**Tests:** startup characterization updated in the same commit — its inline
+select-ports simulation loses the 500ms advance entirely (feed root → landing
+fires synchronously → feed preset → explicit descend → feed landed menu →
+`dumpComplete`); the `autoLoad` snapshot field in the recorder is replaced by
+the landing state. Renderer tests for the descend-state replacement of the
+autoload branch (fail-on-old via the deleted flag).
+
+**Hardware validation (one consolidated session, after 3.3 is also coded):**
+live connect on the real 31250-baud link (root dump arrival time vs the old
+500ms guess; landing correctness), the wave-saturation smoke (polling +
+bitmap-on-change vs the 10s watchdog ceiling), and eager-load throughput.
+
 ## Validation / open items
 
 - Eager-load throughput on real hardware (many `OBJECTINFO`/`VALUE` round

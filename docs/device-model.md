@@ -98,9 +98,11 @@ TYPE  POSITION  KEY  PARENT  STATEMENT  TAG  [type-specific…]
 Tokenized like a shell line: whitespace-separated, single/double quotes group a
 multi-word field (so `'space parameters'` is one token). This is `splitLine` in
 `src/sysex-split.js`. **Quoting invariant** `[V]` (D1/#118): the device quotes
-a value iff it contains a space — verified across all 52 captured fixture
-lines and hardware STR-put echoes (#104) — so positional parsing is safe;
-`parseSubObject`'s hex-child-count canary logs if this ever breaks (§8).
+any value containing a space (and quotes empty values) — verified across all
+52 captured fixture lines and hardware STR-put echoes (#104) — so positional
+parsing is safe. `parseSubObject`'s canary (a COL line's trailing field must
+be a non-empty hex child count) logs the earliest symptom of a COL-line
+break; a break confined to a param line is not detected (§8).
 
 On the object's **own** line, the `PARENT` field echoes the object's **own key**
 (self-referential), not its real parent — verified across every captured dump,
@@ -353,13 +355,16 @@ distinct ids; id 0 = broadcast (§1).
   10040000 '' ''` — no children, no trailing count field) and its `VALUE`
   returns an empty value. An empty/reserved leaf; render-skip is correct.
 - **Quoting is need-based, and that IS the invariant** `[V]` (D1/#118,
-  resolves the old "inconsistent" reading) — the device quotes a value iff
-  it contains a space: `'Black Hole'` quoted, `MetallicChamber` bare,
-  verified across all 52 captured fixture lines and on hardware for
-  multi-word STR puts (#104, quoted echoes). Positional `splitLine` parsing
-  is therefore safe; `parseSubObject` carries a canary (a COL line's
-  trailing field must be hex — a non-hex token there is the earliest
-  symptom of a field shift) that logs loudly if the invariant ever breaks.
+  resolves the old "inconsistent" reading) — the device quotes any value
+  containing a space, and quotes empty values: `'Black Hole'` quoted,
+  `MetallicChamber` bare, `''` for blank tags; verified across all 52
+  captured fixture lines and on hardware for multi-word STR puts (#104,
+  quoted echoes). Positional `splitLine` parsing is therefore safe;
+  `parseSubObject` carries a canary (a COL line's trailing field must be a
+  NON-EMPTY hex child count — non-hex or missing means a field shift) that
+  logs the earliest symptom of a COL-line break. Honest scope: a break
+  confined to a param line (e.g. an unquoted multi-word SET option) is not
+  detected.
 - **Framing** `[V]` — OBJECTINFO uses CRLF lines + trailing NUL; VALUE_DUMP does
   not (see §1).
 - **Screen dump carries a checksum** `[V]` — the trailing byte is a sum-to-zero

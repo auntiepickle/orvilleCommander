@@ -445,6 +445,17 @@ describe('parseResponse', () => {
       'error',
       'error'
     );
+
+    // The motivating shape (review finding): a TWO-word unquoted name with
+    // a quoted-empty tag shifts '' into the count slot — empty must fire
+    // too (every observed COL line carries a count).
+    mockLog.mockClear();
+    parseSubObject("COL 0 401000b 0 Black Hole '' 0");
+    expect(mockLog).toHaveBeenCalledWith(
+      expect.stringContaining('Suspect COL line'),
+      'error',
+      'error'
+    );
   });
 
   test('handles screen dump (bitmap) and calls renderBitmap', () => {

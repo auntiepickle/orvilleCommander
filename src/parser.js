@@ -280,15 +280,18 @@ export function parseSubObject(line) {
     value = parts[6] || '';
   }
   // D1 (#118) field-shift canary. Positional parsing is safe because the
-  // device QUOTES any value containing a space — verified across all 52
-  // captured fixture lines (multi-word statements like 'Black Hole' always
-  // quoted, single words like MetallicChamber bare) and on hardware for
-  // multi-word STR puts (#104, quoted echoes). If that invariant ever
-  // breaks, fields shift: a COL line's trailing field is its HEX child
-  // count (e.g. setup's 'f' = 15), so a non-hex token there is the
-  // earliest detectable symptom — log loudly instead of corrupting every
-  // downstream consumer silently.
-  if (type === 'COL' && value && !/^[0-9a-f]+$/i.test(value)) {
+  // device QUOTES any value containing a space (and quotes empty values) —
+  // verified across all 52 captured fixture lines (multi-word statements
+  // like 'Black Hole' always quoted, single words like MetallicChamber
+  // bare) and on hardware for multi-word STR puts (#104, quoted echoes).
+  // If that invariant breaks on a COL line, fields shift: the trailing
+  // field is its HEX child count (e.g. setup's 'f' = 15) on every observed
+  // COL line, so a non-hex OR MISSING token there is the earliest
+  // detectable symptom (a two-word unquoted name shifts a quoted-empty tag
+  // into this slot — review finding) — log loudly instead of corrupting
+  // downstream consumers silently. Scope honesty: this detects COL-line
+  // breaks only; a break confined to a param line is not detected.
+  if (type === 'COL' && !/^[0-9a-f]+$/i.test(value)) {
     log(
       `Suspect COL line (non-hex child count — unquoted multi-word field shift? D1/#118): ${line}`,
       'error',

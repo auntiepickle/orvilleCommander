@@ -1,6 +1,6 @@
 // renderer.js
 import { appState } from './state.js';
-import { CMD, KEY, KEY_PREFIX, ROOT_SOFTKEYS } from './sysex-commands.js';
+import { CMD, KEY, KEY_PREFIX, PARAM_TYPES, ROOT_SOFTKEYS } from './sysex-commands.js';
 import { TIMING, LAYOUT } from './constants.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
@@ -46,7 +46,7 @@ const handleLcdClick = (e) => {
     const patch = {
       presetKey: newPresetKey,
       currentKey: newPresetKey,
-      autoLoad: true,
+      pendingDescend: true,
       currentSoftkeys: [], // Clear softkeys on DSP switch; childSubs cleared by updateScreen below
     };
     if (
@@ -77,7 +77,7 @@ const handleLcdClick = (e) => {
           {
             currentKey: newKey,
             paramOffset: 0,
-            autoLoad: true,
+            pendingDescend: true,
           },
           'renderer:lcd-click-softkey-sibling'
         );
@@ -98,7 +98,7 @@ const handleLcdClick = (e) => {
         ],
         currentKey: newKey,
         paramOffset: 0, // Reset offset for new menu
-        autoLoad: true,
+        pendingDescend: true,
       },
       'renderer:lcd-click-softkey-descend'
     );
@@ -109,7 +109,7 @@ const handleLcdClick = (e) => {
       {
         keyStack: appState.keyStack.slice(0, -1),
         currentKey: clickedKey,
-        autoLoad: true,
+        pendingDescend: true,
         currentSoftkeys: [],
       },
       'renderer:lcd-click-back'
@@ -482,9 +482,7 @@ export function renderScreen(subs, ascii, logParam) {
       }
     });
     // Append only the first child sub-menu inline if available
-    const hasNonColParams = subs
-      .slice(1)
-      .some((s) => ['NUM', 'SET', 'CON', 'TRG', 'INF'].includes(s.type));
+    const hasNonColParams = subs.slice(1).some((s) => PARAM_TYPES.includes(s.type));
     localSoftSubs = subs
       .slice(1)
       .filter(
@@ -827,38 +825,10 @@ export function renderScreen(subs, ascii, logParam) {
   // Remove and re-add the event listener to ensure only one is active
   lcdEl.removeEventListener('click', handleLcdClick);
   lcdEl.addEventListener('click', handleLcdClick);
-  // Auto load first menu if applicable
-  const hasParams = subs.slice(1).some((s) => ['NUM', 'SET', 'CON', 'TRG', 'INF'].includes(s.type));
-  if (appState.autoLoad && !hasParams) {
-    setState({ autoLoad: false }, 'renderer:autoload-clear');
-    const softSubsLocal = subs
-      .slice(1)
-      .filter(
-        (s) => s.type === 'COL' && s.tag.trim().length <= LAYOUT.SHORT_TAG_MAX && s.tag.trim()
-      );
-    if (softSubsLocal.length > 1) {
-      log(
-        `Auto-loading first menu: ${softSubsLocal[0].key} - ${softSubsLocal[0].tag}`,
-        'info',
-        'general'
-      );
-      // Source the keyStack parent entry from the `subs` this render was invoked
-      // with, not the global appState.currentSubs. The render-pin at the top of
-      // renderScreen keeps the global == subs today, but reading the param is
-      // correct-by-construction and stays right if a stale/newer dump ever
-      // diverges the global from this render's input (C5 / #41). currentKey stays
-      // global: it is the key being loaded (e.g. the preset), distinct from
-      // subs[0] (the rendered page's main object).
-      setState(
-        {
-          keyStack: [...appState.keyStack, makeKeyStackEntry(appState.currentKey, subs)],
-          currentKey: softSubsLocal[0].key,
-        },
-        'renderer:autoload-descend'
-      );
-      updateScreen();
-    }
-  } else if (appState.autoLoad) {
-    setState({ autoLoad: false }, 'renderer:autoload-clear');
-  }
+  // The auto-descend into a COL-only menu's first child no longer lives here:
+  // C2 (#38) replaced the sticky autoLoad flag this branch consumed with a
+  // one-shot pendingDescend, consumed in event-bridge.js when the dump for
+  // the navigated-to menu ARRIVES — a render (including a stale re-render)
+  // can no longer trigger navigation. That also retires the C5 (#41)
+  // staleness class this function had to defend against.
 }

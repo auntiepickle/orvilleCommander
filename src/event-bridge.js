@@ -1,9 +1,8 @@
 // src/event-bridge.js
 //
 // Step 7 parser <-> renderer handoff, rebuilt on dumpComplete (Phase 3.1,
-// C1/#37). The old per-message timer stack (RENDER_COALESCE_MS setTimeout
-// chains + a shared lodash debounce + the render:request indirection) is
-// gone; midi.js's request-wave tracking is the render clock now.
+// C1/#37), now also home to the connect-landing / one-shot-descend state
+// machine (C2/#38). midi.js's request-wave tracking is the render clock.
 //
 // Render triggers — exactly two:
 //   1. objectinfo:received with key === currentKey: the PROGRESSIVE
@@ -14,12 +13,20 @@
 //      confirmed state once. Value-only waves (meter poll ticks, value
 //      refetches) render here — one render per wave, not per message.
 //
-// A render that itself issues requests (missing values, embed prefetch)
-// opens a new wave whose drain triggers the next settled paint; the loop
-// converges when a render issues no new requests. value:received is still
-// emitted by the parser (C7 classification, pinned by tests) but the bridge
-// no longer consumes it; isLoadingPreset is deleted (C4/#40) — hideLoading
-// is driven solely by dumpComplete.
+// Navigation one-shots (C2 — replaces the PORT_INIT_MS timer and the sticky
+// autoLoad flag; see docs/refactor/phase3-state-model.md "C2 design"):
+//   - pendingLanding === 'root' + the root dump arrives: adopt the dump's
+//     authoritative DSP keys (parser already wrote them), push the root
+//     keyStack entry, navigate to the active DSP's preset (A/B chosen by the
+//     persisted presetKey prefix — the cached KEY itself is only a hint),
+//     prefetch the other DSP, optional screen fetch.
+//   - pendingDescend + the currentKey dump arrives: consume the one-shot;
+//     if the menu is COL-only with >1 short-tag children, descend once into
+//     the first (the old autoload semantics, but triggered by the dump for
+//     the navigated-to menu — never by a stale render).
+//   - A watchdog dumpComplete clears both one-shots: never land or descend
+//     from stale state, and a pending descend must not fire on a much
+//     later, unrelated dump.
 //
 // hideLoading is injected via registerEventBridge({ hideLoading }) rather
 // than imported from main.js — that injection severs the would-be
@@ -31,9 +38,14 @@
 // teardown in afterEach to prevent cross-test subscriber leakage.
 
 import { on } from './events.js';
-import { renderScreen } from './renderer.js';
+import { renderScreen, updateScreen } from './renderer.js';
 import { renderBitmap } from './bitmap.js';
 import { appState } from './state.js';
+import { setState } from './store.js';
+import { sendObjectInfoDump, sendSysEx } from './midi.js';
+import { makeKeyStackEntry, toggleDspKey } from './navigation.js';
+import { CMD, KEY, KEY_PREFIX, PARAM_TYPES } from './sysex-commands.js';
+import { LAYOUT } from './constants.js';
 import { log } from './logger.js';
 
 export function registerEventBridge({ hideLoading }) {
@@ -49,14 +61,72 @@ export function registerEventBridge({ hideLoading }) {
   };
 
   unsubscribers.push(
-    on('objectinfo:received', ({ key }) => {
+    on('objectinfo:received', ({ key, subs }) => {
       if (key === appState.currentKey) render();
+
+      // C2 landing: the root dump arrived while a connect is pending.
+      // selectPorts reset currentKey to root, so the progressive root paint
+      // above has already happened; now navigate to the active preset.
+      if (key === KEY.ROOT && appState.pendingLanding === 'root') {
+        const activeIsB = appState.presetKey.startsWith(KEY_PREFIX.DSP_B);
+        const landKey = activeIsB ? appState.dspBKey : appState.dspAKey;
+        setState(
+          {
+            pendingLanding: 'preset',
+            pendingDescend: true,
+            keyStack: [...appState.keyStack, makeKeyStackEntry(KEY.ROOT, appState.currentSubs)],
+            currentKey: landKey,
+            presetKey: landKey,
+          },
+          'bridge:landing-root'
+        );
+        updateScreen(log);
+        sendObjectInfoDump(toggleDspKey(landKey)); // other-DSP prefetch
+        if (appState.fetchBitmap) {
+          sendSysEx(CMD.GET_SCREEN, []);
+          log('Fetched initial preset screen.', 'info', 'general');
+        }
+        return; // currentKey changed; nothing below applies to this dump
+      }
+
+      // C2 one-shot descend: the dump for the menu we navigated to arrived.
+      // Uses the dump's own subs (the parser gate guarantees subs[0].key ===
+      // currentKey here), so the descend can never read a stale render.
+      if (key === appState.currentKey && appState.pendingDescend && subs) {
+        setState({ pendingDescend: false, pendingLanding: null }, 'bridge:descend-consume');
+        const children = subs.slice(1);
+        const hasParams = children.some((s) => PARAM_TYPES.includes(s.type));
+        const softSubsLocal = children.filter(
+          (s) => s.type === 'COL' && s.tag.trim().length <= LAYOUT.SHORT_TAG_MAX && s.tag.trim()
+        );
+        if (!hasParams && softSubsLocal.length > 1) {
+          log(
+            `Auto-loading first menu: ${softSubsLocal[0].key} - ${softSubsLocal[0].tag}`,
+            'info',
+            'general'
+          );
+          setState(
+            {
+              keyStack: [...appState.keyStack, makeKeyStackEntry(appState.currentKey, subs)],
+              currentKey: softSubsLocal[0].key,
+            },
+            'bridge:descend'
+          );
+          updateScreen(log);
+        }
+      }
     })
   );
 
   unsubscribers.push(
     on('dumpComplete', (payload) => {
       render();
+      // A stalled wave invalidates any pending one-shot: do not land or
+      // descend from stale state (C2 design step 4).
+      if (payload?.reason === 'watchdog' && (appState.pendingLanding || appState.pendingDescend)) {
+        setState({ pendingLanding: null, pendingDescend: false }, 'bridge:landing-stall-clear');
+        log('Wave stalled with a pending landing/descend; cleared.', 'error', 'error');
+      }
       // Clear the loading indicator only when the wave carried OBJECTINFO
       // (structure) requests — i.e. it could be the wave a navigation or
       // refresh opened — or when the watchdog gave up (never strand the

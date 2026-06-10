@@ -1,14 +1,21 @@
 // tests/event-bridge.test.js
 // Pins the C1 (#37) bridge contract directly: exactly two render triggers
 // (objectinfo:received for the current key; dumpComplete), hideLoading driven
-// solely by dumpComplete (C4/#40), and teardown unsubscribing everything.
+// solely by dumpComplete (C4/#40), teardown unsubscribing everything, and the
+// C2 (#38) landing / one-shot-descend state machine.
 
 jest.mock('../src/renderer.js', () => ({
   renderScreen: jest.fn(),
+  updateScreen: jest.fn(),
 }));
 
 jest.mock('../src/bitmap.js', () => ({
   renderBitmap: jest.fn(),
+}));
+
+jest.mock('../src/midi.js', () => ({
+  sendObjectInfoDump: jest.fn(),
+  sendSysEx: jest.fn(),
 }));
 
 jest.mock('../src/logger.js', () => ({
@@ -16,8 +23,10 @@ jest.mock('../src/logger.js', () => ({
 }));
 
 import { registerEventBridge } from '../src/event-bridge.js';
-import { renderScreen } from '../src/renderer.js';
+import { renderScreen, updateScreen } from '../src/renderer.js';
 import { renderBitmap } from '../src/bitmap.js';
+import { sendObjectInfoDump, sendSysEx } from '../src/midi.js';
+import { CMD } from '../src/sysex-commands.js';
 import { appState } from '../src/state.js';
 import { emit } from '../src/events.js';
 
@@ -28,10 +37,20 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
   beforeEach(() => {
     renderScreen.mockClear();
     renderBitmap.mockClear();
+    updateScreen.mockClear();
+    sendObjectInfoDump.mockClear();
+    sendSysEx.mockClear();
     hideLoading = jest.fn();
     appState.currentKey = '10010000';
     appState.currentSubs = [{ key: '10010000', type: 'COL', parent: '10010000' }];
     appState.lastAscii = 'COL 0 10010000 10010000 setup setup';
+    appState.pendingLanding = null;
+    appState.pendingDescend = false;
+    appState.keyStack = [];
+    appState.presetKey = '401000b';
+    appState.dspAKey = '401000b';
+    appState.dspBKey = '801000b';
+    appState.fetchBitmap = true;
     teardown = registerEventBridge({ hideLoading });
   });
 
@@ -85,6 +104,138 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     const rawBytes = [1, 2, 3];
     emit('screen:received', { rawBytes });
     expect(renderBitmap).toHaveBeenCalledWith('lcd-canvas', rawBytes);
+  });
+
+  test('landing: the root dump navigates to the active preset (C2/#38)', () => {
+    appState.currentKey = '0';
+    appState.currentSubs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '0',
+        parent: '0',
+        statement: 'ORVILLE ROOT OBJECT',
+        tag: 'ORVILLE',
+      },
+    ];
+    appState.pendingLanding = 'root';
+    emit('objectinfo:received', { key: '0', subs: appState.currentSubs });
+
+    expect(appState.currentKey).toBe('401000b'); // presetKey prefix '4' -> dspAKey
+    expect(appState.presetKey).toBe('401000b');
+    expect(appState.pendingLanding).toBe('preset');
+    expect(appState.pendingDescend).toBe(true);
+    expect(appState.keyStack).toHaveLength(1);
+    expect(appState.keyStack[0]).toMatchObject({ key: '0', tag: 'ORVILLE' });
+    expect(updateScreen).toHaveBeenCalledTimes(1);
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('801000b'); // other-DSP prefetch
+    expect(sendSysEx).toHaveBeenCalledWith(CMD.GET_SCREEN, []); // fetchBitmap on
+  });
+
+  test('landing honors the persisted DSP B choice via the presetKey prefix', () => {
+    appState.currentKey = '0';
+    appState.presetKey = '801000b'; // cached hint: B was active
+    appState.pendingLanding = 'root';
+    emit('objectinfo:received', { key: '0', subs: appState.currentSubs });
+
+    expect(appState.currentKey).toBe('801000b'); // landed on the dump's dspBKey
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('401000b'); // prefetch A
+  });
+
+  test('descend one-shot: a COL-only menu dump descends once into its first child', () => {
+    appState.currentKey = '401000b';
+    appState.pendingDescend = true;
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '401000b',
+        parent: '401000b',
+        statement: 'Black Hole',
+        tag: '',
+      },
+      {
+        type: 'COL',
+        position: '0',
+        key: '4040001',
+        parent: '401000b',
+        statement: 'space parameters',
+        tag: 'space',
+      },
+      {
+        type: 'COL',
+        position: '0',
+        key: '4050001',
+        parent: '401000b',
+        statement: 'in eq parameters',
+        tag: 'in eq',
+      },
+    ];
+    appState.currentSubs = subs;
+    emit('objectinfo:received', { key: '401000b', subs });
+
+    expect(appState.currentKey).toBe('4040001');
+    expect(appState.pendingDescend).toBe(false);
+    expect(appState.pendingLanding).toBe(null);
+    expect(appState.keyStack).toHaveLength(1);
+    expect(appState.keyStack[0]).toMatchObject({ key: '401000b' });
+    expect(updateScreen).toHaveBeenCalledTimes(1);
+
+    // One-shot: the same dump arriving again must not descend further.
+    updateScreen.mockClear();
+    appState.currentSubs = subs;
+    emit('objectinfo:received', { key: appState.currentKey, subs });
+    expect(updateScreen).not.toHaveBeenCalled();
+  });
+
+  test('descend consumes without descending when the menu has params', () => {
+    appState.currentKey = '10010001';
+    appState.pendingDescend = true;
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010001',
+        parent: '10010001',
+        statement: 'Input',
+        tag: 'input',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10010011',
+        parent: '10010001',
+        statement: 'lvl %3.0f',
+        tag: '',
+        value: '5',
+      },
+      {
+        type: 'COL',
+        position: '2',
+        key: '10010012',
+        parent: '10010001',
+        statement: 'Sub',
+        tag: 'sub',
+      },
+    ];
+    emit('objectinfo:received', { key: '10010001', subs });
+
+    expect(appState.pendingDescend).toBe(false);
+    expect(appState.currentKey).toBe('10010001'); // no descend
+    expect(updateScreen).not.toHaveBeenCalled();
+  });
+
+  test('a watchdog dumpComplete clears pending one-shots (no stale landing/descend)', () => {
+    appState.pendingLanding = 'root';
+    appState.pendingDescend = true;
+    emit('dumpComplete', { reason: 'watchdog' });
+
+    expect(appState.pendingLanding).toBe(null);
+    expect(appState.pendingDescend).toBe(false);
+
+    // A later dump for the current key must not land or descend.
+    emit('objectinfo:received', { key: appState.currentKey, subs: appState.currentSubs });
+    expect(updateScreen).not.toHaveBeenCalled();
   });
 
   test('teardown unsubscribes all listeners', () => {

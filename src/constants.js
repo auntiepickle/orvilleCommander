@@ -13,7 +13,6 @@ export const TIMING = {
   PROGRAM_SET_MS: 300, // extra wait to ensure a program value is set
   DEVICE_LOAD_MS: 500, // wait for the device to process a preset load
   VALUE_DUMP_WAIT_MS: 500, // wait for a VALUE_DUMP to arrive after a change
-  PORT_INIT_MS: 500, // delay after auto-selecting cached ports at boot
   POLL_INTERVAL_MS: 500, // meter-polling re-request interval
   REDUMP_MS: 200, // parser re-dump after the Favorites re-order fix
   WATCHDOG_IDLE_MS: 1500, // dump-complete idle/silence watchdog, rearmed on each send and receive;

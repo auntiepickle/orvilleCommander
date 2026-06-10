@@ -4,16 +4,8 @@ import { CMD, KEY } from './sysex-commands.js';
 import { TIMING, DEFAULT_LOG_CATEGORIES } from './constants.js';
 import { loadConfig, saveConfig, clearConfig, mergeLogCategories } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
-import {
-  setMidiPorts,
-  addSysexListener,
-  sendSysEx,
-  sendValueDump,
-  sendValuePut,
-  sendObjectInfoDump,
-} from './midi.js';
+import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut } from './midi.js';
 import { updateScreen } from './renderer.js';
-import { toggleDspKey, makeKeyStackEntry } from './navigation.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { denibble, renderBitmap } from './bitmap.js';
@@ -146,28 +138,26 @@ function selectPorts() {
   addSysexListener();
   log('Ports selected and listener added. Device ID set to ' + devId, 'info', 'general');
   lcdEl.innerText = 'Connected. Fetching root screen...';
+  showLoading();
+  // C2 (#38): reset the view to root BEFORE requesting, then arm the one-shot
+  // landing. selectPorts is re-runnable (button + cached-config auto-run);
+  // the reset forces the parser's full root branch on reconnect (background
+  // root dumps do not update currentSubs, so landing from a navigated-deep
+  // state would pair the root keyStack entry with stale subs). The landing
+  // itself — adopt DSP keys/names, navigate to the active preset, prefetch
+  // the other DSP, optional screen fetch — fires in event-bridge.js when the
+  // root dump arrives. No timer, no autoLoad flag.
+  setState(
+    {
+      currentKey: KEY.ROOT,
+      keyStack: [],
+      currentSubs: [],
+      pendingLanding: 'root',
+      pendingDescend: false,
+    },
+    'main:select-ports-reset'
+  );
   updateScreen(log);
-  setTimeout(() => {
-    setState(
-      {
-        keyStack: [
-          ...appState.keyStack,
-          makeKeyStackEntry(appState.currentKey, appState.currentSubs),
-        ],
-        currentKey: appState.presetKey,
-        autoLoad: true,
-      },
-      'main:select-ports-init'
-    );
-    updateScreen(log);
-    sendObjectInfoDump(toggleDspKey(appState.presetKey));
-    if (appState.fetchBitmap) {
-      sendSysEx(CMD.GET_SCREEN, []);
-      log('Fetched initial preset screen.', 'info', 'general');
-    } else {
-      log('Bitmap fetch disabled; skipped initial preset screen dump.', 'info', 'bitmap');
-    }
-  }, TIMING.PORT_INIT_MS);
 }
 
 connectBtn.addEventListener('click', () => connectMidi());

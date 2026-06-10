@@ -609,9 +609,13 @@ in logs/ (program-screen.png).
       the bar path (literal '%2.1f%%' as label + pegged-full bar from 70.7 clamped into 0-1), and
       the *100 'percent inflation' rendered 'monitor = 10003.00%'. Fix in both CON render sites
       (top-level + embed): format detection falls back to the tag; *100 deleted; bar path remains
-      for spec-less indicator CONs only (Tempo 'Beat'). Audit detector: format-only-CON exception
-      (pure-value render, no stable literal). device-model §3 + §12 updated; CON snapshot input
-      corrected to display units. NOTE: audio LEVEL meters are NOT tree CONs (device draws them
+      for spec-less indicator CONs only (Tempo 'Beat'). Review hardening: '%%' now collapses to '%'
+      via FORMAT_SPEC_RE's leading alternative on EVERY param path — the live LCD used to show
+      'mod rate :  60 %%' because only the CON branch collapsed post-hoc; CON format detection uses
+      the tight CON_FORMAT_RE (a literal '%' can't be misread as a format). Audit detector: format-
+      only CONs are checked against a PATTERN derived from their format (specs -> a number) instead
+      of skipped blind, so total disappearance still flags. device-model §3 + §12 updated; CON
+      snapshot input corrected to display units. NOTE: audio LEVEL meters are NOT tree CONs (device draws them
       into the LCD framebuffer; bitmap path only — probed to depth 3).
 NOTE: C2 landing validated LIVE end to end on this session: root dump -> landing -> descend ->
 'space parameters' with values matching the physical LCD capture (logs/hil-shot.png). Perf reported

@@ -843,6 +843,15 @@ describe('renderer.js', () => {
         tag: 'Beat',
         value: '0',
       },
+      {
+        type: 'NUM',
+        position: '3',
+        key: '40a0001',
+        parent: '10030301',
+        statement: 'mod rate  : %3.0f %%',
+        tag: '',
+        value: '60',
+      },
     ];
     renderScreen(subs, '', mockLog);
 
@@ -851,6 +860,10 @@ describe('renderer.js', () => {
     expect(text).not.toContain('%2.1f'); // the format string is never a label
     expect(text).toContain('monitor = 100.03%'); // no *100 inflation
     expect(text).not.toContain('10003');
+    // '%%' collapses on EVERY param path now (the live LCD used to show
+    // 'mod rate :  60 %%' — the collapse lived only in the CON branch).
+    expect(text).toContain('60 %');
+    expect(text).not.toContain('%%');
     // A spec-less indicator CON still gets the bar.
     expect(document.querySelector('.meter-bar')).toBeTruthy();
     expect(text).toContain('Beat');

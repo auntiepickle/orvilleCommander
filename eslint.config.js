@@ -36,13 +36,21 @@ export default [
     },
   },
   {
-    files: ['build_tools/**/*.js', 'vite.config.js'],
+    files: ['build_tools/**/*.js', 'build_tools/**/*.mjs', 'vite.config.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: { ...globals.node },
     },
     rules: { 'no-console': 'off' },
+  },
+  {
+    // The headless live harness + tree auditor create a jsdom document and
+    // publish it on globalThis before importing the app module graph.
+    files: ['build_tools/live-app.mjs', 'build_tools/tree-audit.mjs'],
+    languageOptions: {
+      globals: { ...globals.node, document: 'writable' },
+    },
   },
   {
     files: ['**/*.cjs'],

@@ -139,6 +139,9 @@ function selectPorts() {
   log('Ports selected and listener added. Device ID set to ' + devId, 'info', 'general');
   lcdEl.innerText = 'Connected. Fetching root screen...';
   showLoading();
+  // NOTE: this reset block is hand-mirrored in build_tools/live-app.mjs and
+  // build_tools/tree-audit.mjs (selectPorts is not exported) - update those
+  // when changing it.
   // C2 (#38): reset the view to root BEFORE requesting, then arm the one-shot
   // landing. selectPorts is re-runnable (button + cached-config auto-run);
   // the reset forces the parser's full root branch on reconnect (background

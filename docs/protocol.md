@@ -184,8 +184,10 @@ tracker B10g.3). The app still issues a value request after a put to reconcile
 rather than trusting an optimistic local write.
 
 `0x2e` response payload is ASCII `"<key> <value…>"`; `parser.js` caches it under
-the key. `CON` values and meter keys trigger an immediate re-render; others are
-coalesced.
+the key. Keys the loaded subs type `CON` (in the current menu or a stored child
+menu) trigger an immediate re-render, as do child-menu params already on screen;
+everything else — including keys absent from every loaded dump — is coalesced
+(C7; see "Key conventions" below for the `0002` naming note).
 
 ## Key conventions
 
@@ -198,7 +200,9 @@ Structural patterns on otherwise-dynamic keys:
 
 - `KEY_PREFIX.DSP_A` (`'4'`) / `KEY_PREFIX.DSP_B` (`'8'`) — first char selects the DSP.
 - `KEY_SUFFIX.PRESET` (`'000b'`) — a preset/DSP root key.
-- `KEY_SUFFIX.METER` (`'0002'`) — a meter parameter (immediate re-render).
+- Meter parameters are observed to end `'0002'` (see `device-model.md` §5), but
+  the app classifies meters by their `CON` type from loaded dumps, not by key
+  suffix — menu keys can end `0002` too (C7).
 
 ## Request/response tracking — the dump wave (app-side)
 

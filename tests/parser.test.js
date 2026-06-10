@@ -157,24 +157,50 @@ describe('parseResponse', () => {
     );
   });
 
-  test('VALUE_DUMP for a meter key (endsWith 0002) takes the immediate fallback', () => {
-    appState.currentSubs = []; // no matching sub
-    parseResponse(valueDump('10030002 0.8'));
-    expect(emit).toHaveBeenCalledWith('value:received', { key: '10030002', immediate: true });
+  test('VALUE_DUMP for a CON sub stored in childSubs emits an immediate render (C7/#43)', () => {
+    appState.currentSubs = []; // meter lives in an embedded child menu, not the top level
+    appState.childSubs = {
+      4040002: [
+        { key: '4040002', type: 'COL' },
+        { key: '4070002', type: 'CON' },
+      ],
+    };
+    parseResponse(valueDump('4070002 0.5'));
+    expect(emit).toHaveBeenCalledWith('value:received', { key: '4070002', immediate: true });
     expect(mockLog).toHaveBeenCalledWith(
-      expect.stringContaining('Fallback triggered for meter or child key 10030002'),
+      expect.stringContaining('Immediate re-rendered screen for CON value change on key 4070002'),
       'debug',
-      'general'
+      'renderScreen'
     );
   });
 
-  test('VALUE_DUMP for a child param takes the immediate fallback', () => {
+  test('VALUE_DUMP for an unknown key coalesces — 0002 suffix alone is not a meter (C7/#43)', () => {
+    // Pre-C7 the endsWith('0002') heuristic forced an immediate render here.
+    // A key absent from every loaded dump has no on-screen line an immediate
+    // render could update, and menu keys can end 0002 too; type is the truth.
+    appState.currentSubs = [];
+    appState.childSubs = {};
+    parseResponse(valueDump('10030002 0.8'));
+    expect(appState.currentValues['10030002']).toBe('0.8');
+    expect(emit).toHaveBeenCalledWith('value:received', { key: '10030002', immediate: false });
+  });
+
+  test('VALUE_DUMP for a loaded non-CON key ending 0002 coalesces (C7/#43)', () => {
+    // Pre-C7 the suffix heuristic forced an immediate render even when the
+    // loaded sub said the key was not a meter. Menu/param keys can end 0002.
+    appState.currentSubs = [{ key: '10010002', type: 'COL' }];
+    appState.childSubs = {};
+    parseResponse(valueDump('10010002 5'));
+    expect(emit).toHaveBeenCalledWith('value:received', { key: '10010002', immediate: false });
+  });
+
+  test('VALUE_DUMP for a non-CON child param takes the immediate fallback', () => {
     appState.currentSubs = [];
     appState.childSubs = { 10010071: [{ key: '10010711', type: 'NUM' }] };
     parseResponse(valueDump('10010711 7'));
     expect(emit).toHaveBeenCalledWith('value:received', { key: '10010711', immediate: true });
     expect(mockLog).toHaveBeenCalledWith(
-      expect.stringContaining('Fallback triggered for meter or child key 10010711'),
+      expect.stringContaining('Fallback triggered for child param key 10010711'),
       'debug',
       'general'
     );

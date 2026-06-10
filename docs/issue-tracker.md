@@ -280,7 +280,7 @@ HUMAN-GATE: none
       renderer.test forces a divergent stale global (no-op setter) to prove the descend reads the param —
       verified fail-on-old / pass-on-fix. RESIDUAL (minor, follow-up): the entry's `key` still reads the global
       appState.currentKey, the same staleness class, but no param carries the loaded key.
-- [x] C8  (branch fix/childsubs-nav-clear, GH #44) FINDING: the filed premise ("some nav paths bypass the
+- [x] C8  (branch fix/childsubs-nav-clear, GH #44, PR #85) FINDING: the filed premise ("some nav paths bypass the
       clear") no longer holds — every nav path (LCD clicks, keypress controls, sync, connect, polling)
       funnels through updateScreen(), which clears childSubs+currentValues unconditionally and predates the
       refactor. Cross-menu stale stores were also already blocked by the parser guard, but only implicitly
@@ -295,9 +295,21 @@ HUMAN-GATE: none
       its parent — verified across all 8 OBJECTINFO fixtures). RESIDUAL (defer to C1): a VALID child dump
       can be dropped if a stale re-render re-pins currentSubs before it lands — harmless (next updateScreen
       refetch self-heals); request-correlated dumpComplete events are the real fix.
-- [ ] C7  Replace endsWith('0002') meter heuristic with a protocol-based check (GH #43 — "heuristic
-      masquerading as protocol"; literal already named KEY_SUFFIX.METER in #57, deeper fix = detect CON-type
-      from loaded subs rather than key suffix; needs more VALUE_DUMP coverage first)
+- [x] C7  (branch refactor/meter-con-type-check, GH #43) Replaced the endsWith('0002') meter heuristic with
+      a type-based check: a VALUE_DUMP takes the CON immediate-render path iff the loaded subs type the key
+      CON — looked up in currentSubs or any stored childSubs (the type comes from OBJECTINFO; non-CON child
+      params keep their separate immediate fallback). Behavior change confined to 0002-suffixed keys that
+      are neither typed CON in a loaded dump nor stored child params — chiefly keys absent from every
+      loaded dump, which now coalesce (an unknown key has no on-screen line an immediate render could
+      update, and menu keys can end 0002 too — the snapshot suite itself uses 10010002 as a COL key), plus
+      the narrow case of a top-level non-CON key ending 0002, which now coalesces with its menu instead of
+      rendering immediately on the suffix alone. Loaded meters keep identical behavior: top-level CONs hit
+      the CON branch as before; child-menu CONs were already immediate via the child-param fallback and now
+      classify as CON proper. KEY_SUFFIX.METER removed from sysex-commands.js (the suffix no longer drives
+      logic); the observed 0002 naming convention stays documented in device-model.md §4/§5 (downgraded to
+      [I]: naming convention, not a type guarantee) and protocol.md. Tests: child-CON immediate +
+      unknown-key coalesce pinned (the latter fails pre-C7). VALUE_DUMP-coverage precondition was met by
+      Batch 0.3's 0x2e characterization.
 - [ ] NEW Persist active DSP (A/B) app-side as view state (default A)
 HUMAN-GATE: none
 

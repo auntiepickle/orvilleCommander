@@ -157,7 +157,8 @@ After the six common fields, trailing fields depend on TYPE:
   options become the choice list; `currentIndex` is **hex** and **0-based** —
   the Programming Manual's `textknob`: "if the 1st selection is made the output
   = 0, if the 3rd, = 2". `[V/D]`
-- **CON** — `value` (continuous; rendered as a bar; meter keys end `0002`).
+- **CON** — `value` (continuous; rendered as a bar; meter keys observed to end
+  `0002` — naming convention only, see §5).
   Maps to the documented `monitor`/`hmonitor`/`vmonitor`/`meter` modules, which
   have their own min/max display specifiers `[D]`; the absolute value range is
   still `[?]` (we treat ≈0..1).
@@ -190,15 +191,18 @@ decimal (omit the `.` → 6 decimals); a `textknob`/string field uses `%s`. The
 handles `%-Ns` (left-justified) and `%%` (literal percent) — consistent with
 this family. (Updates the `[V]` in §3 STATEMENT/TAG to `[D]`.)
 
-## 5. Keys & conventions `[V]`
+## 5. Keys & conventions `[V/I]`
 
 Keys are firmware-defined and stable per object; discover them dynamically
-(don't hardcode beyond the handful named in `src/sysex-commands.js`).
+(don't hardcode beyond the handful named in `src/sysex-commands.js`). Items
+below are `[V]` unless marked otherwise.
 
 - `0` — root (`'ORVILLE ROOT OBJECT'`).
 - First char selects the DSP: `4…` = DSP A, `8…` = DSP B.
 - Suffix `000b` — a preset/DSP root (`401000b` A, `801000b` B).
-- Suffix `0002` — a meter parameter.
+- Suffix `0002` — observed on meter parameters `[I]` (naming convention, not a
+  type guarantee: non-meter keys can end `0002` — e.g. menu keys at child slot
+  2. The app classifies meters by `CON` type from dumps, not by suffix).
 - Function menus: setup `10010000`, program `10020000`, level `10030000`,
   bypass `10030500`.
 - Load menu: program select `10020011`, bank select `10020012`, load triggers

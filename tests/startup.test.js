@@ -413,7 +413,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
 
       // Root fan-out (short-tag COLs × 2 MIDI calls each). Order follows
       // fixture order; derived from rootShortTagKeys for Option B robustness.
-      ...expectedRoot.rootShortTagKeys.flatMap((k) => [
+      ...expectedRoot.rootFanOutKeys.flatMap((k) => [
         `midi:objectinfo:${k}`,
         `midi:valuedump:${k}`,
       ]),

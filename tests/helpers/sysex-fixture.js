@@ -67,6 +67,9 @@ export function extractExpectedFromRoot(rootBytes) {
     dspBName: dspBSub?.statement,
     firstShortTagCOLKey: shortTagCols[0]?.key,
     rootShortTagKeys: shortTagCols.map((s) => s.key),
+    // The parser's ROOT fan-out additionally excludes the presets (header
+    // tabs; the connect landing fetches the active one itself — R9 review).
+    rootFanOutKeys: shortTagCols.filter((s) => !s.key.endsWith('000b')).map((s) => s.key),
     // Full subs array length including main and any non-COL entries (e.g.,
     // the type=8 sub in the current Black Hole/MetallicChamber capture).
     // This is what parser.js passes to renderScreen, so it matches the

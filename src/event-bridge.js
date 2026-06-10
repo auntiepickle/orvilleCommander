@@ -113,7 +113,7 @@ export function registerEventBridge({ hideLoading }) {
         const softSubsLocal = children.filter((s) => s.type === 'COL' && softkeyLabel(s));
         if (!hasParams && softSubsLocal.length > 1) {
           log(
-            `Auto-loading first menu: ${softSubsLocal[0].key} - ${softSubsLocal[0].tag}`,
+            `Auto-loading first menu: ${softSubsLocal[0].key} - ${softkeyLabel(softSubsLocal[0])}`,
             'info',
             'general'
           );

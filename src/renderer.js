@@ -529,14 +529,14 @@ export function renderScreen(subs, ascii, logParam) {
       .filter((s) => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey)
       .slice(0, 1);
     let embeddedKey = null;
-    // Proactively fetch the embed candidate ONLY when the parser's short-tag
-    // fan-out will not already fetch it (long/empty tag) — otherwise this
+    // Proactively fetch the embed candidate ONLY when the parser's fan-out
+    // will not already fetch it (no derivable label) — otherwise this
     // duplicated the same request in the same wave on every navigation, and
     // on 'program functions' the duplicated key is the giant bank list
-    // (R6 review).
+    // (R6 review; predicate kept in lockstep with softkeyLabel per R9).
     if (potentialEmbedSubs.length > 0) {
       const cand = potentialEmbedSubs[0];
-      const fanOutCovers = cand.tag.trim() && cand.tag.trim().length <= LAYOUT.SHORT_TAG_MAX;
+      const fanOutCovers = Boolean(softkeyLabel(cand));
       if (!fanOutCovers && !appState.childSubs[cand.key]) {
         sendObjectInfoDump(cand.key, logParam);
       }

@@ -66,9 +66,19 @@ export function parseResponse(data) {
         // Fetch child sub-menus for navigable COLs if not already fetched
         // (softkeyLabel keeps the fan-out in lockstep with what the renderer
         // shows — R9 made empty-tag, statement-labeled children navigable).
+        // At ROOT the presets are excluded: they render as header tabs, not
+        // softkeys, and the connect landing fetches the active one itself —
+        // prefetching here only duplicated both presets' requests at connect
+        // and re-fired their child fan-outs (R9 review).
         const localSoftSubs = subs
           .slice(1)
-          .filter((s) => s.type === 'COL' && softkeyLabel(s) && !appState.childSubs[s.key]);
+          .filter(
+            (s) =>
+              s.type === 'COL' &&
+              softkeyLabel(s) &&
+              !appState.childSubs[s.key] &&
+              !(main.key === KEY.ROOT && s.key.endsWith(KEY_SUFFIX.PRESET))
+          );
         localSoftSubs.forEach((s) => {
           sendObjectInfoDump(s.key);
           sendValueDump(s.key);

@@ -412,14 +412,15 @@ Discovered by running the REAL app module graph headless (jsdom + @julusian/midi
 real parser/bridge/renderer) against the powered Orville — no browser. Harness prototype:
 logs/live-app.mjs (gitignored); promote to build_tools/ as part of G2. Physical ground-truth captures
 in logs/ (program-screen.png).
-- [ ] R1  CRITICAL UX (maintainer: "can't set the machine's program"): renderScreen drops ALL
-      position-0 COL children from the softkey row when the menu has any param — the
-      `if (hasNonColParams) localSoftSubs.filter(s => s.position !== '0')` holdover. 'program functions'
-      (one TRG + 8 position-0 COLs) renders with NO load/save/update/... softkeys -> the load-new-preset
-      UI (bank/program SETs + LOAD TRGs, confirmed arriving in childSubs) is unreachable. GROUND TRUTH:
-      the physical PROGRAM screen shows the banks/programs selectors with load/save/update/delete
-      softkeys. FIX candidate: delete the filter — the embed flow already excludes the embedded key
-      explicitly; verify against snapshots, then live.
+- [x] R1  (branch fix/softkey-position-filter) CRITICAL UX FIXED (maintainer: "can't set the machine's
+      program"): deleted the holdover that dropped ALL position-0 COL children from the softkey row
+      whenever the menu had any param — 'program functions' (one TRG + 8 position-0 COLs) rendered with
+      no access to its own children. The embed flow's own embeddedKey filter is the only exclusion needed.
+      VERIFIED LIVE with the headless harness: program menu now shows load/save/update/card/delete/
+      savebank/del bank/link (matching the physical PROGRAM screen capture), and descending into 'load
+      new preset' renders BOTH SET dropdowns (70 banks / 28 programs) + the load-into-A/B TRGs — the
+      full program-set UI works end to end on hardware. Renderer test pins the shape (fails pre-fix);
+      no existing snapshot changed (none covered the mixed shape).
 - [ ] R2  Duplicate softkey row sets (maintainer report): the static bottom root softkeys take the
       DESCEND branch, so the keyStack grows without bound (2 -> 6 in one four-click walk) and the
       previous menu becomes the "parent" entry — its COL row set renders twice (once from stale

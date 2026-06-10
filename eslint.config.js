@@ -3,7 +3,7 @@ import globals from 'globals';
 import prettier from 'eslint-config-prettier';
 
 export default [
-  { ignores: ['node_modules/**', 'combine/**', 'dist/**', '**/__snapshots__/**'] },
+  { ignores: ['node_modules/**', 'combine/**', 'dist/**', '**/__snapshots__/**', 'logs/**'] },
   js.configs.recommended,
   {
     // Phase 1 cleanup is complete, so these are hard errors now. Prefix an

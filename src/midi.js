@@ -155,6 +155,10 @@ export function setMidiPorts(output, input, devId) {
  */
 export function addSysexListener() {
   if (!selectedInput) {
+    // Deliberately does NOT detach the previous listener here: with no new
+    // input to serve, keeping the old one live is the lesser evil, and the
+    // tracked pair is not cleared, so the next successful registration still
+    // detaches it (no leak).
     log('Error: MIDI input not set; cannot add listener', 'error', 'error');
     return;
   }

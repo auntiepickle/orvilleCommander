@@ -151,7 +151,7 @@ describe('midi.js SysEx byte contract', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     output = { sendSysex: jest.fn() };
-    setMidiPorts(output, { addListener: jest.fn() }, 0);
+    setMidiPorts(output, { addListener: jest.fn(), removeListener: jest.fn() }, 0);
   });
 
   afterEach(() => {
@@ -166,7 +166,7 @@ describe('midi.js SysEx byte contract', () => {
   });
 
   test('sendSysEx uses the configured device id', () => {
-    setMidiPorts(output, { addListener: jest.fn() }, 7);
+    setMidiPorts(output, { addListener: jest.fn(), removeListener: jest.fn() }, 7);
     sendSysEx(0x18, []);
     expect(output.sendSysex).toHaveBeenCalledWith([0x1c, 0x70], [0x07, 0x18]);
   });

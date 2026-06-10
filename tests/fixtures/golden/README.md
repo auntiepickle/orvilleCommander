@@ -30,7 +30,7 @@ To regenerate a golden after an intentional decoder change:
 
     node build_tools/render-screen.js tests/fixtures/screen-<name>.txt tests/fixtures/golden/screen-<name>.png 1
 
-To recapture from hardware (must be on the physical console, not RDP — see
-issue-tracker.md B10g.4):
+To recapture from hardware (the HIL tool is documented in issue-tracker.md
+B10g.4):
 
     node build_tools/hil-screenshot.cjs --press <key> --name screen-<name> --png logs/<name>.png

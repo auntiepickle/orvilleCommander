@@ -104,7 +104,7 @@ Sub-object types in the ASCII dump: `COL` (column/menu), `NUM`, `SET`, `CON` (co
 
 ## Where state lives
 
-Almost all runtime state is on `appState` (state.js). The exception: `logger.js` owns its own log level and per-category visibility as private module state (defaults from `constants.DEFAULT_LOG_CATEGORIES`), set via `setLogLevel` / `setLogCategories`. This was moved off `appState` (C6) so `logger.js` no longer imports `state.js`, breaking the `store` → `logger` → `state` → `store` import cycle. Everything persistent is in `localStorage.midiConfig` (config.js). There is no other store. If you need durable state, add it to `midiConfig` via `saveConfig`.
+Almost all runtime state is on `appState` (state.js). The per-menu caches `childSubs` and `currentValues` are cleared in exactly one place — `renderer.js:updateScreen`, which every navigation path funnels through — so don't add per-handler clears (C8/#44). The exception: `logger.js` owns its own log level and per-category visibility as private module state (defaults from `constants.DEFAULT_LOG_CATEGORIES`), set via `setLogLevel` / `setLogCategories`. This was moved off `appState` (C6) so `logger.js` no longer imports `state.js`, breaking the `store` → `logger` → `state` → `store` import cycle. Everything persistent is in `localStorage.midiConfig` (config.js). There is no other store. If you need durable state, add it to `midiConfig` via `saveConfig`.
 
 ## Dev server quirks
 

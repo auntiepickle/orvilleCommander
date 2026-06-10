@@ -160,6 +160,11 @@ Field order per line — `type position key parent statement tag …`:
 | `TRG` | trigger / action   | —                                                          |
 | `INF` | info / read-only   | `value`                                                    |
 
+On the dump's first line (the queried object itself), `parent` echoes the
+object's **own key**, not its real parent; only the child lines carry a real
+parent (the dump's main key). So a `0x32` reply cannot be correlated to a
+parent menu from its own bytes — see [`device-model.md`](device-model.md) §3.
+
 For `SET`, the option count is hex; the named options follow and become the
 dropdown choices.
 
@@ -172,9 +177,11 @@ dropdown choices.
   space) + `value` ASCII. Example — load DSP A (`sendValuePut('1002001c','1')`):
   `... 2D  31 30 30 32 30 30 31 63  20  31  F7`.
 
-The device does **not** acknowledge a put. The only confirmation is a subsequent
-`0x2e` dump, so the app issues a value request after a put to reconcile rather
-than trusting an optimistic local write.
+The device acknowledges a put by **echoing a `0x2e` dump** of the resulting —
+possibly clamped — value, even when the value is unchanged (live-probed; this
+corrects an earlier "no ack" note here — see `device-model.md` §6/§9 and
+tracker B10g.3). The app still issues a value request after a put to reconcile
+rather than trusting an optimistic local write.
 
 `0x2e` response payload is ASCII `"<key> <value…>"`; `parser.js` caches it under
 the key. `CON` values and meter keys trigger an immediate re-render; others are
@@ -205,8 +212,10 @@ render-coalescing build on (see
 
 - A wave **starts** when the `outstanding` request counter transitions `0 → 1`.
 - Each `OBJECTINFO_DUMP` (`0x31`) and `VALUE_DUMP` request (`0x2d`) increments
-  `outstanding` (via `recordRequest`). `VALUE_PUT` is **not** counted — the
-  device sends no response to a put (see the `0x2d` section above).
+  `outstanding` (via `recordRequest`). `VALUE_PUT` is **not** counted, although
+  the device does echo a `0x2e` for a put (see the `0x2d` section above): with
+  no wave in flight the echo is a no-op (`notifyResponse` returns at zero), but
+  mid-wave it decrements the counter as an uncounted response.
 - Each matching `0x32` / `0x2e` response decrements `outstanding`, via
   `notifyResponse`, which `parser.js` calls at the top of each branch. The
   counter is a pure count — it does not yet correlate responses to requests by

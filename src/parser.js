@@ -84,10 +84,21 @@ export function parseResponse(data) {
         // current screen so the new top-bar/DSP names land. isLoadingPreset clear lives in event-bridge.js.
         emit('objectinfo:received', { key: main.key });
       } else {
-        // Store child sub-menu data if it's a child of the current menu
-        const isChild = appState.currentSubs.some(
-          (s) => s.key === main.key && s.parent === appState.currentKey
-        );
+        // Store child sub-menu data only if it's a child of the current menu.
+        // A dump cannot self-identify its parent: the object's own line echoes
+        // its own key in the parent slot (docs/device-model.md §3), so the only
+        // correlation available is the current menu's child list. currentSubs
+        // can lag navigation (it is replaced when the new menu's dump lands and
+        // re-pinned by renders), so first require that it actually describes
+        // currentKey; the membership check then guarantees the arriving dump is
+        // a child of the menu being viewed. Late dumps from a menu navigated
+        // away from fail this and are dropped (fail-closed, C8/#44); the next
+        // updateScreen refetch self-heals any drop. C1's request-correlated
+        // dump events will replace this view-state correlation.
+        const describesCurrentMenu = appState.currentSubs[0]?.key === appState.currentKey;
+        const isChild =
+          describesCurrentMenu &&
+          appState.currentSubs.some((s) => s.key === main.key && s.parent === appState.currentKey);
         if (isChild) {
           setState(
             { childSubs: { ...appState.childSubs, [main.key]: subs } },
@@ -124,10 +135,11 @@ export function parseResponse(data) {
                   'general'
                 );
                 sendValuePut(programSub.key, newIndex.toString());
-                // No optimistic cache write (A3): the Orville does not
-                // acknowledge a PUT, so the re-dump below is the single source
-                // of truth and avoids a divergent cached value if the PUT does
-                // not take.
+                // No optimistic cache write (A3): the device echoes a 0x2e
+                // dump of the resulting (possibly clamped) value after a PUT
+                // (B10g.3), and the delayed re-dump below reconciles on top of
+                // that — either way the device, not a local write, is the
+                // single source of truth if the PUT does not take as sent.
                 setTimeout(() => sendValueDump(programSub.key), TIMING.REDUMP_MS);
               }
             }

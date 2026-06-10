@@ -591,8 +591,11 @@ in logs/ (program-screen.png).
       SETs) monopolizes the link for seconds and starves subsequent navigation (watchdog send=2
       recv=0). System self-heals in all observed cases (next wave drains all-received). The (b)
       per-visit-refetch cost is now the subject of #113 below (program-subtree caching).
-- [ ] NEW (GH #113) Program-subtree caching (maintainer report, 2026-06-10 hands-on: "loading
-      program takes a ton of time... only a handful of actions can cause a change to program"):
+- [~] NEW (GH #113) Program-subtree caching (maintainer report, 2026-06-10 hands-on: "loading
+      program takes a ton of time... only a handful of actions can cause a change to program").
+      NEXT: design note in phase3-state-model.md (per-subtree freshness policy + invalidation
+      hooks), then implement the fan-out skip + dirty-marking; acceptance = live before/after of a
+      program-menu visit + tree audit. Maintainer-agreed next item (2026-06-10):
       every visit re-fans-out all 8 program children incl. the bank-list dump (multi-second on the
       31250-baud link) even though the tree already holds them — structure renders from cache
       (T1b/R3) but the refetch wave keeps the loading state + link busy. Design sketch (in the GH
@@ -639,8 +642,11 @@ HUMAN-GATE: none
 ## Phase 4 — Parser quirks & edge hardening
 
 ### Batch 4.1
-- [ ] D1  Make splitLine robust to multi-word unquoted preset names (parser.js:9-33), or document + assert
-- [ ] D2  Handle/define root OBJECTINFO type=8 entry (key=10040000) in parseSubObject dispatch
+- [ ] D1  (GH #118) Make splitLine robust to multi-word unquoted preset names (sysex-split.js), or
+      prove the device always quotes (hardware evidence: #104 multi-word STR puts echo QUOTED) and
+      document + assert the invariant. Offline.
+- [ ] D2  (GH #119) Handle/define root OBJECTINFO type=8 entry (key=10040000) in parseSubObject
+      dispatch; remove the scattered ad-hoc `'8'` exclusions (renderer, eager-loader, audit). Offline.
 HUMAN-GATE: none
 
 ---
@@ -654,9 +660,12 @@ HUMAN-GATE: none
       #113 (program-subtree caching).
 HUMAN-GATE: none
 
-### Batch 5.2 — HIL screenshot regression + live self-loop
+### Batch 5.2 — HIL screenshot regression + live self-loop   (GH #45)
 - [ ] G2  Offline golden-PNG screenshot regression on the 0.4 replay harness
-- [ ] G2  Live loop: drive Orville via MIDI masks -> 0x18 screengrab -> diff against golden
+- [ ] G2  Live loop: drive Orville via MIDI masks -> 0x18 screengrab -> diff against golden.
+      Substrate already shipped: build_tools/live-app.mjs (real app headless against the device,
+      walk/load/eager/smoke modes) + tree-audit (per-node DOM diffing). What remains is the
+      golden-capture format + diff harness.
 HUMAN-GATE: needs-decision — live drive-the-physical-machine loop held until maintainer go signal
 
 ---
@@ -664,12 +673,35 @@ HUMAN-GATE: needs-decision — live drive-the-physical-machine loop held until m
 ## Phase 6 — Performance & fidelity validation
 
 ### Batch 6.1 — Close-out
-- [ ] Measure render latency (target: ~400ms stall gone post-3.1), MIDI outbound throughput, meter-polling cost
-- [ ] Validate machine fidelity end-to-end via live self-loop (if enabled)
+- [ ] Measure render latency, MIDI outbound throughput, meter-polling cost — SUBSTANTIALLY DONE by
+      the #107 saturation smoke (PR #115, logs/live-smoke-107*.log): meter-polling cost measured
+      under combined load (155 waves/180s, avg wave 1127ms, watchdog 3.87%), wave durations
+      characterized before/after the scheduling fixes. needs-decision: whether a dedicated
+      render-latency number is still wanted or the smoke data closes this.
+- [ ] Validate machine fidelity end-to-end via live self-loop (if enabled — merges with G2/#45)
 - [ ] Final ledger sweep: every item [x]
 HUMAN-GATE: none
 
 ---
+
+## GitHub reconciliation log
+
+2026-06-10 full sweep (every open GH issue adjudicated against shipped work):
+- CLOSED as shipped, with evidence comments: #2 (A/B render race — C1/C2/T1b/R3 arc), #5 (virtual/
+  screen sync — resolved by tree-derived render + audited equivalence; verification continues as
+  #45), #8 (inc/dec — wired in controls.js + index.html), #51 (bitmap start-marker guard — code
+  replaced by framebuffer header validation). Earlier same day: #105, #106, #107, #116 closed via
+  PRs #109/#111/#112/#115/#117.
+- STATUS COMMENTS posted (still open, scoped against current main): #3 (loading UX for bitmap-only
+  waves — now trivial post-#115), #9 (settings snapshot — infrastructure now exists), #10 (audio
+  meters — framebuffer-only, path is bitmap polling), #47 (framing validation — reassembly half
+  shipped as FB6/FB7; per-command length checks remain), #48 (checkbox->appState sync is boot-only —
+  defect characterized).
+- FILED: #113 (program-subtree caching, maintainer report), #116 (CON semantics, fixed same day),
+  #118 (D1), #119 (D2).
+- OPEN BOARD after sweep: #3, #9, #10, #12, #14, #45 (G2), #47, #48, #113, #118 (D1), #119 (D2).
+  Every open issue now maps to a ledger item or carries a current-state comment; #12/#14 are
+  UI-polish enhancements with no ledger batch (schedule ad hoc).
 
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24

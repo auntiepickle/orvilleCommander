@@ -10,7 +10,6 @@ import {
   isFresh,
   markDirtyIfStable,
   markAllStableDirty,
-  clearDirtyOnRootRefetch,
   reset,
 } from '../src/tree.js';
 
@@ -113,42 +112,45 @@ describe('tree store (T1b)', () => {
     expect(labelFor('feed0000')).toBe('...');
   });
 
-  describe('stable-subtree freshness (#113 — policy: program prefix 10020, root 10020000)', () => {
-    test('isFresh requires cached + stable + clean; only the subtree ROOT clears dirtiness', () => {
+  describe('stable-subtree freshness (#113 — per-key staleness; program prefix 10020)', () => {
+    test('isFresh requires cached + stable + not stale; only a RE-RECORD un-stales', () => {
       expect(isFresh('10020010')).toBe(false); // uncached
       recordDump([
         col('10020010', '10020010', 'load new preset', 'load'),
         num('10020011', '10020010', 'program: %s'),
       ]);
+      recordDump([col('10020020', '10020020', 'save program', 'save')]);
       expect(isFresh('10020010')).toBe(true); // cached + stable + clean
 
       // Cached but NOT in a stable subtree: never fresh (per-visit refetch).
       recordDump([col('10010000', '10010000', 'setup functions', 'setup')]);
       expect(isFresh('10010000')).toBe(false);
 
-      // A mutating put anywhere under the prefix dirties the whole subtree.
+      // A mutating put anywhere under the prefix stales every cached key
+      // under it.
       markDirtyIfStable('1002001c'); // the load trigger
       expect(isFresh('10020010')).toBe(false);
+      expect(isFresh('10020020')).toBe(false);
 
-      // A DEEP visit's fan-out must not launder staleness — only the
-      // subtree root's refetch clears.
-      clearDirtyOnRootRefetch('10020010');
-      expect(isFresh('10020010')).toBe(false);
-      clearDirtyOnRootRefetch('10020000');
+      // Re-recording ONE node un-stales only that node — a deep visit (or
+      // a dropped sibling response) can never launder staleness into the
+      // rest of the subtree.
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
       expect(isFresh('10020010')).toBe(true);
+      expect(isFresh('10020020')).toBe(false); // sibling stays stale
 
       // Puts outside any stable subtree mark nothing.
       markDirtyIfStable('4070001');
       expect(isFresh('10020010')).toBe(true);
     });
 
-    test('markAllStableDirty (Sync/reconnect) distrusts every stable cache; reset clears marks', () => {
+    test('markAllStableDirty (Sync/reconnect/keypress) distrusts every stable cache; reset clears', () => {
       recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
       markAllStableDirty();
       expect(isFresh('10020010')).toBe(false);
       reset();
       recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
-      expect(isFresh('10020010')).toBe(true); // reset cleared the dirty mark
+      expect(isFresh('10020010')).toBe(true); // reset cleared the marks
     });
   });
 });

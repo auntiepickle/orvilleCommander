@@ -310,9 +310,10 @@ describe('parseResponse', () => {
     expect(mockLog).toHaveBeenCalledWith('Value did not change, still new', 'debug', 'noChange');
   });
 
-  test('stable-subtree children skip the per-visit refetch while cached and clean (#113)', () => {
+  test('stable-subtree children skip the STRUCTURE refetch but still refresh param values (#113)', () => {
     appState.currentKey = '10020000'; // visiting the program menu
-    // The heavy bank-list child is already tree-cached from a prior visit.
+    // The heavy bank-list child is already tree-cached from a prior visit,
+    // params included.
     recordDump([
       {
         type: 'COL',
@@ -322,19 +323,41 @@ describe('parseResponse', () => {
         statement: 'load new preset',
         tag: 'load',
       },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10020011',
+        parent: '10020010',
+        statement: 'program: %2.0f',
+        tag: 'pgm',
+        value: '0',
+      },
+      {
+        type: 'TRG',
+        position: '2',
+        key: '1002001c',
+        parent: '10020010',
+        statement: '<- load',
+        tag: 'load',
+      },
     ]);
     parseAscii(
       'COL 0 10020000 10020000 "program functions" "program"\n' +
         ' COL 0 10020010 10020000 "load new preset" "load"\n' +
         ' COL 0 10020020 10020000 "save program" "save"'
     );
-    // Cached stable child: skipped. Uncached sibling: fetched as always.
+    // Cached stable child: no structure refetch, no COL value fetch...
     expect(sendObjectInfoDump).not.toHaveBeenCalledWith('10020010');
     expect(sendValueDump).not.toHaveBeenCalledWith('10020010');
+    // ...but its PARAM values refresh (the per-visit value-volatility
+    // contract holds on the warm path; TRGs carry no value).
+    expect(sendValueDump).toHaveBeenCalledWith('10020011');
+    expect(sendValueDump).not.toHaveBeenCalledWith('1002001c');
+    // Uncached sibling: fetched as always.
     expect(sendObjectInfoDump).toHaveBeenCalledWith('10020020');
   });
 
-  test('a mutating put dirties the subtree; the ROOT fan-out refetches and clears (#113)', () => {
+  test('a mutating put stales the subtree; refetch repeats until the child RE-RECORDS (#113)', () => {
     appState.currentKey = '10020000';
     recordDump([
       {
@@ -352,12 +375,20 @@ describe('parseResponse', () => {
       'COL 0 10020000 10020000 "program functions" "program"\n' +
       ' COL 0 10020010 10020000 "load new preset" "load"';
     parseAscii(programDump);
-    // Dirty: the cached child is refetched like pre-#113...
+    // Stale: the cached child is refetched like pre-#113.
     expect(sendObjectInfoDump).toHaveBeenCalledWith('10020010');
 
-    // ...and the root fan-out cleared the mark: the NEXT visit skips again.
+    // The refetch's response is DROPPED (busy link): the key stays stale,
+    // so the next visit retries — staleness cannot be laundered by the
+    // request having merely gone out.
     sendObjectInfoDump.mockClear();
-    sendValueDump.mockClear();
+    parseAscii(programDump);
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('10020010');
+
+    // The child's own dump finally arrives (re-recorded by this parser):
+    // the key is fresh again and the next visit skips.
+    parseAscii('COL 0 10020010 10020010 "load new preset" "load"');
+    sendObjectInfoDump.mockClear();
     parseAscii(programDump);
     expect(sendObjectInfoDump).not.toHaveBeenCalledWith('10020010');
   });

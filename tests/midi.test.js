@@ -235,6 +235,26 @@ describe('midi.js SysEx byte contract', () => {
     treeReset();
   });
 
+  test('sendKeypress distrusts the stable caches — the other mutation chokepoint (#113)', () => {
+    // Virtual front-panel keys drive the REAL device UI; a save/delete
+    // sequence can mutate the program subtree without any put.
+    treeReset();
+    recordDump([
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020010',
+        parent: '10020010',
+        statement: 'load new preset',
+        tag: 'load',
+      },
+    ]);
+    expect(isFresh('10020010')).toBe(true);
+    sendKeypress([0xff, 0xff, 0xff, 0xef]); // any press
+    expect(isFresh('10020010')).toBe(false);
+    treeReset();
+  });
+
   test('GET_SCREEN (0x18) is wave-counted; the 0x17 response drains it (#107)', () => {
     // The ~1.2s bitmap transfer must keep the wave open so poll ticks gate
     // behind it instead of watchdogging into invisible link time.

@@ -4,7 +4,7 @@ import { CMD, KEY, KEY_PREFIX, KEY_SUFFIX, SYSEX } from './sysex-commands.js';
 import { TIMING } from './constants.js';
 import { setState } from './store.js';
 import { sendValuePut, sendValueDump, sendObjectInfoDump, notifyResponse } from './midi.js';
-import { recordDump, parentOf, findParamUnder, isFresh, clearDirtyOnRootRefetch } from './tree.js';
+import { recordDump, parentOf, findParamUnder, isFresh, getNode } from './tree.js';
 import { log } from './logger.js';
 import { denibble } from './bitmap.js';
 import { emit } from './events.js';
@@ -69,29 +69,37 @@ export function parseResponse(data) {
         // Fetch child sub-menus for ALL COL children (T1b: labels no longer
         // gate fetching — blank nodes need their children loaded to derive a
         // label, and the tree wants completeness). Per-visit freshness: this
-        // fires once per arrival of the current menu's dump. At ROOT the
-        // presets are excluded: they render as header tabs, not softkeys,
-        // and the connect landing fetches the active one itself (R9 review).
+        // fires once per arrival of the current menu's dump — except that
+        // stable-subtree children skip the structure refetch while fresh
+        // (#113, see below). At ROOT the presets are excluded: they render
+        // as header tabs, not softkeys, and the connect landing fetches the
+        // active one itself (R9 review).
         const localSoftSubs = subs
           .slice(1)
           .filter(
             (s) => s.type === 'COL' && !(main.key === KEY.ROOT && s.key.endsWith(KEY_SUFFIX.PRESET))
           );
         localSoftSubs.forEach((s) => {
-          // #113 stable-subtree cache: skip the refetch for children whose
-          // cached dump may be trusted (tree-cached, stable prefix, not
-          // dirty) — the program children include the multi-second bank
-          // list. The dirty path and non-stable subtrees behave as before.
+          // #113 stable-subtree cache: skip the STRUCTURE refetch for
+          // children whose cached dump may be trusted (tree-cached, stable
+          // prefix, not staled by a mutation chokepoint) — the program
+          // children include the multi-second bank list. Values are NOT
+          // trusted: refresh the cached child's param values so embeds
+          // never show a stale selection (the per-visit value volatility
+          // contract holds on the warm path too). Stale keys and
+          // non-stable subtrees behave exactly as before.
           if (isFresh(s.key)) {
             log(`Skipping refetch of fresh stable child ${s.key} (#113)`, 'debug', 'parsedDump');
+            for (const line of (getNode(s.key) || []).slice(1)) {
+              if (line.key && !['COL', 'TRG', '8'].includes(line.type)) {
+                sendValueDump(line.key);
+              }
+            }
             return;
           }
           sendObjectInfoDump(s.key);
           sendValueDump(s.key);
         });
-        // The subtree root's heavy children were just (re)requested — the
-        // dirty mark, if any, is satisfied. No-op for non-root keys.
-        clearDirtyOnRootRefetch(main.key);
         setState({ lastAscii: ascii }, 'parser:current-key-ascii');
         setState({ currentSubs: subs }, 'parser:current-subs');
         emit('objectinfo:received', { key: main.key, subs, ascii });

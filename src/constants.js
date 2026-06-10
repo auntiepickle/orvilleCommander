@@ -39,17 +39,21 @@ export const RENDER = {
   LOADING_STATEMENT: 'loading ...',
 };
 
-// Stable-subtree cache policy (#113). Subtrees whose STRUCTURE changes only
-// via enumerable in-app actions may trust cached child dumps across visits;
-// the parser skips their per-visit child fan-out while clean (tree.js owns
-// the dirty state). The program subtree is the one entry: its dumps are the
-// heaviest on the link (the ~70-name bank list is multi-second at 31250
-// baud) and mutate only via save/delete/card/link/name/bank-select puts.
-// `prefix` covers every key in the subtree; `rootKey` is the menu whose
-// child fan-out carries the heavy dumps — clearing dirtiness requires its
-// refetch, so a deep visit while dirty cannot launder staleness.
+// Stable-subtree cache policy (#113). Subtrees whose STRUCTURE rarely
+// changes may trust cached child dumps across visits; the parser skips
+// their per-visit child OBJECTINFO fan-out for keys tree.js deems fresh
+// (param VALUES are still refreshed every visit). The program subtree is
+// the one entry: its dumps are the heaviest on the link (the ~70-name bank
+// list is multi-second at 31250 baud). In-app mutations are caught at two
+// chokepoints (every VALUE_PUT under the prefix; every virtual front-panel
+// keypress, which drives the real device UI); device-side mutations the app
+// cannot observe (physical front panel, card swap, external MIDI program
+// changes) are covered by Sync-to-Hardware / reconnect distrusting all
+// stable caches. Staleness is per-KEY (tree.js staleKeys): a node becomes
+// fresh again only when ITS dump is actually re-recorded, so dropped
+// responses and deep visits can never launder staleness.
 export const CACHE = {
-  STABLE_SUBTREES: [{ prefix: '10020', rootKey: '10020000' }],
+  STABLE_SUBTREE_PREFIXES: ['10020'],
 };
 
 // Eager structure loader (#106). MAX_DEPTH bounds the breadth-first walk

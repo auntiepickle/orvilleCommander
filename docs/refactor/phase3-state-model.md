@@ -351,34 +351,40 @@ baud) yet its STRUCTURE changes only via an enumerable set of actions — so
 per-visit child refetch (the default freshness policy) is almost always
 wasted there.
 
-**Policy (lives with the cache, `tree.js`):** `CACHE.STABLE_SUBTREES` (one
-entry today: prefix `10020`, root `10020000`) declares subtrees whose
-cached child dumps may be trusted across visits. The parser's per-visit
-child fan-out skips OBJECTINFO+VALUE for a child that `isFresh(key)` —
-tree-cached, under a stable prefix, and the prefix not marked dirty. The
-visited menu's OWN dump is still always refetched (`updateScreen` is
-untouched), so the on-screen menu stays device-fresh; only the heavy child
-prefetch is policy-gated.
+**Policy (lives with the cache, `tree.js`):**
+`CACHE.STABLE_SUBTREE_PREFIXES` (one entry today: the program prefix
+`10020`) declares subtrees whose cached child dumps may be trusted across
+visits. Staleness is **per-key** (review-hardened design): marking stales
+every CACHED key under the prefix, and a key becomes fresh again only when
+`recordDump` actually re-records IT. Drop-tolerant by construction — a
+refetch whose response never arrives leaves the key stale and the next
+visit retries — and a deep visit can never launder staleness into siblings
+it did not re-record. The parser's per-visit child fan-out skips the
+STRUCTURE refetch for `isFresh(key)` children; the visited menu's OWN dump
+always refetches (`updateScreen` untouched), and a skipped child's **param
+values are still refreshed** (small VALUE requests over its cached lines),
+so the per-visit value-volatility contract holds on the warm path too —
+only the heavy OBJECTINFO option lists are trusted.
 
-**Invalidation (one chokepoint + explicit re-reads):**
+**Invalidation (two in-app chokepoints + explicit re-reads):**
 
-- `sendValuePut` marks the key's stable prefix dirty. This covers every
-  in-app mutating action at once: TRG loads/saves/deletes/card ops, STR
-  name edits, AND SET selects — bank selection matters because changing
-  the bank changes the program list the device returns for `10020010`.
-- Sync-to-Hardware and selectPorts (reconnect) mark ALL stable subtrees
-  dirty — the documented answer to front-panel changes made outside the
-  app (the known observability gap).
-- While dirty, every visit under the prefix behaves exactly as today
-  (full child refetch). The prefix is cleared only when the SUBTREE
-  ROOT's fan-out runs (its children are the heavy dumps), so a deep visit
-  while dirty cannot launder staleness into the rest of the subtree.
+- `sendValuePut` stales the key's stable prefix: TRG loads/saves/deletes/
+  card ops, STR name edits, AND SET selects — bank selection matters
+  because changing the bank changes the program list the device returns.
+- `sendKeypress` stales ALL stable caches: the virtual front-panel keys
+  drive the real device UI, and the app cannot interpret which presses are
+  part of a mutating sequence. Conservative; costs at most one refetch.
+- Sync-to-Hardware and selectPorts (reconnect) stale ALL stable caches —
+  the answer to device-side mutations the app cannot observe: physical
+  front panel, card insertion/removal, external MIDI program changes.
+  (Future structural hook: the device emits a bank-change SysEx whose
+  format is uncaptured — device-model §12; capturing it would give an
+  automatic invalidation signal.)
 
-Values stay per-visit volatile everywhere (C8 semantics unchanged); this
-policy governs structure dumps only. Eager loader unaffected (it already
-skips cached nodes). Acceptance: live before/after of a warm program-menu
-visit (expect ~2 sends and a sub-second wave vs ~18 sends with the
-multi-second bank list), plus a zero-violation tree audit.
+Eager loader unaffected (it already skips cached nodes). Acceptance: live
+before/after of a program-menu visit (cold 41 sends / 17.9s settled vs
+warm 27 sends / 646ms — 1 OBJECTINFO plus the small per-param VALUE
+refreshes; logs/live-prog-113b.log) plus a zero-violation tree audit.
 
 ## Validation / open items
 

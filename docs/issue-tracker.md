@@ -594,19 +594,27 @@ in logs/ (program-screen.png).
 - [x] NEW (GH #113) (branch feat/program-subtree-cache) Program-subtree caching SHIPPED
       (maintainer report, 2026-06-10 hands-on: "loading program takes a ton of time... only a
       handful of actions can cause a change to program"). Stable-subtree freshness policy
-      (design: phase3-state-model.md "Stable-subtree caching"): CACHE.STABLE_SUBTREES (program
-      prefix 10020, root 10020000) — the parser's per-visit child fan-out skips OBJECTINFO+VALUE
-      for tree.js isFresh() children (cached + stable + clean); the visited menu's OWN dump still
-      always refetches. Invalidation: sendValuePut marks the key's stable prefix dirty (single
-      chokepoint — covers TRG/STR/SET/NUM puts incl. bank selects, which change the device's
-      program list); Sync + selectPorts markAllStableDirty (the front-panel-changes answer);
-      dirtiness clears ONLY when the subtree ROOT's fan-out re-runs, so deep visits cannot launder
-      staleness. Values stay per-visit volatile (C8 unchanged).
-      LIVE ACCEPTANCE (2026-06-10, logs/live-prog-113.log, live-app 'prog' mode): COLD visit
-      (dirty = pre-#113 behavior) 17 waves / 41 sends / settled 17926ms; WARM visit 2 waves /
-      4 sends / settled 305ms — ~59x, embeds render identically from cache. Tree audit: zero
-      violations. 6 new tests (tree freshness semantics, parser skip/dirty-refetch-clear/non-stable
-      scope, sendValuePut chokepoint). Original report context:
+      (design: phase3-state-model.md "Stable-subtree caching"): CACHE.STABLE_SUBTREE_PREFIXES
+      (program prefix 10020) — the parser's per-visit child fan-out skips the STRUCTURE refetch
+      for tree.js isFresh() children; the visited menu's OWN dump always refetches, and a skipped
+      child's PARAM VALUES still refresh (small VALUE requests over its cached lines), so value
+      volatility holds on the warm path — only the heavy OBJECTINFO option lists are trusted.
+      Staleness is PER-KEY (review-hardened): marking stales every cached key under the prefix;
+      a key is fresh again only when recordDump re-records IT — drop-tolerant (a lost refetch
+      response leaves the key stale and the next visit retries) and launder-proof by construction.
+      Invalidation chokepoints: sendValuePut (TRG/STR/SET/NUM puts incl. bank selects, which
+      change the device's program list) + sendKeypress (virtual front-panel keys drive the real
+      device UI — any press may be a mutating sequence) + Sync/selectPorts markAllStableDirty
+      (device-side mutations the app cannot observe: physical panel, card swap, external MIDI
+      program changes). FUTURE HOOK: the device's uncaptured bank-change SysEx (§12) would give
+      automatic invalidation.
+      LIVE ACCEPTANCE (2026-06-10, logs/live-prog-113b.log, live-app 'prog' mode): COLD visit
+      (stale = pre-#113 behavior) 17 waves / 41 sends / settled 17919ms; WARM visit 1 wave /
+      27 sends (1 objectinfo + the small per-param VALUE refreshes) / settled 646ms — ~28x,
+      embeds render identically from cache. Tree audit: zero violations. 7 new tests (per-key
+      freshness semantics incl. re-record-only un-staling, parser skip + value-refresh +
+      stale-retry-until-rerecord + non-stable scope, sendValuePut + sendKeypress chokepoints).
+      Original report context:
       every visit re-fans-out all 8 program children incl. the bank-list dump (multi-second on the
       31250-baud link) even though the tree already holds them — structure renders from cache
       (T1b/R3) but the refetch wave keeps the loading state + link busy. Design sketch (in the GH

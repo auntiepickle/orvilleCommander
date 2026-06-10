@@ -6,7 +6,7 @@ import { log } from './logger.js';
 import { emit } from './events.js';
 import { CMD, SYSEX } from './sysex-commands.js';
 import { TIMING } from './constants.js';
-import { markDirtyIfStable } from './tree.js';
+import { markDirtyIfStable, markAllStableDirty } from './tree.js';
 
 let selectedOutput = null;
 let selectedInput = null;
@@ -378,6 +378,12 @@ function nibble(mask) {
  * sendKeypress(keypressMasks['enter']);
  */
 export function sendKeypress(mask) {
+  // #113 review: the virtual front-panel keys drive the REAL device UI —
+  // a save/delete/rename sequence can mutate the program subtree without
+  // any put the app can see. The app cannot interpret which presses
+  // mutate, so every press distrusts the stable caches (conservative: at
+  // worst one extra refetch on the next program visit).
+  markAllStableDirty();
   const nibbled = nibble(mask);
   sendSysEx(CMD.KEYPRESS, nibbled);
 }

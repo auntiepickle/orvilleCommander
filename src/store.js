@@ -24,7 +24,15 @@ export const appState = {
   presetKey: '401000b',
   currentValues: {},
   paramOffset: 0,
-  autoLoad: false,
+  // C2 (#38): one-shot navigation state replacing the sticky autoLoad flag.
+  // pendingLanding: null | 'root' | 'preset' — connect-flow landing machine.
+  // Only 'root' gates behavior (the bridge's landing block); 'preset' is a
+  // breadcrumb for observability/tests — the post-landing descend rides the
+  // generic pendingDescend below, and the watchdog clear sweeps both.
+  // pendingDescend: consume on the next currentKey dump; descend once if the
+  // menu is COL-only with >1 short-tag children (old autoload semantics).
+  pendingLanding: null,
+  pendingDescend: false,
   keyStack: [],
   dspAKey: '401000b',
   dspBKey: '801000b',

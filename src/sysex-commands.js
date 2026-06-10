@@ -72,6 +72,10 @@ export const KEY_SUFFIX = {
   // suffix — C7/#43)
 };
 
+// Sub-object types that render as parameters (vs COL menus / type-8 empties).
+// Shared by the renderer's param loops and the bridge's descend predicate (C2).
+export const PARAM_TYPES = ['NUM', 'SET', 'CON', 'TRG', 'INF'];
+
 // Root-level menus, in softkey order, used both as a "is this a top-level menu"
 // set and as the static bottom softkey row.
 export const ROOT_SOFTKEYS = [

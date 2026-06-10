@@ -307,10 +307,9 @@ config toggles lazy) -> render on dumpComplete.
       like a ~1.2s 0x17 transfer could keep waves merged until the WATCHDOG_MAX_MS 10s ceiling, freezing
       settled renders for up to 10s; pre-C1 CONs rendered per message regardless). If saturation is real,
       either skip poll ticks while a wave is open or re-admit a per-CON render path.
-- [ ] NEW (C1 review, minor) A WATCHDOG dumpComplete firing mid-navigation (genuine stall after a click set
-      autoLoad=true but before the new menu's dump landed) renders the OLD subs and the autoload branch can
-      descend from them. Narrow (stall-only); 3.3's explicit rootDumpComplete landing subsumes it — fold
-      into C2's design.
+- [x] NEW (C1 review, minor) RESOLVED BY C2: the autoload branch is deleted, so a watchdog-stall render can
+      no longer descend from stale subs; the bridge additionally clears any pending landing/descend
+      one-shot on a watchdog dumpComplete (pinned by event-bridge tests).
 - [x] C4  (same branch, GH #40, PR #89) isLoadingPreset deleted: store default, both renderer writes, and the
       event-bridge gating/clear are gone — hideLoading is driven solely by dumpComplete. The parser's
       Favorites re-order fix now gates on loadingPresetName alone; FINDING: no production code writes
@@ -380,24 +379,30 @@ HUMAN-GATE: none
       [I]: naming convention, not a type guarantee) and protocol.md. Tests: child-CON immediate +
       unknown-key coalesce pinned (the latter fails pre-C7). VALUE_DUMP-coverage precondition was met by
       Batch 0.3's 0x2e characterization.
-- [ ] NEW Persist active DSP (A/B) app-side as view state (default A) — FOLDED INTO C2 (Batch 3.3): the
-      landing chooses dspAKey/dspBKey by this view state; do not implement separately (see
-      phase3-state-model.md "C2 design"). Mark [x] when C2 ships.
+- [x] NEW Persist active DSP (A/B) app-side as view state (default A) — SHIPPED WITH C2 (Batch 3.3): the
+      landing chooses the root dump's dspAKey/dspBKey by the persisted presetKey's A/B prefix (the cached
+      key itself is only a hint; store default presetKey is the A preset).
 HUMAN-GATE: none
 
 ### Batch 3.3 — Connect handshake + eager loader + landing  (replaces the autoLoad timer mechanism)
 DECISION RESOLVED (see phase3-state-model.md): land on the last-active DSP's preset, read authoritatively
 from the root dump (device boots into last-used preset). Cache is a provisional structure-only pre-paint.
-- [~] C2  Remove the PORT_INIT_MS (500ms) timer + autoLoad flag mechanism (main.js); land on the root
-      dump's arrival -> active preset. NOTE: the race SYMPTOM (wrong landing menu) was eliminated by
-      C1's synchronous root render (Batch 3.1), but the timer-driven mechanism it rode on is still in
-      place — this item owns removing it.
-      NEXT: implement per phase3-state-model.md "C2 design — connect/landing without timers" (design
-      written + reviewed): one-shot pendingLanding state replaces the PORT_INIT_MS timer AND the sticky
-      autoLoad flag (renderer autoload branch deleted; click handlers move to the same one-shot descend
-      state); folds in 3.2's persist-active-DSP and the watchdog-mid-nav item's landing case. Startup
-      characterization updated in the same commit. Hardware validation deferred to one consolidated
-      session after 3.3 (landing timing + wave-saturation smoke + eager-load throughput).
+- [x] C2  (branch refactor/c2-landing, GH #38) Implemented per phase3-state-model.md "C2 design": the
+      PORT_INIT_MS timer and the sticky autoLoad flag are DELETED. selectPorts resets the view to root
+      (re-runnable: forces the parser's full root branch on reconnect) and arms a one-shot
+      pendingLanding='root'; the bridge lands when the root dump ARRIVES — keyStack root entry,
+      currentKey -> the dump's authoritative dspA/dspBKey (A/B chosen by the persisted presetKey prefix,
+      folding in 3.2's persist-active-DSP), other-DSP prefetch + optional 0x18 — then a one-shot
+      pendingDescend, consumed by the dump for the navigated-to menu, descends once into a COL-only
+      menu's first child (old autoload semantics, but never triggerable by a stale render — retires the
+      C5/#41 staleness class; that defensive test removed with the branch it guarded). All six former
+      autoLoad writers migrated (4 renderer click handlers, controls PARAMETER keypress, store default);
+      renderer's autoload branch deleted; PARAM_TYPES extracted to sysex-commands.js. Watchdog clears
+      pending one-shots (no stale landing/descend; closes the Batch 3.1 watchdog-mid-nav item). Startup
+      characterization rewritten per its charter — the simulation now mirrors only the reset, with
+      landing + descend exercised through the real bridge. 126 tests / 14 suites green. Hardware
+      validation deferred to the consolidated session after 3.3 (landing timing on the real link +
+      wave-saturation smoke + eager-load throughput).
 - [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX
 - [ ] NEW `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
 - [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number

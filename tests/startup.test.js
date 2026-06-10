@@ -3,7 +3,7 @@
  *
  * Pins the observable state writes, MIDI outbound calls, render/bitmap
  * calls, and terminal appState that result from a cached-config startup
- * (Connect MIDI → Select Ports → cached preset autoload).
+ * (Connect MIDI → Select Ports → landing on the active preset).
  *
  * Primary use: feedback loop during refactor work. If a later session's
  * diff changes this test's output, the divergence is signal — decide
@@ -12,12 +12,12 @@
  * is deliberate; narrower tests would miss incidental behavior shifts.
  *
  * Known bugs pinned as current behavior, NOT fixed by this test:
- *   - (RESOLVED by C1/#37) the autoload-vs-401000b landing-page race is
- *     gone: the bridge renders the root dump synchronously on arrival —
- *     BEFORE select-ports-init flips autoLoad — so the flag is consumed by
- *     the PRESET render, which descends into the preset's first menu (the
- *     intended landing). Previously the timer-delayed root render consumed
- *     the flag and landed on the first ROOT menu (setup) while the
+ *   - (RESOLVED: race by C1/#37, mechanism by C2/#38) the autoload-vs-401000b
+ *     landing-page race is gone, and the mechanism it rode on is deleted:
+ *     there is no select-ports timer and no autoLoad flag. The bridge lands
+ *     on the root dump's arrival and a one-shot pendingDescend lands on the
+ *     preset's first menu. Previously the timer-delayed root render consumed
+ *     the sticky flag and landed on the first ROOT menu (setup) while the
  *     401000b/801000b dumps were silently dropped.
  *   - (RESOLVED by C3/#39) keyStack used to hold mixed types: main.js
  *     pushed a raw string while the renderer autoload pushed a {key, tag,
@@ -91,9 +91,9 @@ jest.mock('../src/bitmap.js', () => {
 });
 
 // renderer partial mock: everything real except renderScreen, which is wrapped
-// to snapshot appState.autoLoad/currentKey at call time (pins the landing-page
+// to snapshot the landing one-shots + currentKey at call time (pins the C2
 // race's precondition). The wrapper calls through to the real renderScreen so
-// the autoload branch still fires and exercises the real update path.
+// the real render path is exercised end to end.
 jest.mock('../src/renderer.js', () => {
   const actual = jest.requireActual('../src/renderer.js');
   const stateModule = jest.requireActual('../src/state.js');
@@ -102,7 +102,8 @@ jest.mock('../src/renderer.js', () => {
     ...actual,
     renderScreen: jest.fn((subs, ascii, logParam) => {
       recorder.recordRenderScreenCall({
-        autoLoad: stateModule.appState.autoLoad,
+        pendingLanding: stateModule.appState.pendingLanding,
+        pendingDescend: stateModule.appState.pendingDescend,
         currentKey: stateModule.appState.currentKey,
         subsCount: subs?.length,
         subsFirstKey: subs?.[0]?.key,
@@ -114,14 +115,12 @@ jest.mock('../src/renderer.js', () => {
 
 import { parseResponse } from '../src/parser.js';
 import { updateScreen } from '../src/renderer.js';
-import { sendObjectInfoDump, sendSysEx } from '../src/midi.js';
 import { appState } from '../src/state.js';
 import { setState } from '../src/store.js';
-import { hideLoading } from '../src/main.js';
-import { makeKeyStackEntry } from '../src/navigation.js';
+import { hideLoading, showLoading } from '../src/main.js';
 import { registerEventBridge } from '../src/event-bridge.js';
 import { emit } from '../src/events.js';
-import { CMD } from '../src/sysex-commands.js';
+import { KEY } from '../src/sysex-commands.js';
 import {
   loadFixture,
   extractExpectedFromRoot,
@@ -134,13 +133,6 @@ import {
   getRenderScreenSnapshots,
   drainAndSort,
 } from './helpers/startup-recorder.js';
-
-// Duplicated from renderer.js so the simulation's toggleDspKey call does not
-// route through the mocked renderer module. Keeps the inline main.js selectPorts
-// reproduction self-contained.
-function toggleDspKey(key) {
-  return key.startsWith('4') ? '8' + key.slice(1) : '4' + key.slice(1);
-}
 
 // Log substrings that are semantically load-bearing for startup ordering.
 // All other log messages are non-whitelisted and get filtered out of the
@@ -163,7 +155,7 @@ function normalize(e) {
     case 'midiSend':
       return `midi:${e.op}:${e.arg}`;
     case 'renderScreen':
-      return `render:autoLoad=${e.autoLoad},key=${e.currentKey},subsCount=${e.subsCount},subsFirst=${e.subsFirstKey}`;
+      return `render:land=${e.pendingLanding ?? '-'},desc=${e.pendingDescend},key=${e.currentKey},subsCount=${e.subsCount},subsFirst=${e.subsFirstKey}`;
     case 'bitmap':
       return 'bitmap';
     case 'hideLoading':
@@ -221,7 +213,8 @@ describe('startup characterization (roadmap step 5.5)', () => {
       presetKey: '401000b',
       currentValues: {},
       paramOffset: 0,
-      autoLoad: false,
+      pendingLanding: null,
+      pendingDescend: false,
       keyStack: [],
       dspAKey: '401000b',
       dspBKey: '801000b',
@@ -255,40 +248,37 @@ describe('startup characterization (roadmap step 5.5)', () => {
     jest.useRealTimers();
   });
 
-  // Replays the cached-config startup flow. Since C1 the bridge renders the
-  // root dump SYNCHRONOUSLY inside step (c)'s parseResponse — before step
-  // (d) flips autoLoad — so the root render consumes nothing and the preset
-  // render at step (f) takes the autoload descend into the preset's first
-  // menu. The 200ms render timers this simulation used to advance are gone.
+  // Replays the cached-config startup flow. Since C2 the simulation no
+  // longer mirrors a select-ports timer step: it reproduces only main.js
+  // selectPorts' reset (showLoading + view-to-root + pendingLanding +
+  // updateScreen); the LANDING — adopt DSP keys, navigate to the active
+  // preset, prefetch the other DSP, screen fetch — fires inside step (c)'s
+  // parseResponse via the real event-bridge, and the one-shot descend fires
+  // inside step (f)'s. No timers anywhere in the connect flow.
   function simulateSelectPorts() {
-    // (b) updateScreen('0') — reproduces main.js selectPorts
-    updateScreen();
-    // (c) feed root fixture — bridge renders the root menu on arrival
-    //     (objectinfo:received key === currentKey '0', autoLoad still false).
-    parseResponse(rootBytes);
-    // (d) inline main.js select-ports-init mirror — sets autoLoad=true and
-    //     lands currentKey on the cached preset. Mirrors the production
-    //     module's combined-per-cluster setState.
+    // (b) main.js selectPorts mirror: loading UX + reset + root request.
+    showLoading();
     setState(
       {
-        keyStack: [
-          ...appState.keyStack,
-          makeKeyStackEntry(appState.currentKey, appState.currentSubs),
-        ],
-        currentKey: appState.presetKey,
-        autoLoad: true,
+        currentKey: KEY.ROOT,
+        keyStack: [],
+        currentSubs: [],
+        pendingLanding: 'root',
+        pendingDescend: false,
       },
-      'main:select-ports-init'
+      'main:select-ports-reset'
     );
     updateScreen();
-    sendObjectInfoDump(toggleDspKey(appState.presetKey));
-    if (appState.fetchBitmap) sendSysEx(CMD.GET_SCREEN, []);
-    // (e) advance 500ms — pins that NO render timers are pending since C1.
+    // (c) feed root fixture — bridge renders the root menu on arrival, then
+    //     LANDS: keyStack root entry, currentKey -> active preset (dspAKey,
+    //     chosen by the cached presetKey's 'A' prefix), updateScreen,
+    //     other-DSP prefetch, 0x18 screen fetch. All recorded.
+    parseResponse(rootBytes);
+    // (e) advance 500ms — pins that NO connect timers exist since C2.
     jest.advanceTimersByTime(500);
-    // (f) feed 401000b — currentKey now matches, so the full path runs:
-    //     preset-meta + presetKey writes, child fan-out, render with
-    //     autoLoad=true -> autoload descend into the preset's first
-    //     short-tag COL menu (the C1 race-free landing).
+    // (f) feed 401000b — currentKey matches: preset-meta + presetKey writes,
+    //     child fan-out, render, then the bridge consumes pendingDescend and
+    //     descends into the preset's first short-tag COL menu.
     parseResponse(preset401Bytes);
     // (g) advance 200ms — still nothing pending.
     jest.advanceTimersByTime(200);
@@ -299,6 +289,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
     parseResponse(bitmapBytes);
     // (j) feed the landed menu's dump (the preset's first short-tag COL) —
     //     currentKey matches; params render and their values are fetched.
+    //     pendingDescend was already consumed at (f), so no further descend.
     parseResponse(landedMenuBytes);
     // (k) the wave the fan-outs opened would drain on a real device;
     //     midi.js is mocked here (no wave counting), so fire the bridge's
@@ -310,23 +301,24 @@ describe('startup characterization (roadmap step 5.5)', () => {
     jest.runAllTimers();
   }
 
-  // Pins the C1 race-free landing directly. Pre-C1, the root render was
-  // timer-delayed past select-ports-init, so the FIRST render observed
-  // autoLoad=true with currentKey already flipped to the preset — the
-  // landing-page race precondition. Since C1 the root dump renders
-  // synchronously on arrival: the first render observes autoLoad=false at
-  // root, and the autoload flag is consumed by the PRESET render instead.
-  test('root renders before select-ports-init; autoload is consumed by the preset render (C1/#37)', () => {
+  // Pins the C2 landing machine directly: the root render happens while the
+  // landing is still pending ('root', no descend armed), and the preset
+  // render happens with the landing advanced to 'preset' + the descend
+  // one-shot armed — which the bridge then consumes to land on the preset's
+  // first menu. No timer, no autoLoad flag (deleted in C2/#38).
+  test('landing fires on the root dump; descend is consumed by the preset dump (C2/#38)', () => {
     simulateSelectPorts();
     const snapshots = getRenderScreenSnapshots();
     expect(snapshots.length).toBeGreaterThanOrEqual(2);
     expect(snapshots[0]).toMatchObject({
-      autoLoad: false,
+      pendingLanding: 'root',
+      pendingDescend: false,
       currentKey: '0',
       subsFirstKey: '0',
     });
     expect(snapshots[1]).toMatchObject({
-      autoLoad: true,
+      pendingLanding: 'preset',
+      pendingDescend: true,
       currentKey: '401000b',
       subsFirstKey: '401000b',
     });
@@ -343,7 +335,8 @@ describe('startup characterization (roadmap step 5.5)', () => {
     // (defaults in main.js/store.js, which branches fire, which gates fail).
     expect(appState.deviceId).toBe(1);
     expect(appState.presetKey).toBe('401000b');
-    expect(appState.autoLoad).toBe(false);
+    expect(appState.pendingLanding).toBe(null);
+    expect(appState.pendingDescend).toBe(false);
     expect(appState.childSubs).toEqual({});
 
     // keyStack normalized to a single shape (C3/#39): every entry is
@@ -376,7 +369,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
     expect(appState.menusB).toHaveLength(expected801.menusCount);
 
     // currentSubs last written by the landed menu's dump (step j), which
-    // passed the gate after the preset autoload descended onto it.
+    // passed the gate after the bridge descend landed onto it.
     expect(appState.currentSubs[0].key).toBe(expected401.shortTagKeys[0]);
     expect(appState.lastAscii.length).toBeGreaterThan(0);
 
@@ -397,13 +390,14 @@ describe('startup characterization (roadmap step 5.5)', () => {
     simulateSelectPorts();
 
     const landedKey = expected401.shortTagKeys[0];
-    const landedRender = `render:autoLoad=false,key=${landedKey},subsCount=${expectedLanded.subsCount},subsFirst=${landedKey}`;
+    const landedRender = `render:land=-,desc=false,key=${landedKey},subsCount=${expectedLanded.subsCount},subsFirst=${landedKey}`;
     const expected = [
-      // Step (b) updateScreen('0') from main.js. currentKey === '0' hits
-      // the renderer conditional, so all three keys (childSubs,
-      // currentValues, currentSoftkeys) appear in the patch. Two MIDI sends
-      // follow. If these move or disappear, selectPorts' initial screen
-      // fetch was reordered or dropped.
+      // Step (b) main.js selectPorts mirror (C2): loading UX, view reset to
+      // root + landing armed (one combined setState), then updateScreen —
+      // currentKey === '0' hits the renderer conditional, so all three keys
+      // (childSubs, currentValues, currentSoftkeys) appear in the clear.
+      'showLoading',
+      'state:main:select-ports-reset:currentKey,currentSubs,keyStack,pendingDescend,pendingLanding',
       'state:renderer:update-screen-clear:childSubs,currentSoftkeys,currentValues',
       'midi:objectinfo:0',
       'midi:valuedump:0',
@@ -426,44 +420,38 @@ describe('startup characterization (roadmap step 5.5)', () => {
       'state:parser:current-key-ascii:lastAscii',
       'state:parser:current-subs:currentSubs',
 
-      // C1: the bridge renders the root menu SYNCHRONOUSLY on
-      // objectinfo:received (key === currentKey '0') — inside step (c),
-      // BEFORE select-ports-init flips autoLoad. The root branch pins only
-      // currentSubs (no currentSoftkeys write on the root layout), and the
-      // autoload block is a no-op because autoLoad is still false. This is
-      // the race-elimination moment: pre-C1 this render happened 200ms
-      // later with autoLoad=true and descended into the first ROOT menu.
-      `render:autoLoad=false,key=0,subsCount=${expectedRoot.subsCount},subsFirst=0`,
+      // The bridge renders the root menu SYNCHRONOUSLY on arrival (C1) —
+      // the root branch pins only currentSubs — and then the C2 LANDING
+      // fires in the same handler: one combined setState (keyStack root
+      // entry, currentKey -> dspAKey, presetKey, landing advanced to
+      // 'preset', descend armed), updateScreen for the preset (currentKey
+      // '401000b' is NOT in the renderer conditional list — 2 keys), the
+      // other-DSP prefetch, and the 0x18 screen fetch. No timer step.
+      `render:land=root,desc=false,key=0,subsCount=${expectedRoot.subsCount},subsFirst=0`,
       'state:renderer:render-pin:currentSubs',
-
-      // Step (d) inline main.js select-ports-init mirror — one combined
-      // setState. Then the second updateScreen() runs with currentKey ===
-      // '401000b' (NOT in the renderer conditional list), so currentSoftkeys
-      // is omitted from the patch — 2 keys, not 3.
-      'state:main:select-ports-init:autoLoad,currentKey,keyStack',
+      'state:bridge:landing-root:currentKey,keyStack,pendingDescend,pendingLanding,presetKey',
       'state:renderer:update-screen-clear:childSubs,currentValues',
       'midi:objectinfo:401000b',
       'midi:valuedump:401000b',
       'midi:objectinfo:801000b',
       'midi:sysex:cmd=0x18,len=0',
 
-      // Step (f) 401000b dump arrives and currentKey now MATCHES (pre-C1
-      // the race had already flipped currentKey away and this dump was
-      // silently dropped). Full processing: preset-meta, the presetKey
-      // write, child fan-out, lastAscii/currentSubs, then the synchronous
-      // render with autoLoad=true — whose autoload branch descends into the
-      // preset's first short-tag COL menu (the intended landing).
+      // Step (f) 401000b dump arrives and currentKey matches. Full
+      // processing: preset-meta, the presetKey write, child fan-out,
+      // lastAscii/currentSubs, the synchronous render (landing 'preset',
+      // descend armed), then the bridge consumes the one-shot and descends
+      // into the preset's first short-tag COL menu (the intended landing).
       'log:parsedDump:info:Parsed OBJECTINFO_DUMP',
       'state:parser:preset-meta:dspAName,menusA',
       'state:parser:preset-key:presetKey',
       ...expected401.shortTagKeys.flatMap((k) => [`midi:objectinfo:${k}`, `midi:valuedump:${k}`]),
       'state:parser:current-key-ascii:lastAscii',
       'state:parser:current-subs:currentSubs',
-      `render:autoLoad=true,key=401000b,subsCount=${expected401.subsCount},subsFirst=401000b`,
+      `render:land=preset,desc=true,key=401000b,subsCount=${expected401.subsCount},subsFirst=401000b`,
       'state:renderer:render-pin:currentSoftkeys,currentSubs',
-      'state:renderer:autoload-clear:autoLoad',
+      'state:bridge:descend-consume:pendingDescend,pendingLanding',
       'log:general:info:Auto-loading first menu',
-      'state:renderer:autoload-descend:currentKey,keyStack',
+      'state:bridge:descend:currentKey,keyStack',
       'state:renderer:update-screen-clear:childSubs,currentValues',
       `midi:objectinfo:${landedKey}`,
       `midi:valuedump:${landedKey}`,

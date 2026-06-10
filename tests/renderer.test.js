@@ -34,7 +34,8 @@ describe('renderer.js', () => {
     appState.keyStack = [];
     appState.currentKey = '0';
     appState.presetKey = '401000b';
-    appState.autoLoad = false;
+    appState.pendingDescend = false;
+    appState.pendingLanding = null;
     appState.paramOffset = 0;
     appState.dspAName = '';
     appState.dspBName = '';
@@ -259,7 +260,7 @@ describe('renderer.js', () => {
 
     expect(appState.currentKey).toBe('10010000');
     expect(appState.keyStack.length).toBe(0);
-    expect(appState.autoLoad).toBe(true);
+    expect(appState.pendingDescend).toBe(true);
     expect(appState.currentSoftkeys).toEqual([]);
     expect(appState.childSubs).toEqual({}); // single clear point in updateScreen (C8/#44)
     expect(sendObjectInfoDump).toHaveBeenCalledWith('10010000', null);
@@ -365,56 +366,6 @@ describe('renderer.js', () => {
     expect(appState.currentKey).toBe('10010020');
     expect(appState.keyStack.length).toBe(1); // sibling nav does not push
     expect(appState.childSubs).toEqual({});
-  });
-
-  test('autoload-descend sources the keyStack entry from the param subs, not the global (#41)', () => {
-    appState.autoLoad = true;
-    appState.currentKey = '401000b'; // the key being loaded (stays global)
-    // The subs THIS render was invoked with: two short-tag COL children, no params.
-    const subs = [
-      { type: 'COL', position: '0', key: '0', parent: '', statement: 'Real Root', tag: 'realroot' },
-      {
-        type: 'COL',
-        position: '1',
-        key: '10010000',
-        parent: '0',
-        statement: 'Setup',
-        tag: 'setup',
-      },
-      { type: 'COL', position: '2', key: '10020000', parent: '0', statement: 'Prog', tag: 'prog' },
-    ];
-    // renderScreen re-pins appState.currentSubs = subs at its top, which normally
-    // keeps global == param and masks the divergence. Pin the global to a STALE
-    // value with a no-op setter so it survives that re-pin — simulating stale
-    // debounced delivery. This makes the test fail on the old code (which read
-    // appState.currentSubs[0]) and pass on the fix (which reads subs[0]).
-    const stale = [
-      { type: 'COL', position: '0', key: 'STALE', parent: '', statement: 'Stale', tag: 'stale' },
-    ];
-    Object.defineProperty(appState, 'currentSubs', {
-      configurable: true,
-      get: () => stale,
-      set: () => {}, // swallow renderScreen's render-pin write
-    });
-    try {
-      renderScreen(subs, '', mockLog);
-    } finally {
-      // Restore currentSubs as a normal data property for subsequent tests.
-      Object.defineProperty(appState, 'currentSubs', {
-        configurable: true,
-        enumerable: true,
-        writable: true,
-        value: [],
-      });
-    }
-
-    expect(appState.keyStack).toHaveLength(1);
-    const entry = appState.keyStack[0];
-    expect(entry.tag).toBe('realroot'); // from param subs[0], not the stale 'stale'
-    expect(entry.subs[0].key).toBe('0');
-    expect(entry.subs.map((s) => s.key)).not.toContain('STALE');
-    expect(entry.key).toBe('401000b'); // currentKey (loaded key) stays global
-    expect(appState.currentKey).toBe('10010000'); // descended to first child
   });
 
   test('a confirmed-empty NUM value is not refetched on render (C1 refetch convergence)', () => {
@@ -564,7 +515,7 @@ describe('renderer.js', () => {
 
     expect(appState.presetKey).toBe('801000b');
     expect(appState.currentKey).toBe('801000b');
-    expect(appState.autoLoad).toBe(true);
+    expect(appState.pendingDescend).toBe(true);
     expect(appState.childSubs).toEqual({});
     expect(appState.keyStack.length).toBe(1);
     expect(appState.keyStack[0].key).toBe('0');

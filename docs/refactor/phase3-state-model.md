@@ -150,7 +150,7 @@ the wave to drain. The replay test asserts the synchronous structure paint
 and deliberately leaves its wave open (wave state resets on the next fresh
 wave start).
 
-## C2 design — connect/landing without timers (next to implement)
+## C2 design — connect/landing without timers (implemented — branch refactor/c2-landing)
 
 What C2 replaces (main.js `selectPorts` today): request root, then a
 `PORT_INIT_MS` (500ms) `setTimeout` that blindly flips `currentKey` to the

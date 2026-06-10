@@ -52,7 +52,8 @@ describe('controls', () => {
         tag: 'ORVILLE',
       },
     ];
-    appState.autoLoad = false;
+    appState.pendingDescend = false;
+    appState.pendingLanding = null;
     appState.fetchBitmap = true;
     sendKeypress.mockClear();
     sendSysEx.mockClear();
@@ -102,7 +103,7 @@ describe('controls', () => {
     jest.advanceTimersByTime(200);
 
     expect(appState.currentKey).toBe('401000b');
-    expect(appState.autoLoad).toBe(true);
+    expect(appState.pendingDescend).toBe(true);
     // Normalized entry, not a raw string (C3/#39): tag derived from the
     // root dump's main line, subs snapshotted for breadcrumb/sibling logic.
     expect(appState.keyStack).toEqual([{ key: '0', tag: 'ORVILLE', subs: appState.currentSubs }]);

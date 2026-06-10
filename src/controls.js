@@ -132,7 +132,7 @@ export function setupKeypressControls() {
                       makeKeyStackEntry(appState.currentKey, appState.currentSubs),
                     ],
                     currentKey: appState.presetKey,
-                    autoLoad: true,
+                    pendingDescend: true,
                   },
                   'controls:keypress-parameter-nav'
                 );

@@ -67,7 +67,9 @@ export const KEY_PREFIX = {
 };
 export const KEY_SUFFIX = {
   PRESET: '000b', // a preset/DSP root key ends with '000b'
-  METER: '0002', // meter parameter keys end with '0002'
+  // (the observed '0002' meter-key naming convention is documented in
+  // docs/device-model.md §5; the app detects meters by CON type, not by
+  // suffix — C7/#43)
 };
 
 // Root-level menus, in softkey order, used both as a "is this a top-level menu"

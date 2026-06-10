@@ -177,20 +177,26 @@ export function parseResponse(data) {
         'debug',
         'general'
       );
-      const isChildParam = Object.keys(appState.childSubs || {}).some((childKey) => {
-        const childSubs = appState.childSubs[childKey] || [];
-        return childSubs.some((cs) => cs.key === key);
-      });
-      if (sub && sub.type === 'CON') {
+      // C7 (#43): meter detection is type-based — a key is a meter iff the
+      // loaded subs (current menu or a stored child menu) type it CON. The old
+      // endsWith('0002') key heuristic classified by naming convention and
+      // could misfire (menu keys can end 0002 too); a key the app has not
+      // loaded has no on-screen line an immediate render could update, so
+      // unknown keys take the coalesced path instead. The 0002 naming
+      // convention itself stays documented in docs/device-model.md §5.
+      const childSub = Object.values(appState.childSubs || {})
+        .flat()
+        .find((cs) => cs.key === key);
+      if ((sub || childSub)?.type === 'CON') {
         emit('value:received', { key, immediate: true });
         log(
           `Immediate re-rendered screen for CON value change on key ${key}`,
           'debug',
           'renderScreen'
         );
-      } else if (key.endsWith(KEY_SUFFIX.METER) || isChildParam) {
-        // Fallback for meter keys or child params
-        log(`Fallback triggered for meter or child key ${key}`, 'debug', 'general');
+      } else if (childSub) {
+        // Embedded child param: its line is already on screen, render now
+        log(`Fallback triggered for child param key ${key}`, 'debug', 'general');
         emit('value:received', { key, immediate: true });
         log(`Immediate re-rendered screen for VALUE_DUMP on key ${key}`, 'debug', 'renderScreen');
       } else {

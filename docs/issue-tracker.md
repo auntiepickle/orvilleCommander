@@ -43,7 +43,7 @@ HUMAN-GATE: none
 - [x] F3  In-range dependency refresh (npm update) — cleared baseline-browser-mapping warning + all vulnerabilities
 - [ ] F3  PARKED (not a resume point — Phase 3 work takes precedence; the [~] NEXT item governs): major
       upgrades each on own branch, tested (Vite 8, Jest 30, archiver 8)   -> Batches 0.2a/0.2b/0.2c
-- [x] F4  (branch chore/actions-node24) Bumped ci.yml ahead of GitHub's Node-24 forced default
+- [x] F4  (branch chore/actions-node24, PR #92) Bumped ci.yml ahead of GitHub's Node-24 forced default
       (2026-06-16; Node 20 leaves runners 2026-09-16): actions/checkout v4 -> v6, actions/setup-node
       v4 -> v6 (latest majors, Node-24 runtimes — no deprecation warnings), and `node-version` 20 -> 24
       (Node 20 reached end-of-life 2026-04-30; 24 is the current LTS). CI green on the PR is the

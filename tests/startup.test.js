@@ -448,7 +448,13 @@ describe('startup characterization (roadmap step 5.5)', () => {
       'state:parser:current-key-ascii:lastAscii',
       'state:parser:current-subs:currentSubs',
       `render:land=preset,desc=true,key=401000b,subsCount=${expected401.subsCount},subsFirst=401000b`,
-      'state:renderer:render-pin:currentSoftkeys,currentSubs',
+      // R6: the deterministic-embed prefetch for the preset's FIRST
+      // position-0 child fires mid-render (between the two render-pin
+      // writes, breaking their coalescing) — it warms the menu the descend
+      // lands on one beat later.
+      'state:renderer:render-pin:currentSubs',
+      `midi:objectinfo:${expected401.shortTagKeys[0]}`,
+      'state:renderer:render-pin:currentSoftkeys',
       'state:bridge:descend-consume:pendingDescend,pendingLanding',
       'log:general:info:Auto-loading first menu',
       'state:bridge:descend:currentKey,keyStack',

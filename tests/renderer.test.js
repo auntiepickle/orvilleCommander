@@ -418,6 +418,59 @@ describe('renderer.js', () => {
     expect(appState.currentKey).toBe('10010000'); // descended to first child
   });
 
+  test('normalized root entry renders a real breadcrumb and a working back-link (C3/#39)', () => {
+    // Pre-C3, main.js/controls.js pushed the raw string '0' here, so a
+    // length-1 stack rendered "[undefined]" and the back-link's data-key was
+    // undefined. With every entry normalized to {key, tag, subs}, the
+    // breadcrumb shows the root tag and back navigates to '0'.
+    appState.currentKey = '401000b';
+    appState.keyStack = [
+      {
+        key: '0',
+        tag: 'ORVILLE',
+        subs: [
+          {
+            type: 'COL',
+            position: '0',
+            key: '0',
+            parent: '0',
+            statement: 'ORVILLE ROOT OBJECT',
+            tag: 'ORVILLE',
+          },
+        ],
+      },
+    ];
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '401000b',
+        parent: '401000b',
+        statement: 'Black Hole',
+        tag: '',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '4070001',
+        parent: '401000b',
+        statement: 'mix %3.0f',
+        tag: '',
+        value: '50',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    const lcd = document.getElementById('lcd');
+    expect(lcd.innerHTML).toContain('[ORVILLE]');
+    expect(lcd.innerHTML).not.toContain('undefined');
+    const back = document.querySelector('.back-link');
+    expect(back.dataset.key).toBe('0');
+
+    back.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(appState.currentKey).toBe('0');
+  });
+
   test('lcd click on dsp-clickable swaps active preset and pushes keyStack', () => {
     appState.currentKey = '0';
     appState.dspAName = 'Reverb';

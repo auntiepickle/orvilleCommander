@@ -271,7 +271,19 @@ config toggles lazy) -> render on dumpComplete.
 HUMAN-GATE: none
 
 ### Batch 3.2 — State-shape hardening
-- [ ] C3  Normalize keyStack mixed types (string@0, objects@1+) to always-objects or split structures (GH #39)
+- [x] C3  (branch refactor/keystack-normalize, GH #39) Normalized keyStack to always-objects: every entry is
+      {key, tag, subs}, built by the new navigation.js makeKeyStackEntry(key, subs) (tag derived the way the
+      renderer always derived parent tags — sub tag, else first statement word — falling back to the key
+      when subs aren't loaded). All five push sites converted: renderer dsp-toggle/softkey-descend/
+      autoload-descend (autoload keeps the C5 sourcing from the render's `subs` param), controls.js
+      parameter-nav and main.js select-ports-init (the two former raw-string '0' pushes). FIXES the latent
+      length-1-stack bugs those strings caused: "[undefined]" breadcrumb + back-link to key undefined on the
+      first preset render after parameter-nav/connect, and a TypeError in the sibling-softkey check
+      (parentEntry.subs.some on undefined) when a preset top menu has params (no autoload re-push).
+      startup.test's mixed-types known-bug pin updated to assert the normalized shape (header note marked
+      RESOLVED); controls.test asserts the normalized entry (fails pre-C3); new tests/navigation.test.js
+      covers the helper; new renderer test pins the real breadcrumb + working back-link. 111 tests / 13
+      suites green; snapshots unchanged (10).
 - [x] C5  (branch fix/autoload-subs-param, GH #41) renderer autoload-descend now sources the keyStack parent
       entry from the `subs` param it was invoked with, not the global appState.currentSubs. NOTE (from review):
       renderScreen re-pins currentSubs=subs at its top (render-pin), so global==param today and this was NOT an

@@ -63,6 +63,14 @@ export function registerEventBridge({ hideLoading }) {
   unsubscribers.push(
     on('objectinfo:received', ({ key, subs }) => {
       if (key === appState.currentKey) render();
+      // Third render trigger (R7, live-validated): a CHILD of the current
+      // menu arrived — the parser stored it in childSubs under the C8 guard,
+      // so its presence proves it belongs to the menu on screen. Without
+      // this, slow child dumps (e.g. the multi-second bank list the program
+      // menu embeds) land AFTER the wave has already watchdogged and
+      // settled, and nothing ever repaints — the embed only appeared after
+      // navigating away and back.
+      else if (appState.childSubs && appState.childSubs[key]) render();
 
       // C2 landing: the root dump arrived while a connect is pending.
       // selectPorts reset currentKey to root, so the progressive root paint

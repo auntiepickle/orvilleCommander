@@ -69,9 +69,32 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     expect(hideLoading).not.toHaveBeenCalled();
   });
 
-  test('objectinfo:received for another key does not render', () => {
+  test('objectinfo:received for an unrelated key does not render', () => {
     emit('objectinfo:received', { key: '801000b' });
     expect(renderScreen).not.toHaveBeenCalled();
+  });
+
+  test('a stored CHILD of the current menu repaints it on arrival (R7)', () => {
+    // Live-validated: the program menu's embedded 'load new preset' dump
+    // (the multi-second bank list) arrives after the wave has watchdogged;
+    // without this trigger nothing ever repainted and the embed appeared
+    // only after navigating away and back. The parser stores the child in
+    // childSubs (C8 guard) before emitting, so presence in childSubs proves
+    // it belongs to the on-screen menu.
+    appState.currentKey = '10020000';
+    appState.currentSubs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020000',
+        parent: '10020000',
+        statement: 'program functions',
+        tag: 'program',
+      },
+    ];
+    appState.childSubs = { 10020010: [{ key: '10020010', type: 'COL', parent: '10020010' }] };
+    emit('objectinfo:received', { key: '10020010' }); // bare child emit (parser's shape)
+    expect(renderScreen).toHaveBeenCalledTimes(1);
   });
 
   test('dumpComplete for a structure wave renders the settled state and hides loading', () => {

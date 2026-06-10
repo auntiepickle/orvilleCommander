@@ -453,6 +453,13 @@ in logs/ (program-screen.png).
       Review hardening: the embed prefetch fires only when the parser's short-tag fan-out will NOT fetch
       the candidate (long/empty tag) — the unconditional version duplicated the heaviest dump on the
       wire once per navigation. Two-phase test pins arrival-order independence (fails pre-fix).
+- [x] R7  (branch fix/render-on-child-arrival; maintainer live repro "not seeing the embed until I
+      navigate elsewhere and come back") MISSING RENDER TRIGGER FIXED: C1's bridge rendered only on the
+      current menu's own dump and on wave end — a slow CHILD dump (the multi-second bank list the
+      program menu embeds) lands after the wave has watchdogged and settled, so nothing ever repainted.
+      Third trigger added: objectinfo:received for a key present in childSubs (the C8 guard guarantees
+      it belongs to the on-screen menu) repaints. The embed now appears the moment its data arrives.
+      Bridge test pins it (fails pre-fix).
 - [ ] R3  Stale-menu render: clicking a menu renders the OLD menu under the NEW key (wrong title and
       breadcrumb, e.g. "[program] program functions" while currentKey=10030000) until the new dump
       lands — on a backed-up link that is seconds. This is the "never render an unconfirmed value"

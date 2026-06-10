@@ -407,6 +407,45 @@ from the root dump (device boots into last-used preset). Cache is a provisional 
 - [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number
 HUMAN-GATE: needs-hardware (eager-load throughput on the real unit; offline parse/render half covered by replay harness)
 
+### Batch 3.3b — Live-loop findings (headless live session, 2026-06-09; maintainer-confirmed symptoms)
+Discovered by running the REAL app module graph headless (jsdom + @julusian/midi adapters feeding the
+real parser/bridge/renderer) against the powered Orville — no browser. Harness prototype:
+logs/live-app.mjs (gitignored); promote to build_tools/ as part of G2. Physical ground-truth captures
+in logs/ (program-screen.png).
+- [ ] R1  CRITICAL UX (maintainer: "can't set the machine's program"): renderScreen drops ALL
+      position-0 COL children from the softkey row when the menu has any param — the
+      `if (hasNonColParams) localSoftSubs.filter(s => s.position !== '0')` holdover. 'program functions'
+      (one TRG + 8 position-0 COLs) renders with NO load/save/update/... softkeys -> the load-new-preset
+      UI (bank/program SETs + LOAD TRGs, confirmed arriving in childSubs) is unreachable. GROUND TRUTH:
+      the physical PROGRAM screen shows the banks/programs selectors with load/save/update/delete
+      softkeys. FIX candidate: delete the filter — the embed flow already excludes the embedded key
+      explicitly; verify against snapshots, then live.
+- [ ] R2  Duplicate softkey row sets (maintainer report): the static bottom root softkeys take the
+      DESCEND branch, so the keyStack grows without bound (2 -> 6 in one four-click walk) and the
+      previous menu becomes the "parent" entry — its COL row set renders twice (once from stale
+      currentSubs as the current row, once as the parent row). FIX: root-level jumps (ROOT_SOFTKEYS keys
+      and root children) should reset the stack like the Sync button, not push; pair with R3's guard.
+- [ ] R3  Stale-menu render: clicking a menu renders the OLD menu under the NEW key (wrong title and
+      breadcrumb, e.g. "[program] program functions" while currentKey=10030000) until the new dump
+      lands — on a backed-up link that is seconds. This is the "never render an unconfirmed value"
+      invariant violation the 3.3 render guard owns; live evidence captured.
+- [ ] R4  NEW PROTOCOL TYPE observed live: `STR` (string-edit field) — `STR 0 10020052 10020050
+      name:%-22s name Favorites` under 'save bank'. Not in device-model §3's TYPE table; parser's
+      default branch treats it INF-like (value=parts[6]). Add to the spec + decide rendering.
+- [ ] R5  Link-contention data (feeds the 3.3 eager-loader design): (a) a 0x18 bitmap fetch mid-wave
+      stalls the wave past WATCHDOG_IDLE_MS (observed watchdog dumpComplete send=21 recv=13 dur=2489ms
+      at connect with fetchBitmap on) — bitmap transfer is ~1.2s of link time; (b) the parser's
+      unbounded child fan-out on menu entry is expensive — 'program functions' prefetches 9 children
+      including 'load new preset', whose response (the ~70-bank + ~28-program SETs) monopolizes the
+      link for seconds and starves subsequent navigation (watchdog send=2 recv=0). Eager loader must
+      bound/queue fan-out (e.g. skip SET-heavy prefetch, serialize bitmap requests after waves).
+      System self-heals in all observed cases (next wave drains all-received).
+NOTE: C2 landing validated LIVE end to end on this session: root dump -> landing -> descend ->
+'space parameters' with values matching the physical LCD capture (logs/hil-shot.png). Perf reported
+good by the maintainer. The B10g.3 §12 item "CON range" still open (no audio signal connected;
+meter rendering verifiable offline with synthetic values — renderer CON snapshot covers it).
+HUMAN-GATE: none (all reproducible offline or with the harness)
+
 ### Batch 3.4 — Cycle cleanup   [branch: refactor/logcategories-off-appstate]  (GH #42)
 - [x] C6  (PR #81) Moved logLevel + logCategories off appState into logger.js (its own module state, defaults from
       constants.DEFAULT_LOG_CATEGORIES). logger.js no longer imports state.js -> the store->logger->state->store

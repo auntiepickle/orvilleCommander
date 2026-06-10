@@ -368,6 +368,72 @@ describe('renderer.js', () => {
     expect(appState.childSubs).toEqual({});
   });
 
+  test('re-clicking the current softkey is a no-op, not a self-push (C3 review)', () => {
+    appState.currentKey = '10010010';
+    appState.keyStack = [
+      {
+        key: '10010000',
+        tag: 'setup',
+        subs: [
+          {
+            type: 'COL',
+            position: '0',
+            key: '10010000',
+            parent: '10010000',
+            statement: 'Setup',
+            tag: 'setup',
+          },
+          {
+            type: 'COL',
+            position: '1',
+            key: '10010010',
+            parent: '10010000',
+            statement: 'Input',
+            tag: 'input',
+          },
+          {
+            type: 'COL',
+            position: '2',
+            key: '10010020',
+            parent: '10010000',
+            statement: 'Output',
+            tag: 'output',
+          },
+        ],
+      },
+    ];
+    // Leaf menu: parent's COLs render as softkeys, current one highlighted.
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010010',
+        parent: '10010010',
+        statement: 'Input',
+        tag: 'input',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10010011',
+        parent: '10010010',
+        statement: 'lvl %3.0f',
+        tag: '',
+        value: '5',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+    sendObjectInfoDump.mockClear();
+
+    const current = document.querySelector('.softkey[data-key="10010010"]');
+    expect(current).toBeTruthy();
+    current.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(appState.currentKey).toBe('10010010'); // unchanged
+    expect(appState.keyStack).toHaveLength(1); // no duplicate self-entry
+    expect(sendObjectInfoDump).not.toHaveBeenCalled(); // no refetch churn
+  });
+
   test('a confirmed-empty NUM value is not refetched on render (C1 refetch convergence)', () => {
     // The device can answer a VALUE request with an empty value, which the
     // parser caches as ''. The render-driven refetch must treat that as

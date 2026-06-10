@@ -303,7 +303,7 @@ config toggles lazy) -> render on dumpComplete.
       every dumpComplete let value-only meter-poll waves (every METER_POLL_MS) clear the loading
       indicator mid-navigation; midi.js now counts OBJECTINFO sends per wave (payload.objectinfoSends)
       and the bridge hides loading only on structure waves or watchdog stalls.
-- [ ] NEW (C1 review, needs-hardware) Wave-saturation smoke: with meter polling + updateBitmapOnChange on,
+- [ ] NEW (C1 review, needs-hardware, GH #107) Wave-saturation smoke: with meter polling + updateBitmapOnChange on,
       confirm `outstanding` still reaches 0 between ticks on the real 31250-baud link (link-busy periods
       like a ~1.2s 0x17 transfer could keep waves merged until the WATCHDOG_MAX_MS 10s ceiling, freezing
       settled renders for up to 10s; pre-C1 CONs rendered per message regardless). If saturation is real,
@@ -407,7 +407,7 @@ MAINTAINER DIRECTIVE (2026-06-10, governs the rest of Phase 3): "we should be re
 a tree... make sure we have good tree navigation since we are navigating a tree of states from the
 unit" — not one-off handler fixes. R1/R2/R6 were symptoms of view state assembled from click history
 and arrival races; the cure is view DERIVED from the device tree.
-- [~] T1  Tree audit + tree-derived navigation (the maintainer's audit ask: "render the html and audit
+- [~] T1  (GH #105 for the (b) half) Tree audit + tree-derived navigation (the maintainer's audit ask: "render the html and audit
       whether we have odd behavior that doesn't get us the full state of a tree and its leaves").
       (a) DONE — TREE AUDITOR SHIPPED: build_tools/tree-audit.mjs (npm run tree-audit) on the headless
       harness build_tools/live-app.mjs (both promoted from prototypes). Phase 1 fetches the ground-truth
@@ -447,9 +447,9 @@ and arrival races; the cure is view DERIVED from the device tree.
       fully-blank nodes (setup's 100100d0 — statement AND tag empty, children are DSP A/B i/p routing)
       stay unlabeled and audit-flagged; label policy (derive from children? device shows 'dsp B') is a
       T1b question. Position 'c' added to device-model §3.
-- [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX. Subordinate to T1's tree model; R5's pacing data (bitmap-in-wave stalls; bank-list fan-out starvation) constrains the request scheduling.
-- [ ] NEW `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
-- [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number
+- [ ] NEW (GH #106) Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX. Subordinate to T1's tree model; R5's pacing data (bitmap-in-wave stalls; bank-list fan-out starvation) constrains the request scheduling.
+- [ ] NEW (GH #106) `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
+- [ ] NEW (GH #106) Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number
 HUMAN-GATE: needs-hardware (eager-load throughput on the real unit; offline parse/render half covered by replay harness)
 
 ### Batch 3.3b — Live-loop findings (headless live session, 2026-06-09; maintainer-confirmed symptoms)
@@ -489,7 +489,7 @@ in logs/ (program-screen.png).
       Third trigger added: objectinfo:received for a key present in childSubs (the C8 guard guarantees
       it belongs to the on-screen menu) repaints. The embed now appears the moment its data arrives.
       Bridge test pins it (fails pre-fix).
-- [ ] R3  Stale-menu render: clicking a menu renders the OLD menu under the NEW key (wrong title and
+- [ ] R3  (owned by GH #106, the render guard) Stale-menu render: clicking a menu renders the OLD menu under the NEW key (wrong title and
       breadcrumb, e.g. "[program] program functions" while currentKey=10030000) until the new dump
       lands — on a backed-up link that is seconds. This is the "never render an unconfirmed value"
       invariant violation the 3.3 render guard owns; live evidence captured.

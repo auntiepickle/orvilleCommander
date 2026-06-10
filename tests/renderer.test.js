@@ -417,6 +417,49 @@ describe('renderer.js', () => {
     expect(appState.currentKey).toBe('10010000'); // descended to first child
   });
 
+  test('a confirmed-empty NUM value is not refetched on render (C1 refetch convergence)', () => {
+    // The device can answer a VALUE request with an empty value, which the
+    // parser caches as ''. The render-driven refetch must treat that as
+    // confirmed-absent (=== undefined check), not retry forever: post-C1
+    // each retry would open a wave whose drain re-renders, making a falsy
+    // check an unthrottled infinite request loop.
+    appState.currentKey = '10010001';
+    appState.currentValues = { 10010011: '' };
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010001',
+        parent: '10010001',
+        statement: 'Input',
+        tag: 'input',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10010011',
+        parent: '10010001',
+        statement: 'lvl %3.0f',
+        tag: '',
+        value: '5',
+      },
+      {
+        type: 'NUM',
+        position: '2',
+        key: '10010012',
+        parent: '10010001',
+        statement: 'pan %3.0f',
+        tag: '',
+        value: '0',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    // The uncached param is fetched; the confirmed-empty one is not.
+    expect(sendValueDump).toHaveBeenCalledWith('10010012');
+    expect(sendValueDump).not.toHaveBeenCalledWith('10010011');
+  });
+
   test('normalized root entry renders a real breadcrumb and a working back-link (C3/#39)', () => {
     // Pre-C3, main.js/controls.js pushed the raw string '0' here, so a
     // length-1 stack rendered "[undefined]" and the back-link's data-key was

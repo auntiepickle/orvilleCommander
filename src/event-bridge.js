@@ -55,9 +55,17 @@ export function registerEventBridge({ hideLoading }) {
   );
 
   unsubscribers.push(
-    on('dumpComplete', () => {
+    on('dumpComplete', (payload) => {
       render();
-      hideLoading();
+      // Clear the loading indicator only when the wave carried OBJECTINFO
+      // (structure) requests — i.e. it could be the wave a navigation or
+      // refresh opened — or when the watchdog gave up (never strand the
+      // spinner on a stall). With meter polling enabled, value-only waves
+      // drain every METER_POLL_MS and must not hide an unrelated loading
+      // state that was shown for an in-flight navigation (C1 review).
+      if (payload?.objectinfoSends > 0 || payload?.reason === 'watchdog') {
+        hideLoading();
+      }
     })
   );
 

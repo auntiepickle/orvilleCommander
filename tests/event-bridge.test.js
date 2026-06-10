@@ -55,10 +55,16 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     expect(renderScreen).not.toHaveBeenCalled();
   });
 
-  test('dumpComplete renders the settled state and hides loading', () => {
-    emit('dumpComplete', { reason: 'all-received' });
+  test('dumpComplete for a structure wave renders the settled state and hides loading', () => {
+    emit('dumpComplete', { reason: 'all-received', objectinfoSends: 2 });
     expect(renderScreen).toHaveBeenCalledTimes(1);
     expect(hideLoading).toHaveBeenCalledTimes(1);
+  });
+
+  test('a value-only wave renders but does NOT hide loading (meter polling must not clear it)', () => {
+    emit('dumpComplete', { reason: 'all-received', objectinfoSends: 0 });
+    expect(renderScreen).toHaveBeenCalledTimes(1);
+    expect(hideLoading).not.toHaveBeenCalled();
   });
 
   test('a watchdog dumpComplete still hides loading even with nothing to render', () => {

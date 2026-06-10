@@ -128,7 +128,7 @@ describe('parseResponse', () => {
     const asciiData = asciiString.split('').map((c) => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x2e, ...asciiData, 0xf7];
     parseResponse(data);
-    jest.advanceTimersByTime(200); // Advance for setTimeout (debounce is synchronous)
+    jest.advanceTimersByTime(200); // flush-safety only; renders are synchronous since C1
     expect(mockLog).toHaveBeenCalledWith(
       expect.stringContaining('Parsed VALUE_DUMP for key 10030000'),
       'info',

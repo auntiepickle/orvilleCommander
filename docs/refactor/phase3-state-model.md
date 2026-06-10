@@ -68,7 +68,8 @@ setup/program/levels menus stay lazy (fetched + loading-gated on navigation).
 - **3.1 `dumpComplete` events** — the substrate. Replace the stacked
   200ms `setTimeout`/`debounce` with explicit `dumpComplete(key, data)` events;
   these drive both the connect handshake and eager-load completion. Removes the
-  timer stack; folds in `isLoadingPreset` removal.
+  timer stack; folds in `isLoadingPreset` removal. (Implemented — see
+  "Implementation notes — 3.1 as built" below.)
 - **3.2 State-shape hardening** — normalize `keyStack`; persist active DSP
   app-side; the "view" is now built deterministically from the tree.
 - **3.3 Connect handshake + eager loader + landing** — replaces the 500ms
@@ -94,14 +95,22 @@ signals:
 1. `objectinfo:received` with `key === currentKey` — the **progressive
    structure paint**: the menu you navigated to paints the instant its dump
    lands, with values still loading.
-2. `dumpComplete` — the **settled paint** + `hideLoading()`: the request wave
-   drained (or the watchdog gave up on a stall); render the confirmed state
-   once. Value-only waves (meter polling, value refetches) render here — one
-   render per wave, not per message.
+2. `dumpComplete` — the **settled paint**: the request wave drained (or the
+   watchdog gave up on a stall); render the confirmed state once. Value-only
+   waves (meter polling, value refetches) render here — one render per wave,
+   not per message. `hideLoading()` fires only when the wave carried
+   OBJECTINFO requests (`payload.objectinfoSends > 0` — i.e. it could be the
+   wave a navigation/refresh opened) or on a watchdog stall (never strand the
+   spinner): with polling enabled, value-only waves drain every
+   `METER_POLL_MS` and must not clear an unrelated loading state.
 
 Renders that themselves issue requests (missing values, embed prefetch) start
 a new wave, whose drain triggers the next settled paint; the loop converges
-when a render issues no new requests.
+when a render issues no new requests. Convergence requires every refetch
+predicate to treat a **confirmed-empty value** (`''` — the device may answer a
+VALUE request with an empty value, device-model.md §6) as *present*: the NUM
+refetch sites check `=== undefined`, not falsiness, since post-C1 a retry is
+self-clocking at link speed instead of timer-throttled (C1 review finding).
 
 **Consequences (intentional behavior changes):**
 
@@ -128,12 +137,16 @@ when a render issues no new requests.
   `loadingPresetName` alone — which **no production code writes** (pre-existing;
   the path is characterized by tests only — see the ledger).
 
-**Test strategy.** Replay/startup suites no longer advance coalesce timers;
-where fixture responses are fed without recorded requests (replay), the
-parser's own fan-out sends open a wave and the idle watchdog
-(`WATCHDOG_IDLE_MS`) closes it — or the suite feeds the wave to drain. The
-startup characterization Tier A/B sequences are rewritten in the same commit,
-per their own charter, and now pin the race-free landing.
+**Test strategy.** `tests/event-bridge.test.js` pins the bridge contract
+directly. The startup characterization Tier A/B sequences are rewritten in the
+same commit, per their own charter, and now pin the race-free landing; their
+remaining timer advances exist only to assert that nothing is pending. In
+replay, a fixture response arrives without a recorded request
+(`notifyResponse` no-ops at zero outstanding) while the render's own fan-out
+sends open a wave; closing it takes a `WATCHDOG_IDLE_MS` advance or feeding
+the wave to drain. The replay test asserts the synchronous structure paint
+and deliberately leaves its wave open (wave state resets on the next fresh
+wave start).
 
 ## Validation / open items
 

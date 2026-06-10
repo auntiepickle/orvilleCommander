@@ -25,7 +25,7 @@ This project emulates the Orville's LCD screen and controls in a browser, using 
   - JavaScript (ES modules).
   - WebMIDI API for MIDI.
   - HTML/CSS for UI.
-  - Runtime deps: `webmidi` and `lodash.debounce` only. Dev: Vite, Jest, ESLint, Prettier.
+  - Runtime dep: `webmidi` only. Dev: Vite, Jest, ESLint, Prettier.
 
 ## Setup and Installation
 1. Clone the repo: `git clone <repo-url>`.
@@ -35,7 +35,7 @@ This project emulates the Orville's LCD screen and controls in a browser, using 
 5. Configure device ID (default: 0) and other settings (log level, bitmap fetching).
 6. Use the virtual panel to navigate and interact.
 
-**Dependencies**: `webmidi` + `lodash.debounce` (runtime); requires browser MIDI access.
+**Dependencies**: `webmidi` (runtime); requires browser MIDI access.
 
 ## Architecture
 The app follows a modular structure with separation of concerns:

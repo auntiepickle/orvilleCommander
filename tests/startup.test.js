@@ -121,6 +121,7 @@ import { hideLoading } from '../src/main.js';
 import { makeKeyStackEntry } from '../src/navigation.js';
 import { registerEventBridge } from '../src/event-bridge.js';
 import { emit } from '../src/events.js';
+import { CMD } from '../src/sysex-commands.js';
 import {
   loadFixture,
   extractExpectedFromRoot,
@@ -135,7 +136,7 @@ import {
 } from './helpers/startup-recorder.js';
 
 // Duplicated from renderer.js so the simulation's toggleDspKey call does not
-// route through the mocked renderer module. Keeps the inline main.js:147
+// route through the mocked renderer module. Keeps the inline main.js selectPorts
 // reproduction self-contained.
 function toggleDspKey(key) {
   return key.startsWith('4') ? '8' + key.slice(1) : '4' + key.slice(1);
@@ -240,7 +241,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
     delete appState.menusA;
     delete appState.menusB;
     // Wire the production parser->renderer dispatch via event-bridge.js. The
-    // mocked main.js (lines 51-57) supplies hideLoading as a recording stub;
+    // mocked main.js (top of this file) supplies hideLoading as a recording stub;
     // the bridge gets it via DI so this harness exercises real bridge code,
     // not a copy. Teardown in afterEach prevents cross-test subscriber leakage.
     teardownEventBridge = registerEventBridge({ hideLoading });
@@ -260,7 +261,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
   // render at step (f) takes the autoload descend into the preset's first
   // menu. The 200ms render timers this simulation used to advance are gone.
   function simulateSelectPorts() {
-    // (b) updateScreen('0') — reproduces main.js:141
+    // (b) updateScreen('0') — reproduces main.js selectPorts
     updateScreen();
     // (c) feed root fixture — bridge renders the root menu on arrival
     //     (objectinfo:received key === currentKey '0', autoLoad still false).
@@ -281,7 +282,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
     );
     updateScreen();
     sendObjectInfoDump(toggleDspKey(appState.presetKey));
-    if (appState.fetchBitmap) sendSysEx(0x18, []);
+    if (appState.fetchBitmap) sendSysEx(CMD.GET_SCREEN, []);
     // (e) advance 500ms — pins that NO render timers are pending since C1.
     jest.advanceTimersByTime(500);
     // (f) feed 401000b — currentKey now matches, so the full path runs:
@@ -301,8 +302,10 @@ describe('startup characterization (roadmap step 5.5)', () => {
     parseResponse(landedMenuBytes);
     // (k) the wave the fan-outs opened would drain on a real device;
     //     midi.js is mocked here (no wave counting), so fire the bridge's
-    //     settled-render path directly: one render + hideLoading.
-    emit('dumpComplete', { reason: 'all-received' });
+    //     settled-render path directly: one render + hideLoading. The wave
+    //     conceptually carried OBJECTINFO requests (the fan-outs), so the
+    //     payload says so — the bridge gates hideLoading on that.
+    emit('dumpComplete', { reason: 'all-received', objectinfoSends: 1 });
     // (l) flush — pins that no timers remain.
     jest.runAllTimers();
   }

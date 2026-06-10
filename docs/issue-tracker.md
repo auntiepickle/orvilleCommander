@@ -282,13 +282,31 @@ config toggles lazy) -> render on dumpComplete.
       lands with 3.3's eager loader if needed. SIDE EFFECT (intentional, characterized): the autoload
       landing-page race (#38's bug) is ELIMINATED — the root dump now renders synchronously BEFORE
       select-ports-init flips autoLoad, so the flag is consumed by the PRESET render and startup lands on
-      the preset's first menu (the intended landing); startup.test rewritten per its charter to pin the
-      race-free flow end-to-end (root render -> preset render -> autoload descend -> landed-menu render ->
-      settled dumpComplete render + hideLoading). Renderer's MIDI_SETTLE/PROGRAM_SET/DEVICE_LOAD chains
+      the preset's first menu (the intended landing). #38/C2 stays OPEN: the PORT_INIT_MS timer and the
+      autoLoad flag mechanism remain in main.js — C1 removed the wrong-landing symptom, not the timer-driven
+      flow; landing explicitly via the root dump is still 3.3's work. startup.test rewritten per its charter
+      to pin the race-free flow end-to-end (root render -> preset render -> autoload descend -> landed-menu
+      render -> settled dumpComplete render + hideLoading). Renderer's MIDI_SETTLE/PROGRAM_SET/DEVICE_LOAD chains
       KEPT: they are outbound device-settle pacing (when to re-request after a PUT/load), not render
       coalescing — replacing the load flow is 3.3's C2 (rootDumpComplete landing). New
       tests/event-bridge.test.js pins the bridge contract; full design in
       docs/refactor/phase3-state-model.md "Implementation notes — 3.1 as built".
+      REVIEW ADDENDUM (correctness reviewer, both fixed in-branch): (1) the NUM refetch predicate was
+      falsy-based, so a confirmed-empty VALUE ('' — legal per device-model §6) would have become an
+      UNTHROTTLED infinite request loop once the timer throttle was gone; the three NUM sites now check
+      === undefined (matching SET/INF) and a renderer test pins no-refetch-on-empty. (2) hideLoading on
+      every dumpComplete let value-only meter-poll waves (every METER_POLL_MS) clear the loading
+      indicator mid-navigation; midi.js now counts OBJECTINFO sends per wave (payload.objectinfoSends)
+      and the bridge hides loading only on structure waves or watchdog stalls.
+- [ ] NEW (C1 review, needs-hardware) Wave-saturation smoke: with meter polling + updateBitmapOnChange on,
+      confirm `outstanding` still reaches 0 between ticks on the real 31250-baud link (link-busy periods
+      like a ~1.2s 0x17 transfer could keep waves merged until the WATCHDOG_MAX_MS 10s ceiling, freezing
+      settled renders for up to 10s; pre-C1 CONs rendered per message regardless). If saturation is real,
+      either skip poll ticks while a wave is open or re-admit a per-CON render path.
+- [ ] NEW (C1 review, minor) A WATCHDOG dumpComplete firing mid-navigation (genuine stall after a click set
+      autoLoad=true but before the new menu's dump landed) renders the OLD subs and the autoload branch can
+      descend from them. Narrow (stall-only); 3.3's explicit rootDumpComplete landing subsumes it — fold
+      into C2's design.
 - [x] C4  (same branch, GH #40) isLoadingPreset deleted: store default, both renderer writes, and the
       event-bridge gating/clear are gone — hideLoading is driven solely by dumpComplete. The parser's
       Favorites re-order fix now gates on loadingPresetName alone; FINDING: no production code writes
@@ -361,10 +379,13 @@ HUMAN-GATE: none
 - [ ] NEW Persist active DSP (A/B) app-side as view state (default A)
 HUMAN-GATE: none
 
-### Batch 3.3 — Connect handshake + eager loader + landing  (replaces the autoLoad race)
+### Batch 3.3 — Connect handshake + eager loader + landing  (replaces the autoLoad timer mechanism)
 DECISION RESOLVED (see phase3-state-model.md): land on the last-active DSP's preset, read authoritatively
 from the root dump (device boots into last-used preset). Cache is a provisional structure-only pre-paint.
-- [ ] C2  Remove the 500ms autoLoad race (main.js); land via rootDumpComplete -> active preset
+- [ ] C2  Remove the PORT_INIT_MS (500ms) timer + autoLoad flag mechanism (main.js); land via
+      rootDumpComplete -> active preset. NOTE: the race SYMPTOM (wrong landing menu) was eliminated by
+      C1's synchronous root render (Batch 3.1), but the timer-driven mechanism it rode on is still in
+      place — this item owns removing it.
 - [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX
 - [ ] NEW `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
 - [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number

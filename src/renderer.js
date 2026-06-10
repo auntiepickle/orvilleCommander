@@ -371,12 +371,14 @@ function formatValue(statement, value, isHtml = false, key = '') {
 let prePainting = false;
 
 // A param line with every value slot blanked to the placeholder: the
-// statement (else the tag) with format specifiers substituted; '%%' still
-// renders as a literal '%'.
+// statement (else the tag) with format specifiers substituted; '%%'
+// collapses to a literal '%' (each '%' matches the bare-% alternative
+// individually, so the pair needs the same explicit collapse the CON
+// render path applies).
 const placeholderLine = (s) =>
-  (s.statement || s.tag || '').replace(FORMAT_SPEC_RE, (m) =>
-    m === '%' ? '%' : RENDER.VALUE_PLACEHOLDER
-  );
+  (s.statement || s.tag || '')
+    .replace(FORMAT_SPEC_RE, (m) => (m === '%' ? '%' : RENDER.VALUE_PLACEHOLDER))
+    .replace('%%', '%');
 
 export function renderScreen(subs, ascii, logParam) {
   const lcdEl = document.getElementById('lcd');
@@ -391,6 +393,16 @@ export function renderScreen(subs, ascii, logParam) {
   // cached structure instead, or an honest loading title when the tree has
   // never seen the key.
   if (!prePainting && subs[0]?.key !== appState.currentKey) {
+    // Root with no cached dump: the ROOT render branch never displays a
+    // title and filters the main sub out of its softkey rows, so the
+    // synthetic loading node would paint a blank screen. Keeping the old
+    // DOM beats painting nothing — skip the paint entirely (the root dump
+    // is always the connect flow's first fetch, so this is a cold-start
+    // corner only).
+    if (appState.currentKey === KEY.ROOT && !getNode(KEY.ROOT)) {
+      log('Render guard (R3): root not cached yet; skipping paint', 'debug', 'renderScreen');
+      return;
+    }
     const cached = getNode(appState.currentKey) || [
       {
         type: 'COL',
@@ -493,15 +505,19 @@ export function renderScreen(subs, ascii, logParam) {
       titleHtml = `<span class="back-link" data-key="${parent.key}">[${parent.tag}]</span> ${titleText.replace(`[${parent.tag}] `, '')}`;
     }
     displayLines.push(titleText);
-    // Group graphic EQ NUMs with position 'a' (skipped in pre-paint: the
-    // R3 shortcut below renders every param as a placeholder line instead,
-    // and this block sends value fetches the real render owns).
-    const graphicEqSubs = prePainting
-      ? []
-      : subs.slice(1).filter((s) => s.type === 'NUM' && s.position === 'a');
+    // Group graphic EQ NUMs with position 'a'. The pre-paint pass keeps the
+    // grouped one-line layout (placeholder values, no fetches) so the real
+    // render doesn't collapse N lines into one when the dump lands (R3).
+    const graphicEqSubs = subs.slice(1).filter((s) => s.type === 'NUM' && s.position === 'a');
     let graphicEqLine;
     let graphicEqHtml;
-    if (graphicEqSubs.length > 0) {
+    if (graphicEqSubs.length > 0 && prePainting) {
+      const line = graphicEqSubs
+        .map((s) => `${s.tag.split(':')[0]}: ${RENDER.VALUE_PLACEHOLDER}`)
+        .join(' ');
+      paramLines.push(line);
+      paramHtmlLines.push(line);
+    } else if (graphicEqSubs.length > 0) {
       const formattedParts = graphicEqSubs.map((s) => {
         const value = appState.currentValues[s.key] || s.value;
         if (appState.currentValues[s.key] === undefined) sendValueDump(s.key); // empty string = confirmed-absent, do not refetch (C1 review)
@@ -526,8 +542,9 @@ export function renderScreen(subs, ascii, logParam) {
       if (prePainting) {
         // R3: one inert placeholder line per param — no clickable spans,
         // no selects, and no value refetches (the real render issues those
-        // when the live dump lands).
-        if (s.type === 'COL' || s.type === '8') return;
+        // when the live dump lands). 'a'-positioned NUMs already rendered
+        // as the grouped graphic-EQ placeholder line above.
+        if (s.type === 'COL' || s.type === '8' || s.position === 'a') return;
         const text = placeholderLine(s);
         if (text) {
           paramLines.push(text);
@@ -740,7 +757,10 @@ export function renderScreen(subs, ascii, logParam) {
       softSubs = localSoftSubs;
     }
     // Pre-paint passes write no state at all (R3): the softkey pin, like
-    // the currentSubs pin, records only device-confirmed renders.
+    // the currentSubs pin, records only device-confirmed renders. (Note:
+    // currentSoftkeys currently has no reader in src — clicks resolve via
+    // data-key attributes — so during a pre-paint window the DOM's softkeys
+    // intentionally lead this pin; revisit if a consumer is ever added.)
     if (softSubs.length > 0 && !prePainting) {
       setState({ currentSoftkeys: softSubs }, 'renderer:render-pin');
     }

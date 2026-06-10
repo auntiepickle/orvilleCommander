@@ -819,6 +819,33 @@ describe('renderer.js', () => {
         statement: 'meter setup',
         tag: 'meter',
       },
+      {
+        type: 'CON',
+        position: '3',
+        key: '10030002',
+        parent: '10030000',
+        statement: 'wet %3.0f%%',
+        tag: 'wet',
+        value: '56',
+      },
+      {
+        type: 'NUM',
+        position: 'a',
+        key: '10030003',
+        parent: '10030000',
+        statement: '',
+        tag: 'v1:%3.0f',
+        value: '2',
+      },
+      {
+        type: 'NUM',
+        position: 'a',
+        key: '10030004',
+        parent: '10030000',
+        statement: '',
+        tag: 'v2:%3.0f',
+        value: '5',
+      },
     ]);
     const staleSubs = [
       {
@@ -850,6 +877,11 @@ describe('renderer.js', () => {
     expect(lcd.textContent).toContain('level functions');
     expect(lcd.textContent).toContain('in gain ... dB');
     expect(lcd.textContent).not.toMatch(/in gain\s+6/);
+    // '%%' collapses to a literal '%' in placeholder lines (reviewer fix).
+    expect(lcd.textContent).toContain('wet ...%');
+    expect(lcd.textContent).not.toContain('%%');
+    // 'a'-positioned NUMs keep the grouped one-line graphic-EQ layout.
+    expect(lcd.textContent).toContain('v1: ... v2: ...');
     expect(document.querySelector('.softkey[data-key="10030045"]')).toBeTruthy();
     // Placeholder params are inert: no clickable value span for the NUM.
     expect(document.querySelector('.param-value[data-key="10030001"]')).toBeFalsy();

@@ -1,7 +1,7 @@
 // tests/event-bridge.test.js
-// Pins the C1 (#37) bridge contract directly: exactly two render triggers
-// (objectinfo:received for the current key; dumpComplete), hideLoading driven
-// solely by dumpComplete (C4/#40), teardown unsubscribing everything, and the
+// Pins the C1 (#37) bridge contract directly: exactly three render triggers
+// (current-key dump; child-of-current-menu arrival, R7; dumpComplete), hideLoading
+// driven solely by dumpComplete (C4/#40), teardown unsubscribing everything, and the
 // C2 (#38) landing / one-shot-descend state machine.
 
 jest.mock('../src/renderer.js', () => ({
@@ -44,6 +44,7 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     appState.currentKey = '10010000';
     appState.currentSubs = [{ key: '10010000', type: 'COL', parent: '10010000' }];
     appState.lastAscii = 'COL 0 10010000 10010000 setup setup';
+    appState.childSubs = {};
     appState.pendingLanding = null;
     appState.pendingDescend = false;
     appState.keyStack = [];

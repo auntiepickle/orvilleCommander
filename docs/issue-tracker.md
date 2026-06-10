@@ -276,7 +276,8 @@ config toggles lazy) -> render on dumpComplete.
       (midi.js per-wave outstanding counter + idle watchdog emitting dumpComplete; FB4) predated this batch
       and FB7 secured its exactly-once decrement; C1 is the consumer migration. event-bridge.js rebuilt:
       the per-message timer stack (RENDER_COALESCE_MS setTimeout chains + shared lodash debounce + the
-      render:request indirection) is GONE; the bridge renders on exactly two signals — objectinfo:received
+      render:request indirection) is GONE; the bridge renders on two signals (a third, child-of-current-menu
+      arrival, was added by R7 after live validation) — objectinfo:received
       for the CURRENT key (progressive structure paint, synchronous on arrival) and dumpComplete (settled
       paint + hideLoading; one render per wave for value-only waves like meter ticks). Renders that issue
       requests open a new wave whose drain triggers the next settled paint (converges when nothing is

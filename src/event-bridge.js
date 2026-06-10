@@ -4,7 +4,7 @@
 // C1/#37), now also home to the connect-landing / one-shot-descend state
 // machine (C2/#38). midi.js's request-wave tracking is the render clock.
 //
-// Render triggers — exactly two:
+// Render triggers — exactly three:
 //   1. objectinfo:received with key === currentKey: the PROGRESSIVE
 //      structure paint. The menu being navigated to paints the instant its
 //      dump lands (values may still be loading).
@@ -12,6 +12,9 @@
 //      drained ('all-received') or stalled out ('watchdog'); render the
 //      confirmed state once. Value-only waves (meter poll ticks, value
 //      refetches) render here — one render per wave, not per message.
+//   3. objectinfo:received for a key stored in childSubs (R7): a child of
+//      the on-screen menu arrived — repaint so embeds/child data show the
+//      moment they land, not on the next unrelated render.
 //
 // Navigation one-shots (C2 — replaces the PORT_INIT_MS timer and the sticky
 // autoLoad flag; see docs/refactor/phase3-state-model.md "C2 design"):

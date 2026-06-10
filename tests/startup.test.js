@@ -136,6 +136,7 @@ import {
   drainAndSort,
 } from './helpers/startup-recorder.js';
 import { reset as treeReset } from '../src/tree.js';
+import { stopEagerLoad } from '../src/eager-loader.js';
 
 // Log substrings that are semantically load-bearing for startup ordering.
 // All other log messages are non-whitelisted and get filtered out of the
@@ -231,6 +232,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
       updateBitmapOnChange: true,
       currentSoftkeys: [],
       pollingEnabled: false,
+      eagerLoad: true, // #106: the post-landing eager fetch is part of the pinned flow
     });
     treeReset(); // child structure lives in the persistent tree (T1b/#105)
     // menusA/menusB may exist from a prior test; blow them away.
@@ -248,6 +250,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
       teardownEventBridge();
       teardownEventBridge = null;
     }
+    stopEagerLoad(); // the real loader subscribes to the shared event bus
     jest.useRealTimers();
   });
 
@@ -494,6 +497,14 @@ describe('startup characterization (roadmap step 5.5)', () => {
       ...landedParamKeys.map((k) => `midi:valuedump:${k}`),
       'state:renderer:render-pin:currentSoftkeys',
       'hideLoading',
+
+      // #106: the landing armed the eager loader; the clean drain starts it.
+      // The preset and the landed first menu are already tree-cached, so the
+      // serialized walk's first (and in this simulation only) request is the
+      // preset's second COL child. No response ever arrives here, so the
+      // walk holds at one in-flight request — pinning the one-at-a-time
+      // scheduling.
+      `midi:objectinfo:${expected401.navColKeys[1]}`,
     ];
 
     const actual = drainAndSort(getEvents()).map(normalize).filter(Boolean);

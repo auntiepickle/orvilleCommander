@@ -49,11 +49,18 @@ import { appState } from './state.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendSysEx } from './midi.js';
 import { getNode, parentOf, deriveKeyStack } from './tree.js';
+import { startEagerLoad } from './eager-loader.js';
 import { CMD, KEY, KEY_PREFIX, PARAM_TYPES } from './sysex-commands.js';
 import { log } from './logger.js';
 
 export function registerEventBridge({ hideLoading }) {
   const unsubscribers = [];
+
+  // Armed by the connect landing; consumed by the next drained wave. The
+  // eager loader starts only AFTER the landing wave drains so the parser's
+  // own fan-out responses are already tree-recorded — starting at landing
+  // time would re-request every in-flight child (#106).
+  let eagerLoadArmed = false;
 
   const render = () => {
     // renderScreen no-ops on empty subs itself; the guard here just avoids
@@ -101,6 +108,7 @@ export function registerEventBridge({ hideLoading }) {
           sendSysEx(CMD.GET_SCREEN, []);
           log('Fetched initial preset screen.', 'info', 'general');
         }
+        eagerLoadArmed = appState.eagerLoad === true; // start after this wave drains (#106)
         return; // currentKey changed; nothing below applies to this dump
       }
 
@@ -150,6 +158,24 @@ export function registerEventBridge({ hideLoading }) {
       // state that was shown for an in-flight navigation (C1 review).
       if (payload?.objectinfoSends > 0 || payload?.reason === 'watchdog') {
         hideLoading();
+      }
+      // #106: the first CLEAN drain after the landing starts the background
+      // structure warm-up (serialized; see eager-loader.js). A watchdog
+      // drain keeps the arm: with fetchBitmap on, the landing wave
+      // routinely stalls on the ~1.2s bitmap transfer (R5a) and self-heals
+      // on the next wave — live-validated; disarming there would skip the
+      // eager load on the most common config. presetKey is read at start
+      // time, so a preset switch before the first clean drain warms the
+      // NEW active preset.
+      if (eagerLoadArmed && payload?.reason === 'all-received') {
+        eagerLoadArmed = false;
+        startEagerLoad(appState.presetKey);
+      } else if (eagerLoadArmed) {
+        log(
+          'Eager load still armed: landing wave stalled; waiting for a clean drain.',
+          'info',
+          'general'
+        );
       }
     })
   );

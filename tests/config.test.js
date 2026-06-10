@@ -13,6 +13,7 @@ const makeUi = () => ({
   logLevelSelect: { value: '' },
   fetchBitmapCheckbox: { checked: null },
   updateBitmapOnChangeCheckbox: { checked: null },
+  eagerLoadCheckbox: { checked: null },
 });
 
 describe('config', () => {
@@ -21,13 +22,14 @@ describe('config', () => {
   });
 
   test('saveConfig then loadConfig round-trips the values and applies them to the UI', () => {
-    saveConfig('out-1', 'in-1', 5, 'debug', { sysexSent: true }, true, false, '801000b');
+    saveConfig('out-1', 'in-1', 5, 'debug', { sysexSent: true }, true, false, '801000b', false);
     const ui = makeUi();
     const parsed = loadConfig(
       ui.deviceIdInput,
       ui.logLevelSelect,
       ui.fetchBitmapCheckbox,
-      ui.updateBitmapOnChangeCheckbox
+      ui.updateBitmapOnChangeCheckbox,
+      ui.eagerLoadCheckbox
     );
 
     expect(parsed).toMatchObject({
@@ -39,11 +41,13 @@ describe('config', () => {
       fetchBitmap: true,
       updateBitmapOnChange: false,
       presetKey: '801000b',
+      eagerLoad: false,
     });
     expect(ui.deviceIdInput.value).toBe(5);
     expect(ui.logLevelSelect.value).toBe('debug');
     expect(ui.fetchBitmapCheckbox.checked).toBe(true);
     expect(ui.updateBitmapOnChangeCheckbox.checked).toBe(false);
+    expect(ui.eagerLoadCheckbox.checked).toBe(false);
   });
 
   test('loadConfig returns null when nothing is stored', () => {
@@ -65,13 +69,15 @@ describe('config', () => {
       ui.deviceIdInput,
       ui.logLevelSelect,
       ui.fetchBitmapCheckbox,
-      ui.updateBitmapOnChangeCheckbox
+      ui.updateBitmapOnChangeCheckbox,
+      ui.eagerLoadCheckbox
     );
     expect(ui.deviceIdInput.value).toBe(0);
     expect(ui.logLevelSelect.value).toBe('info');
     // Absent flags default to checked (only an explicit false unchecks them).
     expect(ui.fetchBitmapCheckbox.checked).toBe(true);
     expect(ui.updateBitmapOnChangeCheckbox.checked).toBe(true);
+    expect(ui.eagerLoadCheckbox.checked).toBe(true); // pre-#106 caches stay eager
   });
 
   describe('mergeLogCategories (A4)', () => {

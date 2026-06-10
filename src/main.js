@@ -23,6 +23,7 @@ const deviceIdInput = document.getElementById('device-id');
 const logLevelSelect = document.getElementById('log-level');
 const fetchBitmapCheckbox = document.getElementById('fetch-bitmap');
 const updateBitmapOnChangeCheckbox = document.getElementById('update-bitmap-on-change');
+const eagerLoadCheckbox = document.getElementById('eager-load');
 const selectPortsBtn = document.getElementById('select-ports');
 const saveConfigBtn = document.getElementById('save-config');
 const clearConfigBtn = document.getElementById('clear-config');
@@ -177,7 +178,8 @@ saveConfigBtn.addEventListener('click', () => {
     getLogCategories(),
     fetchBitmapCheckbox.checked,
     updateBitmapOnChangeCheckbox.checked,
-    appState.presetKey
+    appState.presetKey,
+    eagerLoadCheckbox.checked
   );
   setLogLevel(logLevelSelect.value);
 });
@@ -343,7 +345,8 @@ const cachedConfig = loadConfig(
   deviceIdInput,
   logLevelSelect,
   fetchBitmapCheckbox,
-  updateBitmapOnChangeCheckbox
+  updateBitmapOnChangeCheckbox,
+  eagerLoadCheckbox
 );
 setLogLevel(logLevelSelect.value);
 // Merge cached prefs over the defaults so new categories are not lost for
@@ -357,6 +360,7 @@ setState(
   {
     fetchBitmap: fetchBitmapCheckbox.checked,
     updateBitmapOnChange: updateBitmapOnChangeCheckbox.checked,
+    eagerLoad: eagerLoadCheckbox.checked,
     presetKey: cachedConfig?.presetKey || KEY.DSP_A_PRESET,
   },
   'main:boot-init'

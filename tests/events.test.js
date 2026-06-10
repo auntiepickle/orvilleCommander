@@ -45,4 +45,40 @@ describe('events.js emit/on (7c)', () => {
     off();
     expect(() => emit('gone', null)).not.toThrow();
   });
+
+  test('a subscriber added DURING an emit does not receive the in-flight event (#106)', () => {
+    // Load-bearing for the eager loader: it subscribes to dumpComplete from
+    // inside the bridge's dumpComplete handler; live-set iteration would
+    // deliver that same event to the brand-new listener and skip the
+    // walk's first fetch.
+    const calls = [];
+    const offs = [];
+    offs.push(
+      on('snap', () => {
+        calls.push('outer');
+        offs.push(on('snap', () => calls.push('inner')));
+      })
+    );
+    emit('snap', null);
+    expect(calls).toEqual(['outer']); // inner deferred to the NEXT emit
+    emit('snap', null);
+    expect(calls).toEqual(['outer', 'outer', 'inner']);
+    offs.forEach((off) => off());
+  });
+
+  test('a subscriber removed DURING an emit still receives that event once (#106 snapshot semantics)', () => {
+    // The flip side of snapshot iteration: consumers that tear down
+    // mid-emit must self-guard (the eager loader uses a walk token).
+    const calls = [];
+    const offA = on('snap2', () => {
+      calls.push('a');
+      offB();
+    });
+    const offB = on('snap2', () => calls.push('b'));
+    emit('snap2', null);
+    expect(calls).toEqual(['a', 'b']); // b was in the snapshot
+    emit('snap2', null);
+    expect(calls).toEqual(['a', 'b', 'a']); // and is gone afterward
+    offA();
+  });
 });

@@ -305,14 +305,54 @@ the key. Pre-paint passes write no state: the `currentSubs`/
 `currentSoftkeys` render-pins record device-confirmed renders only, which
 also keeps the tree-audit settle condition honest (it waits for the real
 dump, never a cache paint). Embeds are deferred to the real render (their
-child params would also be unconfirmed). The remaining #106 half — eager
-loader, `eagerLoad` flag, request scheduling from R5's data — is unchanged
-by this and builds on the same tree.
+child params would also be unconfirmed). The other #106 half — eager
+loader, `eagerLoad` flag, request scheduling from R5's data — builds on the
+same tree (next section).
+
+## Eager loader — background structure warm-up (#106 second half; branch feat/eager-loader)
+
+`src/eager-loader.js`: a breadth-first walk of the active preset's COL
+subtree, fetching OBJECTINFO for nodes the tree does not know, bounded by
+`EAGER.MAX_DEPTH` (3) plus a visited set (the actual cycle guard). The
+scheduling is the R5 lesson made code: exactly ONE request in flight.
+The advance signal is the TREE at wave boundaries, not an event-per-response
+(review blocker, fixed): the parser emits `objectinfo:received` only for
+on-screen-related keys, so the loader's background fetches are silently
+tree-recorded; every `dumpComplete` is therefore a decision point — tree
+knows the pending node (including after a watchdog, where the response
+often arrived late behind a bitmap transfer, R5a) → advance and enqueue
+its children; tree does not → the response is not coming, skip. `events.js`
+emit was hardened to snapshot iteration so the walk's own just-added
+listener never receives the in-flight `dumpComplete` that started it (a
+walk token guards the removed-during-emit flip side). Tree-cached nodes are
+walked synchronously at zero request cost, which is what makes the loader
+compose with the parser's per-menu fan-out instead of duplicating it — the
+bridge arms the load at the C2 landing and starts it on the first CLEAN
+(`all-received`) drain afterward, when the fan-out's responses are already
+recorded. Watchdog drains keep the arm: live-validated, the landing wave
+routinely stalls on the ~1.2s bitmap transfer (R5a) and self-heals on the
+next wave.
+
+Two deliberate deviations from the original #106 sketch, decided with T1b
+in place: (1) no VALUE_DUMP prefetch — `currentValues` is per-visit
+volatile (`updateScreen` clears it, C8), so eager values would be discarded
+unseen; structure is the durable half, and it is exactly what the R3
+pre-paint consumes. (2) No dedicated loading UX — the walk is background
+traffic behind the connect overlay the landing already shows, and blocking
+the UI on a warm-up would invert its purpose. `appState.eagerLoad`
+(midiConfig-persisted, default on) gates the arm.
 
 ## Validation / open items
 
-- Eager-load throughput on real hardware (many `OBJECTINFO`/`VALUE` round
-  trips) — confirm the wave completes promptly; tune depth/bound if needed.
-  Hardware-gated; the replay harness can cover the parsing/render half offline.
+- (RESOLVED 2026-06-10) Eager-load throughput on real hardware: production
+  trigger validated live (logs/live-eager-acceptance2.log) — armed through
+  the R5a landing stall, started on the next clean drain, zero duplicate
+  requests against the fan-out's cache. A forced deep walk from ROOT (a
+  stress path production does not take; logs/live-eager-acceptance4.log)
+  walked 75 nodes / 79 fetches in ~37s with one-retry-at-tail absorbing the
+  slow-dump backlog cascade; 6 nodes whose retry also raced the backlog
+  stay un-walked (their late dumps still tree-record; children only —
+  per-visit refetch covers correctness). Revisit pacing only if a root-wide
+  eager walk ever ships.
 - Whether any device value key reports the active DSP (would upgrade active-DSP
   from app-guess to device-confirmed). Hardware exploration, optional.

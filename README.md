@@ -75,6 +75,8 @@ graph TD
 
 * tree.js: Persistent device object tree; the parser records every OBJECTINFO dump, and navigation (keyStack ancestry, child lookups, softkey labels) derives from it (T1b).
 
+* eager-loader.js: Background structure warm-up for the active preset tree after the connect landing — serialized breadth-first OBJECTINFO walk, one request in flight (#106).
+
 * navigation.js: toggleDspKey (A/B preset key prefix flip).
 
 * renderer.js: Builds HTML for LCD (params, softkeys, breadcrumbs). Handles clicks/changes. Exports: updateScreen, renderScreen.

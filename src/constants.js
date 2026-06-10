@@ -39,6 +39,14 @@ export const RENDER = {
   LOADING_STATEMENT: 'loading ...',
 };
 
+// Eager structure loader (#106). MAX_DEPTH bounds the breadth-first walk
+// from the active preset: the deepest observed preset menu nesting is 2
+// (menu -> sub-page, e.g. levels -> Post D/A Gain pages); 3 adds one level
+// of margin. The visited set, not this bound, is the cycle guard.
+export const EAGER = {
+  MAX_DEPTH: 3,
+};
+
 // Canvas presentation for the bitmap screen (CSS, cosmetic only).
 export const CANVAS = {
   CSS_WIDTH: '480px',

@@ -22,10 +22,15 @@ jest.mock('../src/logger.js', () => ({
   log: jest.fn(),
 }));
 
+jest.mock('../src/eager-loader.js', () => ({
+  startEagerLoad: jest.fn(),
+}));
+
 import { registerEventBridge } from '../src/event-bridge.js';
 import { renderScreen, updateScreen } from '../src/renderer.js';
 import { renderBitmap } from '../src/bitmap.js';
 import { sendObjectInfoDump, sendSysEx } from '../src/midi.js';
+import { startEagerLoad } from '../src/eager-loader.js';
 import { CMD } from '../src/sysex-commands.js';
 import { appState } from '../src/state.js';
 import { emit } from '../src/events.js';
@@ -53,6 +58,8 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     appState.dspAKey = '401000b';
     appState.dspBKey = '801000b';
     appState.fetchBitmap = true;
+    appState.eagerLoad = true;
+    startEagerLoad.mockClear();
     teardown = registerEventBridge({ hideLoading });
   });
 
@@ -197,6 +204,67 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
 
     expect(appState.currentKey).toBe('801000b'); // landed on the dump's dspBKey
     expect(sendObjectInfoDump).toHaveBeenCalledWith('401000b'); // prefetch A
+  });
+
+  // Drives the C2 landing (root dump arrival with pendingLanding armed) so
+  // the #106 eager-load arming can be exercised.
+  const land = () => {
+    appState.currentKey = '0';
+    appState.currentSubs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '0',
+        parent: '0',
+        statement: 'ORVILLE ROOT OBJECT',
+        tag: 'ORVILLE',
+      },
+    ];
+    appState.pendingLanding = 'root';
+    recordDump([
+      ...appState.currentSubs,
+      { type: 'COL', position: '1', key: '401000b', parent: '0', statement: 'Black Hole', tag: '' },
+    ]);
+    emit('objectinfo:received', { key: '0', subs: appState.currentSubs });
+  };
+
+  test('eager load starts when the landing wave drains cleanly (#106)', () => {
+    land();
+    expect(startEagerLoad).not.toHaveBeenCalled(); // armed, not started
+
+    emit('dumpComplete', { reason: 'all-received', objectinfoSends: 3 });
+    expect(startEagerLoad).toHaveBeenCalledTimes(1);
+    expect(startEagerLoad).toHaveBeenCalledWith('401000b');
+
+    // One-shot: later drains do not restart it.
+    emit('dumpComplete', { reason: 'all-received', objectinfoSends: 1 });
+    expect(startEagerLoad).toHaveBeenCalledTimes(1);
+  });
+
+  test('eager load does not start when the flag is off (#106)', () => {
+    appState.eagerLoad = false;
+    land();
+    emit('dumpComplete', { reason: 'all-received', objectinfoSends: 3 });
+    expect(startEagerLoad).not.toHaveBeenCalled();
+  });
+
+  test('eager load stays armed through a stalled wave and starts on the next clean drain (#106)', () => {
+    // Live-validated: with fetchBitmap on, the landing wave routinely
+    // watchdogs on the ~1.2s bitmap transfer (R5a) and self-heals on the
+    // next wave — disarming on the stall would skip the eager load on the
+    // most common config.
+    land();
+    emit('dumpComplete', { reason: 'watchdog', objectinfoSends: 3 });
+    expect(startEagerLoad).not.toHaveBeenCalled(); // not yet — but still armed
+
+    emit('dumpComplete', { reason: 'all-received', objectinfoSends: 1 });
+    expect(startEagerLoad).toHaveBeenCalledTimes(1);
+    expect(startEagerLoad).toHaveBeenCalledWith('401000b');
+  });
+
+  test('dumpComplete without a prior landing never starts an eager load (#106)', () => {
+    emit('dumpComplete', { reason: 'all-received', objectinfoSends: 1 });
+    expect(startEagerLoad).not.toHaveBeenCalled();
   });
 
   test('descend one-shot: a COL-only menu dump descends once into its first child', () => {

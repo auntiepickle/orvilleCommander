@@ -4,7 +4,7 @@
 // drives navigation by dispatching clicks on the rendered LCD and reads the
 // virtual render back. This is the G2 "live self-loop" substrate.
 //
-// Usage: node build_tools/live-app.mjs [walk|stay] [settleMs]
+// Usage: node build_tools/live-app.mjs [walk|stay|load|eager] [settleMs]
 
 import { JSDOM } from 'jsdom';
 import midi from '@julusian/midi';
@@ -152,6 +152,56 @@ if (MODE === 'walk') {
   const selects = document.querySelectorAll('select.param-select').length;
   const trgs = [...document.querySelectorAll('.param-value')].map((e) => e.textContent.trim());
   console.log(`[live] SET dropdowns rendered: ${selects}; TRGs: ${JSON.stringify(trgs)}`);
+} else if (MODE === 'eager') {
+  // #106 acceptance: the landing armed the eager loader and the drained
+  // wave started it (the 'Eager load complete' log above is its own
+  // receipt). Quantify tree warmth, then prove the R3 pre-paint serves a
+  // cold click from cache by forcing a render while the dump is in flight.
+  const { getNode } = await import('../src/tree.js');
+  const { renderScreen } = await import('../src/renderer.js');
+  await sleep(15000); // generous: the preset subtree is a handful of nodes
+  const preset = appState.presetKey;
+  const children = (getNode(preset) || []).slice(1).filter((s) => s.type === 'COL');
+  let warm = 0;
+  let grandTotal = 0;
+  let grandWarm = 0;
+  for (const c of children) {
+    const node = getNode(c.key);
+    if (node) warm++;
+    for (const g of (node || []).slice(1).filter((s) => s.type === 'COL')) {
+      grandTotal++;
+      if (getNode(g.key)) grandWarm++;
+    }
+  }
+  console.log(
+    `[live] eager warmth for ${preset}: children cached ${warm}/${children.length}; grandchildren cached ${grandWarm}/${grandTotal}`
+  );
+  // Cold click: navigate to a preset menu the session has never visited,
+  // then render IMMEDIATELY (mid-flight, as a busy link's settled render
+  // would) — the R3 guard must pre-paint the eager-cached structure, not
+  // the old menu.
+  const target = children[children.length - 1];
+  if (target && click(`.softkey[data-key="${target.key}"]`)) {
+    renderScreen(appState.currentSubs, appState.lastAscii, log);
+    console.log(`\n===== PRE-PAINT (immediately after clicking ${target.key}, no settle) =====`);
+    console.log(lcdText());
+    await sleep(SETTLE);
+    dump('after settle (live dump landed)');
+  } else {
+    console.log(`[live] no clickable softkey for ${target?.key}`);
+  }
+
+  // Phase 2: force a DEEP walk from root. The preset subtree is shallow
+  // enough that the landing fan-out covers it (0 fetched), so this is the
+  // live exercise of the serialized FETCH-ADVANCE path (the review-blocker
+  // regression check: background fetches advance at wave boundaries, not
+  // via objectinfo:received). Includes the program subtree's bank-list
+  // dump — the worst case a single serialized fetch can hit.
+  const { startEagerLoad } = await import('../src/eager-loader.js');
+  console.log('[live] phase 2: forcing a deep eager walk from root...');
+  startEagerLoad(KEY.ROOT);
+  await sleep(90000);
+  console.log('[live] deep-walk window closed (see Eager load complete above for the receipt)');
 }
 
 console.log('\n===== last dumpComplete =====');

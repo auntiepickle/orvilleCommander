@@ -46,6 +46,8 @@ export const appState = {
   // store -> logger -> state import cycle.
   fetchBitmap: true,
   updateBitmapOnChange: true,
+  eagerLoad: true, // #106: warm the active preset's structure after landing
+
   currentSoftkeys: [],
   pollingEnabled: false,
   // isLoadingPreset deleted (C4/#40): hideLoading is driven by dumpComplete.

@@ -69,10 +69,8 @@ const handleLcdClick = (e) => {
     if (newKey === appState.currentKey) return;
     if (appState.keyStack.length > 0) {
       const parentEntry = appState.keyStack[appState.keyStack.length - 1];
-      if (
-        parentEntry.subs.some((s) => s.key === newKey && s.type === 'COL') &&
-        newKey !== appState.currentKey
-      ) {
+      // (newKey === currentKey is impossible here — the early return above.)
+      if (parentEntry.subs.some((s) => s.key === newKey && s.type === 'COL')) {
         log(
           `User clicked sibling softkey: ${newKey} - ${e.target.textContent.trim()}`,
           'info',

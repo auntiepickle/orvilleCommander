@@ -74,7 +74,8 @@ export const KEY_SUFFIX = {
 
 // Sub-object types that render as parameters (vs COL menus / type-8 empties).
 // Shared by the renderer's param loops and the bridge's descend predicate (C2).
-export const PARAM_TYPES = ['NUM', 'SET', 'CON', 'TRG', 'INF'];
+// STR = string-edit field, observed live under save program/bank (R8).
+export const PARAM_TYPES = ['NUM', 'SET', 'CON', 'TRG', 'INF', 'STR'];
 
 // Root-level menus, in softkey order, used both as a "is this a top-level menu"
 // set and as the static bottom softkey row.

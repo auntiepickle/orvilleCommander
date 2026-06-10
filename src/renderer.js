@@ -270,6 +270,42 @@ const handleParamClick = (e) => {
             log('Triggered bitmap update after TRG.', 'debug', 'bitmap');
           }
         }, TIMING.DEVICE_LOAD_MS); // Increased delay for device to process load
+      } else if (sub.type === 'STR') {
+        // String-edit (R8): free-text put, confirmed live (the device echoes
+        // the new value as a 0x2e). Single-token strings verified on
+        // hardware; multi-word strings are untested on the wire (the PUT
+        // payload is key SPACE value — see the ledger R8 note).
+        const title = sub.statement.replace(/%.*s/, '').trim() || sub.tag;
+        const currentValue = appState.currentValues[key] ?? sub.value ?? '';
+        const rawValue = prompt(`Enter new value for ${title}:`, currentValue);
+        // Empty string is rejected like prompt-cancel: whether the device
+        // accepts an empty-string PUT (clear semantics) is untested — see
+        // the ledger R8 needs-hardware note.
+        if (rawValue !== null && rawValue !== '') {
+          // SysEx data bytes must be 7-bit: reject non-ASCII rather than
+          // throwing mid-flow with the loading overlay up. Clamp to the
+          // field width from the format (e.g. %-22s) when one is declared.
+          if (!/^[\x20-\x7e]*$/.test(rawValue)) {
+            alert('Only printable ASCII characters can be sent to the device.');
+            return;
+          }
+          const widthMatch = (sub.statement || '').match(/%-?(\d+)s/);
+          const newValue = widthMatch ? rawValue.slice(0, parseInt(widthMatch[1], 10)) : rawValue;
+          showLoading();
+          sendValuePut(key, newValue);
+          setState(
+            { currentValues: { ...appState.currentValues, [key]: newValue } },
+            'renderer:param-click-str-value-cache'
+          );
+          renderScreen(appState.currentSubs, appState.lastAscii); // Immediate local update
+          setTimeout(() => {
+            updateScreen();
+            if (appState.updateBitmapOnChange) {
+              sendSysEx(CMD.GET_SCREEN, []);
+              log('Triggered bitmap update after value change.', 'debug', 'bitmap');
+            }
+          }, TIMING.MIDI_SETTLE_MS);
+        }
       }
     }
   }
@@ -503,6 +539,14 @@ export function renderScreen(subs, ascii, logParam) {
       } else if (s.type === 'TRG') {
         fullHtml = `<span class="param-value" data-key="${s.key}">${s.statement}</span>`;
         fullText = s.statement;
+      } else if (s.type === 'STR') {
+        // String-edit field (R8; live-discovered type, device-model §3):
+        // formatted value rendered as a clickable editor — the save
+        // program/bank name fields.
+        const value = appState.currentValues[s.key] ?? s.value ?? '';
+        if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
+        fullText = formatValue(s.statement || '%s', value);
+        fullHtml = `<span class="param-value" data-key="${s.key}">${fullText}</span>`;
       }
       if (fullText) {
         paramLines.push(fullText);
@@ -617,6 +661,12 @@ export function renderScreen(subs, ascii, logParam) {
           } else if (cs.type === 'TRG') {
             childFullHtml = `<span class="param-value" data-key="${cs.key}">${cs.statement}</span>`;
             childFullText = cs.statement;
+          } else if (cs.type === 'STR') {
+            const value = appState.currentValues[cs.key] ?? cs.value ?? '';
+            if (appState.currentValues[cs.key] === undefined && !cs.value)
+              sendValueDump(cs.key, logParam);
+            childFullText = formatValue(cs.statement || '%s', value);
+            childFullHtml = `<span class="param-value" data-key="${cs.key}">${childFullText}</span>`;
           }
           if (childFullText) {
             paramLines.push(childFullText);

@@ -129,7 +129,7 @@ The object's **own** line ends with its **child count in hex**; child lines show
 | `CON` | continuous / meter   |
 | `TRG` | trigger / action     |
 | `INF` | info / read-only     |
-| `STR` | **string-edit field** `[V]` — observed live (2026-06-10) under 'save program'/'save bank': `STR 0 10020023 10020020 name:%-19s name <value>`. The name editor for saves. The app's parser handles it via the default branch (value = field 7); the renderer has NO branch for it yet (tracker R8), so save-name editing is not rendered. |
+| `STR` | **string-edit field** `[V]` — observed live (2026-06-10) under 'save program'/'save bank': `STR 0 10020023 10020020 name:%-19s name <value>`. The name editor for saves. Parser: default branch (value = field 7). Renderer: clickable editor; a string `VALUE_PUT` is echoed as a `0x2e` (confirmed live, single-token; multi-word puts and empty-string/clear puts untested — ledger R8). |
 | `8`   | **empty / nonexistent object** `[V]` — returned for an unknown key and for empty slots (e.g. root's `10040000`); empty statement/tag. Probed live: `OBJECTINFO ffffffff` → `8 0 ffffffff ffffffff '' ''`. The app filters it. |
 
 ### POSITION `[V/I]`

@@ -1,6 +1,9 @@
 // tests/eager-loader.test.js
 // Covers the #106 eager structure loader: serialized walk (one request in
-// flight), cached-node skipping, depth bound, watchdog skip, supersession.
+// flight), cached-node skipping, the tree-at-wave-boundary advance signal
+// (the parser does NOT emit objectinfo:received for background fetches —
+// review finding), depth bound, watchdog/late-response handling,
+// supersession, stop.
 
 jest.mock('../src/midi.js', () => ({
   sendObjectInfoDump: jest.fn(),
@@ -61,30 +64,53 @@ describe('eager-loader', () => {
     // nothing.
     expect(sentKeys()).toEqual(['4050001']);
 
-    // Its response (parser records before emitting) reveals a sub-page; the
-    // walk advances to it only after the response arrives — serialized.
+    // The response is silently tree-recorded by the parser (no
+    // objectinfo:received for background keys); the wave drain is the
+    // advance signal, and the revealed sub-page is fetched next —
+    // serialized.
     recordDump([
       col('4050001', '4050001', 'in eq parameters', 'in eq'),
       col('4051000', '4050001', 'eq sub page'),
     ]);
-    emit('objectinfo:received', { key: '4050001' });
+    emit('dumpComplete', { reason: 'all-received' });
     expect(sentKeys()).toEqual(['4050001', '4051000']);
 
     recordDump([col('4051000', '4051000', 'eq sub page'), num('4052000', '4051000')]);
-    emit('objectinfo:received', { key: '4051000' });
+    emit('dumpComplete', { reason: 'all-received' });
     // Params only — walk complete, no further requests.
+    expect(sendObjectInfoDump).toHaveBeenCalledTimes(2);
+
+    // Post-completion drains are no-ops.
+    emit('dumpComplete', { reason: 'all-received' });
     expect(sendObjectInfoDump).toHaveBeenCalledTimes(2);
   });
 
-  test('unrelated objectinfo events do not advance the walk', () => {
+  test('a drain WITHOUT the dump recorded skips the node and keeps walking', () => {
+    recordDump([
+      col('401000b', '401000b', 'Black Hole'),
+      col('4040001', '401000b', 'space'),
+      col('4050001', '401000b', 'in eq'),
+    ]);
+    startEagerLoad('401000b');
+    expect(sentKeys()).toEqual(['4040001']);
+
+    // Wave drained but the response never landed (drop/miscount): the node
+    // is not coming — skip, move to the next sibling.
+    emit('dumpComplete', { reason: 'all-received' });
+    expect(sentKeys()).toEqual(['4040001', '4050001']);
+  });
+
+  test('a watchdog WITH the dump recorded still advances and enqueues its children (no coverage loss)', () => {
     recordDump([col('401000b', '401000b', 'Black Hole'), col('4040001', '401000b', 'space')]);
     startEagerLoad('401000b');
     expect(sentKeys()).toEqual(['4040001']);
 
-    // A user navigation's dump for some other key lands mid-walk.
-    recordDump([col('10010000', '10010000', 'setup functions', 'setup')]);
-    emit('objectinfo:received', { key: '10010000' });
-    expect(sentKeys()).toEqual(['4040001']); // still waiting on its own key
+    // The response arrived but the wave stalled later (R5a: a bitmap
+    // transfer in the same wave). The tree knows the node, so the walk
+    // advances into its children instead of dropping the subtree.
+    recordDump([col('4040001', '4040001', 'space'), col('4041000', '4040001', 'sub page')]);
+    emit('dumpComplete', { reason: 'watchdog' });
+    expect(sentKeys()).toEqual(['4040001', '4041000']);
   });
 
   test('the depth bound stops the walk (visited set is the cycle guard)', () => {
@@ -100,25 +126,12 @@ describe('eager-loader', () => {
     expect(sendObjectInfoDump).not.toHaveBeenCalled(); // d stays unfetched
   });
 
-  test('a watchdog dumpComplete skips the pending node and keeps walking', () => {
+  test('a new start supersedes the previous walk', () => {
     recordDump([
       col('401000b', '401000b', 'Black Hole'),
       col('4040001', '401000b', 'space'),
       col('4050001', '401000b', 'in eq'),
     ]);
-    startEagerLoad('401000b');
-    expect(sentKeys()).toEqual(['4040001']);
-
-    emit('dumpComplete', { reason: 'watchdog' });
-    expect(sentKeys()).toEqual(['4040001', '4050001']); // moved on
-
-    // An all-received drain while idle is a no-op for the loader.
-    emit('dumpComplete', { reason: 'all-received' });
-    expect(sendObjectInfoDump).toHaveBeenCalledTimes(2);
-  });
-
-  test('a new start supersedes the previous walk', () => {
-    recordDump([col('401000b', '401000b', 'Black Hole'), col('4040001', '401000b', 'space')]);
     recordDump([col('801000b', '801000b', 'Tape Flanger'), col('8040001', '801000b', 'flange')]);
 
     startEagerLoad('401000b');
@@ -127,10 +140,12 @@ describe('eager-loader', () => {
     startEagerLoad('801000b'); // preset switch: restart on the new subtree
     expect(sentKeys()).toEqual(['4040001', '8040001']);
 
-    // The OLD pending key's late response must not advance the new walk.
-    recordDump([col('4040001', '4040001', 'space'), col('4041000', '4040001', 'sub')]);
-    emit('objectinfo:received', { key: '4040001' });
-    expect(sentKeys()).toEqual(['4040001', '8040001']);
+    // The old walk's pending response landing must advance ONLY the new
+    // walk's own pending decision — and never resurrect the old subtree.
+    recordDump([col('4040001', '4040001', 'space'), col('4041000', '4040001', 'old sub')]);
+    recordDump([col('8040001', '8040001', 'flange'), col('8041000', '8040001', 'new sub')]);
+    emit('dumpComplete', { reason: 'all-received' });
+    expect(sentKeys()).toEqual(['4040001', '8040001', '8041000']); // no 4041000
   });
 
   test('stopEagerLoad halts the walk', () => {
@@ -139,7 +154,7 @@ describe('eager-loader', () => {
     stopEagerLoad();
 
     recordDump([col('4040001', '4040001', 'space'), col('4041000', '4040001', 'sub')]);
-    emit('objectinfo:received', { key: '4040001' });
+    emit('dumpComplete', { reason: 'all-received' });
     expect(sendObjectInfoDump).toHaveBeenCalledTimes(1); // nothing after stop
   });
 });

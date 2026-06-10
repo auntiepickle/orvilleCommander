@@ -477,8 +477,14 @@ and arrival races; the cure is view DERIVED from the device tree.
       T1b question. Position 'c' added to device-model §3.
 - [x] NEW (GH #106) (branch feat/eager-loader) Eager loader SHIPPED as a serialized STRUCTURE walk:
       src/eager-loader.js traverses the active preset tree breadth-first (OBJECTINFO each COL),
-      bounded by EAGER.MAX_DEPTH=3 + a visited set, exactly ONE request in flight (advanced by its
-      own objectinfo:received; a watchdog skips the pending node) — the R5-constrained scheduling.
+      bounded by EAGER.MAX_DEPTH=3 + a visited set, exactly ONE request in flight — the
+      R5-constrained scheduling. ADVANCE SIGNAL (review blocker, fixed): the parser emits
+      objectinfo:received only for on-screen-related keys, so background fetches are silently
+      tree-recorded; the loader therefore advances at WAVE BOUNDARIES — every dumpComplete is a
+      decision point: tree knows the pending node (even after a watchdog — late response behind a
+      bitmap, R5a) -> advance + enqueue children; tree doesn't -> the response is not coming, skip.
+      events.js emit hardened to snapshot iteration so the walk's own just-added listener never
+      receives the in-flight dumpComplete that started it (walk token guards the removal flip side).
       Cached nodes cost no request, so the parser's per-menu fan-out (depth 1) is never duplicated:
       the bridge arms the load at the C2 landing and starts it on the first CLEAN drain after it
       (live finding: with fetchBitmap on the landing wave routinely watchdogs on the ~1.2s bitmap

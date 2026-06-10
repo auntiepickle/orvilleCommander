@@ -314,15 +314,24 @@ same tree (next section).
 `src/eager-loader.js`: a breadth-first walk of the active preset's COL
 subtree, fetching OBJECTINFO for nodes the tree does not know, bounded by
 `EAGER.MAX_DEPTH` (3) plus a visited set (the actual cycle guard). The
-scheduling is the R5 lesson made code: exactly ONE request in flight,
-advanced by its own `objectinfo:received`; a watchdog drain skips the
-pending node. Tree-cached nodes are walked synchronously at zero request
-cost, which is what makes the loader compose with the parser's per-menu
-fan-out instead of duplicating it — the bridge arms the load at the C2
-landing and starts it on the first CLEAN (`all-received`) drain afterward,
-when the fan-out's responses are already recorded. Watchdog drains keep the
-arm: live-validated, the landing wave routinely stalls on the ~1.2s bitmap
-transfer (R5a) and self-heals on the next wave.
+scheduling is the R5 lesson made code: exactly ONE request in flight.
+The advance signal is the TREE at wave boundaries, not an event-per-response
+(review blocker, fixed): the parser emits `objectinfo:received` only for
+on-screen-related keys, so the loader's background fetches are silently
+tree-recorded; every `dumpComplete` is therefore a decision point — tree
+knows the pending node (including after a watchdog, where the response
+often arrived late behind a bitmap transfer, R5a) → advance and enqueue
+its children; tree does not → the response is not coming, skip. `events.js`
+emit was hardened to snapshot iteration so the walk's own just-added
+listener never receives the in-flight `dumpComplete` that started it (a
+walk token guards the removed-during-emit flip side). Tree-cached nodes are
+walked synchronously at zero request cost, which is what makes the loader
+compose with the parser's per-menu fan-out instead of duplicating it — the
+bridge arms the load at the C2 landing and starts it on the first CLEAN
+(`all-received`) drain afterward, when the fan-out's responses are already
+recorded. Watchdog drains keep the arm: live-validated, the landing wave
+routinely stalls on the ~1.2s bitmap transfer (R5a) and self-heals on the
+next wave.
 
 Two deliberate deviations from the original #106 sketch, decided with T1b
 in place: (1) no VALUE_DUMP prefetch — `currentValues` is per-visit

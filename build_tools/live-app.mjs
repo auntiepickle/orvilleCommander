@@ -190,6 +190,18 @@ if (MODE === 'walk') {
   } else {
     console.log(`[live] no clickable softkey for ${target?.key}`);
   }
+
+  // Phase 2: force a DEEP walk from root. The preset subtree is shallow
+  // enough that the landing fan-out covers it (0 fetched), so this is the
+  // live exercise of the serialized FETCH-ADVANCE path (the review-blocker
+  // regression check: background fetches advance at wave boundaries, not
+  // via objectinfo:received). Includes the program subtree's bank-list
+  // dump — the worst case a single serialized fetch can hit.
+  const { startEagerLoad } = await import('../src/eager-loader.js');
+  console.log('[live] phase 2: forcing a deep eager walk from root...');
+  startEagerLoad(KEY.ROOT);
+  await sleep(90000);
+  console.log('[live] deep-walk window closed (see Eager load complete above for the receipt)');
 }
 
 console.log('\n===== last dumpComplete =====');

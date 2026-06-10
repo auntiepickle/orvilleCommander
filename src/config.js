@@ -14,7 +14,7 @@ import { STORAGE_KEY, DEFAULT_LOG_LEVEL } from './constants.js';
  *
  * @example
  * // In main.js or similar
- * const cachedConfig = loadConfig(deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox);
+ * const cachedConfig = loadConfig(deviceIdInput, logLevelSelect, fetchBitmapCheckbox, updateBitmapOnChangeCheckbox, eagerLoadCheckbox);
  * if (cachedConfig) {
  *   // Use cached ports, etc.
  * }
@@ -58,7 +58,7 @@ export function loadConfig(
  *
  * @example
  * // Save after user selects ports
- * saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, getLogCategories(), fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, appState.presetKey);
+ * saveConfig(outputSelect.value, inputSelect.value, parseInt(deviceIdInput.value, 10), logLevelSelect.value, getLogCategories(), fetchBitmapCheckbox.checked, updateBitmapOnChangeCheckbox.checked, appState.presetKey, eagerLoadCheckbox.checked);
  */
 export function saveConfig(
   outputId,

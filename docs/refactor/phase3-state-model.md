@@ -221,7 +221,7 @@ live connect on the real 31250-baud link (root dump arrival time vs the old
 500ms guess; landing correctness), the wave-saturation smoke (polling +
 bitmap-on-change vs the 10s watchdog ceiling), and eager-load throughput.
 
-## T1b design — tree-derived navigation (implemented on refactor/t1b-tree-navigation; GH #105; device-on acceptance pending)
+## T1b design — tree-derived navigation (implemented on refactor/t1b-tree-navigation; GH #105; device-on acceptance PASSED 2026-06-10: zero audit violations)
 
 The cure for the R-series bug class: the view derives from the device's
 object tree, not from recorded click history or message-arrival races.
@@ -282,9 +282,12 @@ unconfirmed-value render guard (R3), the eager loader, and request
 scheduling. Known open notes (#105): duplicate derived sibling labels
 ('Post'/'Post'), clipped-label bracket overflow.
 
-**Acceptance:** offline suite green; then a maintainer-run
-`npm run tree-audit` against the device reporting ZERO violations (the last
-standing class — blank-node reachability — is resolved by the label policy).
+**Acceptance:** offline suite green; then a device-on `npm run tree-audit`
+reporting ZERO violations (the last standing class — blank-node reachability
+— is resolved by the label policy). PASSED 2026-06-10: depth 2, 42 nodes
+fetched, 41 audited, zero violations (capMs=30000 to ride out the program
+subtree's bank-list backlog — the R5 congestion class flagged one spurious
+no-render at the default 15s cap).
 
 ## Validation / open items
 

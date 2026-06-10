@@ -438,9 +438,13 @@ and arrival races; the cure is view DERIVED from the device tree.
       'unreachable-child' is structurally impossible). Renderer snapshots byte-identical (render
       preservation proof); replay snapshot updated intentionally (100100d0 now reachable — the
       board's last violation). Auditor updated: phase 2 uses the production deriveKeyStack (app tree
-      seeded with phase-1 dumps), embed check reads getNode. ACCEPTANCE PENDING: device-on
-      npm run tree-audit, target ZERO violations. The auditor stays the standing regression loop
-      afterward (merges with G2).
+      seeded with phase-1 dumps), embed check reads getNode. ACCEPTANCE PASSED (device-on,
+      2026-06-10): npm run tree-audit depth 2 — 42 nodes fetched, 41 COL nodes audited, ZERO
+      violations. (First run flagged one no-render at 10030000 with the default 15s cap; the log
+      shows its dump arrived in a late burst behind the program subtree's bank-list backlog — the
+      R5 congestion class, not a reachability bug; rerun with capMs=30000 settled it cleanly.)
+      Awaiting maintainer PR review (#109) before merge. The auditor stays the standing regression
+      loop afterward (merges with G2).
 - [x] R8  (branch feat/str-rendering) STR string-edit fields RENDERED + EDITABLE: put semantics
       confirmed live first (put 10020052 'TestName' -> 0x2e echo + readback; restored after). Renderer
       STR branches (top-level + embedded child): formatted value as a clickable param-value; click

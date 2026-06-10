@@ -171,7 +171,19 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
         tag: 'in eq',
       },
     ];
-    appState.currentSubs = subs;
+    // Divergent global: the descend must build its keyStack entry from the
+    // EVENT PAYLOAD's subs, not appState.currentSubs (successor to the C5/#41
+    // staleness pin that lived on the deleted renderer autoload branch).
+    appState.currentSubs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: 'STALE',
+        parent: 'STALE',
+        statement: 'Stale',
+        tag: 'stale',
+      },
+    ];
     emit('objectinfo:received', { key: '401000b', subs });
 
     expect(appState.currentKey).toBe('4040001');
@@ -179,6 +191,7 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     expect(appState.pendingLanding).toBe(null);
     expect(appState.keyStack).toHaveLength(1);
     expect(appState.keyStack[0]).toMatchObject({ key: '401000b' });
+    expect(appState.keyStack[0].subs.map((s) => s.key)).not.toContain('STALE'); // payload, not global
     expect(updateScreen).toHaveBeenCalledTimes(1);
 
     // One-shot: the same dump arriving again must not descend further.

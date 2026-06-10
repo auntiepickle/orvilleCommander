@@ -43,7 +43,7 @@ import { renderBitmap } from './bitmap.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendSysEx } from './midi.js';
-import { makeKeyStackEntry, toggleDspKey } from './navigation.js';
+import { makeKeyStackEntry } from './navigation.js';
 import { CMD, KEY, KEY_PREFIX, PARAM_TYPES } from './sysex-commands.js';
 import { LAYOUT } from './constants.js';
 import { log } from './logger.js';
@@ -66,10 +66,14 @@ export function registerEventBridge({ hideLoading }) {
 
       // C2 landing: the root dump arrived while a connect is pending.
       // selectPorts reset currentKey to root, so the progressive root paint
-      // above has already happened; now navigate to the active preset.
-      if (key === KEY.ROOT && appState.pendingLanding === 'root') {
+      // above has already happened; now navigate to the active preset. The
+      // key === currentKey guard means a background-branch root dump (user
+      // navigated away before the dump arrived) cannot land from stale view
+      // state; the next reconnect re-arms cleanly (C2 review).
+      if (key === KEY.ROOT && key === appState.currentKey && appState.pendingLanding === 'root') {
         const activeIsB = appState.presetKey.startsWith(KEY_PREFIX.DSP_B);
         const landKey = activeIsB ? appState.dspBKey : appState.dspAKey;
+        const otherKey = activeIsB ? appState.dspAKey : appState.dspBKey;
         setState(
           {
             pendingLanding: 'preset',
@@ -81,7 +85,7 @@ export function registerEventBridge({ hideLoading }) {
           'bridge:landing-root'
         );
         updateScreen(log);
-        sendObjectInfoDump(toggleDspKey(landKey)); // other-DSP prefetch
+        sendObjectInfoDump(otherKey); // other-DSP prefetch (dump-authoritative key)
         if (appState.fetchBitmap) {
           sendSysEx(CMD.GET_SCREEN, []);
           log('Fetched initial preset screen.', 'info', 'general');

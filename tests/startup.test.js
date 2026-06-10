@@ -3,7 +3,7 @@
  *
  * Pins the observable state writes, MIDI outbound calls, render/bitmap
  * calls, and terminal appState that result from a cached-config startup
- * (Connect MIDI → Select Ports → cached preset autoload).
+ * (Connect MIDI → Select Ports → landing on the active preset).
  *
  * Primary use: feedback loop during refactor work. If a later session's
  * diff changes this test's output, the divergence is signal — decide
@@ -12,12 +12,12 @@
  * is deliberate; narrower tests would miss incidental behavior shifts.
  *
  * Known bugs pinned as current behavior, NOT fixed by this test:
- *   - (RESOLVED by C1/#37) the autoload-vs-401000b landing-page race is
- *     gone: the bridge renders the root dump synchronously on arrival —
- *     BEFORE select-ports-init flips autoLoad — so the flag is consumed by
- *     the PRESET render, which descends into the preset's first menu (the
- *     intended landing). Previously the timer-delayed root render consumed
- *     the flag and landed on the first ROOT menu (setup) while the
+ *   - (RESOLVED: race by C1/#37, mechanism by C2/#38) the autoload-vs-401000b
+ *     landing-page race is gone, and the mechanism it rode on is deleted:
+ *     there is no select-ports timer and no autoLoad flag. The bridge lands
+ *     on the root dump's arrival and a one-shot pendingDescend lands on the
+ *     preset's first menu. Previously the timer-delayed root render consumed
+ *     the sticky flag and landed on the first ROOT menu (setup) while the
  *     401000b/801000b dumps were silently dropped.
  *   - (RESOLVED by C3/#39) keyStack used to hold mixed types: main.js
  *     pushed a raw string while the renderer autoload pushed a {key, tag,
@@ -91,9 +91,9 @@ jest.mock('../src/bitmap.js', () => {
 });
 
 // renderer partial mock: everything real except renderScreen, which is wrapped
-// to snapshot appState.autoLoad/currentKey at call time (pins the landing-page
+// to snapshot the landing one-shots + currentKey at call time (pins the C2
 // race's precondition). The wrapper calls through to the real renderScreen so
-// the autoload branch still fires and exercises the real update path.
+// the real render path is exercised end to end.
 jest.mock('../src/renderer.js', () => {
   const actual = jest.requireActual('../src/renderer.js');
   const stateModule = jest.requireActual('../src/state.js');
@@ -369,7 +369,7 @@ describe('startup characterization (roadmap step 5.5)', () => {
     expect(appState.menusB).toHaveLength(expected801.menusCount);
 
     // currentSubs last written by the landed menu's dump (step j), which
-    // passed the gate after the preset autoload descended onto it.
+    // passed the gate after the bridge descend landed onto it.
     expect(appState.currentSubs[0].key).toBe(expected401.shortTagKeys[0]);
     expect(appState.lastAscii.length).toBeGreaterThan(0);
 

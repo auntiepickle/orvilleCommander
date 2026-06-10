@@ -148,7 +148,7 @@ function sleep(ms) {
 
 // ----- root-dump self-verification ------------------------------------
 // Decodes a captured root OBJECTINFO_DUMP and returns the first
-// short-tag COL sub the renderer autoload (renderer.js:733-748) will
+// short-tag COL sub the bridge descend one-shot (event-bridge.js, C2) will
 // land on, so the developer can confirm the planned fixture #4
 // filename (objectinfo-10010000.txt) matches reality. The canonical
 // splitLine lives in src/sysex-split.js; this copy is kept in sync by hand
@@ -298,7 +298,7 @@ async function main() {
         `root dump first short-tag COL: ${first.key} (tag="${first.tag}") - confirm fixture #4 filename matches`
       );
     } else {
-      console.log('root dump has no short-tag COLs - autoload will not fire on root');
+      console.log('root dump has no short-tag COLs - the landing descend will not fire on root');
     }
   } else {
     console.log('(root dump not captured - first-short-tag-COL summary skipped)');

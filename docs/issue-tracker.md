@@ -400,15 +400,9 @@ from the root dump (device boots into last-used preset). Cache is a provisional 
       renderer's autoload branch deleted; PARAM_TYPES extracted to sysex-commands.js. Watchdog clears
       pending one-shots (no stale landing/descend; closes the Batch 3.1 watchdog-mid-nav item). Startup
       characterization rewritten per its charter — the simulation now mirrors only the reset, with
-      landing + descend exercised through the real bridge. 126 tests / 14 suites green. NOTE: the race SYMPTOM (wrong landing menu) was eliminated by
-      C1's synchronous root render (Batch 3.1), but the timer-driven mechanism it rode on is still in
-      place — this item owns removing it.
-      NEXT: implement per phase3-state-model.md "C2 design — connect/landing without timers" (design
-      written + reviewed): one-shot pendingLanding state replaces the PORT_INIT_MS timer AND the sticky
-      autoLoad flag (renderer autoload branch deleted; click handlers move to the same one-shot descend
-      state); folds in 3.2's persist-active-DSP and the watchdog-mid-nav item's landing case. Startup
-      characterization updated in the same commit. Hardware validation deferred to one consolidated
-      session after 3.3 (landing timing + wave-saturation smoke + eager-load throughput).
+      landing + descend exercised through the real bridge. 126 tests / 14 suites green. Hardware
+      validation deferred to the consolidated session after 3.3 (landing timing on the real link +
+      wave-saturation smoke + eager-load throughput).
 - [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX
 - [ ] NEW `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
 - [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number

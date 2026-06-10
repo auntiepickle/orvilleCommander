@@ -448,6 +448,10 @@ describe('startup characterization (roadmap step 5.5)', () => {
       'state:parser:current-key-ascii:lastAscii',
       'state:parser:current-subs:currentSubs',
       `render:land=preset,desc=true,key=401000b,subsCount=${expected401.subsCount},subsFirst=401000b`,
+      // R6 review: the embed prefetch is suppressed when the parser's
+      // short-tag fan-out already fetches the candidate (it does here:
+      // 'space'), so no duplicate request appears and the render-pins
+      // coalesce as before.
       'state:renderer:render-pin:currentSoftkeys,currentSubs',
       'state:bridge:descend-consume:pendingDescend,pendingLanding',
       'log:general:info:Auto-loading first menu',

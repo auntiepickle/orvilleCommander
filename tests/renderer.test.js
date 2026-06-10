@@ -484,6 +484,129 @@ describe('renderer.js', () => {
     expect(document.querySelector('.param-value[data-key="10020090"]')).toBeTruthy(); // TRG still renders
   });
 
+  test('only the FIRST position-0 child may embed, regardless of arrival order (R6)', () => {
+    // Live-validated: on 'program functions' the first child's dump (the
+    // giant bank list) arrives last, so the old first-loaded-wins loop
+    // embedded a later sibling ('link program') and the embedded UI varied
+    // run to run. Pin: a later sibling with loaded childSubs must NOT embed
+    // while the first candidate's data is absent.
+    appState.currentKey = '10020000';
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020000',
+        parent: '10020000',
+        statement: 'program functions',
+        tag: 'program',
+      },
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020010',
+        parent: '10020000',
+        statement: 'load new preset',
+        tag: 'load',
+      },
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020080',
+        parent: '10020000',
+        statement: 'link program',
+        tag: 'link',
+      },
+    ];
+    appState.childSubs = {
+      // Only the LATER sibling has arrived.
+      10020080: [
+        {
+          type: 'COL',
+          position: '0',
+          key: '10020080',
+          parent: '10020080',
+          statement: 'link program',
+          tag: 'link',
+        },
+        {
+          type: 'TRG',
+          position: '1',
+          key: '10020081',
+          parent: '10020080',
+          statement: '<- link',
+          tag: 'link',
+        },
+      ],
+    };
+    renderScreen(subs, '', mockLog);
+    const lcd = document.getElementById('lcd');
+    expect(lcd.textContent).not.toContain('<- link'); // later sibling must not embed
+    expect(document.querySelector('.softkey[data-key="10020080"]')).toBeTruthy(); // stays a softkey
+
+    // Once the FIRST candidate's data arrives, it embeds (and leaves the row).
+    appState.childSubs = {
+      10020010: [
+        {
+          type: 'COL',
+          position: '0',
+          key: '10020010',
+          parent: '10020010',
+          statement: 'load new preset',
+          tag: 'load',
+        },
+        {
+          type: 'TRG',
+          position: '1',
+          key: '1002001c',
+          parent: '10020010',
+          statement: '<- load program in A',
+          tag: 'load',
+        },
+      ],
+    };
+    renderScreen(subs, '', mockLog);
+    expect(lcd.textContent).toContain('<- load program in A'); // first candidate embeds
+    expect(document.querySelector('.softkey[data-key="10020010"]')).toBeFalsy(); // excluded from row
+  });
+
+  test('static root softkeys jump (reset the stack), never descend (R2)', () => {
+    // Live-validated: descending grew the keyStack without bound (2 -> 6 in
+    // one walk) and duplicated the previous menu's COL row set.
+    appState.currentKey = '10010010';
+    appState.keyStack = [
+      { key: '0', tag: 'ORVILLE', subs: [] },
+      { key: '10010000', tag: 'setup', subs: [] },
+    ];
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010010',
+        parent: '10010010',
+        statement: 'MIDI configuration',
+        tag: 'midi',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10010011',
+        parent: '10010010',
+        statement: 'ch %2.0f',
+        tag: '',
+        value: '1',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    const levels = document.querySelector('.softkey[data-key="10030000"]'); // static row
+    expect(levels).toBeTruthy();
+    levels.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(appState.currentKey).toBe('10030000');
+    expect(appState.keyStack).toEqual([]); // jump resets, not push to length 3
+    expect(appState.pendingDescend).toBe(true);
+  });
+
   test('a confirmed-empty NUM value is not refetched on render (C1 refetch convergence)', () => {
     // The device can answer a VALUE request with an empty value, which the
     // parser caches as ''. The render-driven refetch must treat that as

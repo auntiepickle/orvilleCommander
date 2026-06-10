@@ -67,6 +67,31 @@ const handleLcdClick = (e) => {
     // branch and push a duplicate self-entry onto the keyStack, rendering
     // the menu "inside itself" (C3 review finding).
     if (newKey === appState.currentKey) return;
+    // The static bottom row (program/setup/levels/bypass) is a top-level
+    // JUMP, not a descend (R2, live-validated): descending pushed the
+    // previous menu as "parent", growing the keyStack without bound and
+    // rendering the old menu's COL row set twice (once stale-current, once
+    // as the parent row). Jumping resets the stack — these are root's own
+    // children; the static row itself is the way back around.
+    if (ROOT_SOFTKEYS.some((s) => s.key === newKey)) {
+      log(
+        `User clicked root softkey: ${newKey} - ${e.target.textContent.trim()}`,
+        'info',
+        'general'
+      );
+      setState(
+        {
+          keyStack: [],
+          currentKey: newKey,
+          paramOffset: 0,
+          pendingDescend: true,
+          currentSoftkeys: [],
+        },
+        'renderer:lcd-click-root-jump'
+      );
+      updateScreen();
+      return;
+    }
     if (appState.keyStack.length > 0) {
       const parentEntry = appState.keyStack[appState.keyStack.length - 1];
       // (newKey === currentKey is impossible here — the early return above.)
@@ -495,15 +520,29 @@ export function renderScreen(subs, ascii, logParam) {
       .filter(
         (s) => s.type === 'COL' && s.tag.trim().length <= LAYOUT.SHORT_TAG_MAX && s.tag.trim()
       );
+    // Deterministic embed (R6, live-validated): only ever the FIRST
+    // position-0 child in subs order may embed. The old loop embedded
+    // whichever child's dump happened to have arrived — on 'program
+    // functions' the first child's response (the giant bank list) is the
+    // slowest, so a later sibling like 'link program' would win the race
+    // and the embedded UI varied run to run. The physical PROGRAM page is
+    // the ground truth: the first child ('load new preset') is the menu's
+    // default view.
     let potentialEmbedSubs = subs
       .slice(1)
-      .filter((s) => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey);
+      .filter((s) => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey)
+      .slice(0, 1);
     let embeddedKey = null;
-    // Proactively fetch single position-0 child for embedding (wrappers)
-    if (potentialEmbedSubs.length === 1) {
-      const embedKey = potentialEmbedSubs[0].key;
-      if (!appState.childSubs[embedKey]) {
-        sendObjectInfoDump(embedKey, logParam);
+    // Proactively fetch the embed candidate ONLY when the parser's short-tag
+    // fan-out will not already fetch it (long/empty tag) — otherwise this
+    // duplicated the same request in the same wave on every navigation, and
+    // on 'program functions' the duplicated key is the giant bank list
+    // (R6 review).
+    if (potentialEmbedSubs.length > 0) {
+      const cand = potentialEmbedSubs[0];
+      const fanOutCovers = cand.tag.trim() && cand.tag.trim().length <= LAYOUT.SHORT_TAG_MAX;
+      if (!fanOutCovers && !appState.childSubs[cand.key]) {
+        sendObjectInfoDump(cand.key, logParam);
       }
     }
     for (let local of potentialEmbedSubs) {

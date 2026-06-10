@@ -7,6 +7,7 @@ design live in the plan; this file is the operational ledger.
 ## How to use this file
 
 **Status legend:** `[ ]` todo · `[~]` in progress (has a one-line **NEXT:**) · `[x]` done (with PR ref).
+A `[ ]` item marked **PARKED** is deliberately deferred — skip it when scanning for the next item.
 
 **Gate tags:** `needs-hardware` = fix is coded + replay-tested but final confirmation needs the
 physical Orville. `needs-decision` = a product/UX or irreversible call for the maintainer.
@@ -40,7 +41,13 @@ HUMAN-GATE: none
 - [x] F2  ESLint flat config (no-unused-vars / no-console / no-useless-assignment warn) + `npm run lint`
 - [x] F2  Prettier config + project-wide format pass over code (markdown excluded); `format`/`format:check` scripts; .git-blame-ignore-revs
 - [x] F3  In-range dependency refresh (npm update) — cleared baseline-browser-mapping warning + all vulnerabilities
-- [ ] F3  Major upgrades each on own branch, tested (Vite 8, Jest 30, archiver 8)   -> Batches 0.2a/0.2b/0.2c
+- [ ] F3  PARKED (not a resume point — Phase 3 work takes precedence; the [~] NEXT item governs): major
+      upgrades each on own branch, tested (Vite 8, Jest 30, archiver 8)   -> Batches 0.2a/0.2b/0.2c
+- [ ] F4  PARKED (same): bump GitHub Actions to Node-24-ready versions (actions/checkout@v4 +
+      actions/setup-node@v4 emit deprecation warnings; GitHub forces Node 24 by default starting
+      2026-06-16 and removes Node 20 from runners 2026-09-16 — update to the current major of each).
+      Same pass: bump ci.yml's `node-version: 20` (Node 20 reached end-of-life 2026-04-30) to an
+      active LTS. Low risk; do on its own chore branch and confirm CI green.
 - [x] B9  Moved `jest-environment-jsdom` to devDependencies
 NOTE: ESLint warnings are the live Phase 1 prune worklist (`npm run lint`); promote no-* rules back to error at end of Phase 1.
 HUMAN-GATE: none
@@ -130,13 +137,13 @@ reviewer agents swept all of src/; findings consolidated below.
       layout + framing notes. TN34 PDF kept locally in logs/ (gitignored; copyright) — cited by URL only.
 
 ### Device-research follow-ups (from Tech Note 34)
-- [x] FB1 RESOLVED (branch fix/framebuffer-header-checksum): parseScreenHeader() reads width/height/size from
+- [x] FB1 RESOLVED (branch fix/framebuffer-header-checksum, PR #77): parseScreenHeader() reads width/height/size from
       the three big-endian u32 header fields; computePixels derives dims from the header (fallback 240x64 if
       missing/insane); renderBitmap logs an error on truncation / checksum-mismatch / bad-dims instead of
       silently painting a partial screen. CHECKSUM ALGORITHM confirmed against a full hardware capture: the
       sum of every byte from the size field (offset 8) through the trailing checksum byte is 0 mod 256 (TN34's
       "all bytes incl. size sum to 0" = from the size field). Tests pin it against screen-dump-black-hole.txt.
-- [x] FB5 RESOLVED (branch fix/hil-sysex-reassembly): HIL screen captures were truncated. ROOT CAUSE: the
+- [x] FB5 RESOLVED (branch fix/hil-sysex-reassembly, PR #78): HIL screen captures were truncated. ROOT CAUSE: the
       Orville drives the U6MIDI Pro over a 31250-baud DIN link, so a ~3872-byte 0x17 dump takes ~1.2s to
       transmit and @julusian/midi (WinMM) delivers it as multiple 2048-byte buffer chunks (first chunk starts
       F0 1C 70 dev 17 with no F7; continuation chunks are raw bytes; the last ends F7). The old tool resolved
@@ -148,7 +155,7 @@ reviewer agents swept all of src/; findings consolidated below.
       complete && checksumOk) and re-rendered. Verified against the device. SCOPE: only hil-screenshot.cjs
       (the golden-capture path) was fixed; orville-probe.cjs's diagnostic `screen` action still keeps only the
       first chunk, which is fine for a quick diagnostic dump — fix it there too only if it ever needs full screens.
-- [x] FB6 RESOLVED (branch fix/app-sysex-reassembly): the SAME multi-packet truncation could hit the BROWSER
+- [x] FB6 RESOLVED (branch fix/app-sysex-reassembly, PR #79): the SAME multi-packet truncation could hit the BROWSER
       APP, not just the CLI. midi.js addSysexListener handed a single WebMIDI `e.data` straight to parseResponse
       with no reassembly, so if Chrome ever delivers a long SysEx split across packets, the app would render a
       truncated screen (0x17) OR a truncated/corrupt OBJECTINFO menu (e.g. the ~70-name bank list). FIX:
@@ -157,7 +164,7 @@ reviewer agents swept all of src/; findings consolidated below.
       Covers every inbound SysEx type, not just the screen. Tested (complete pass-through, split reassembly,
       buffer reset on new F0, Uint8Array data). NOT yet verified whether Chrome actually chunks on this device
       (would need an in-browser test against the unit); the fix is correct either way (defensive + matches FB5).
-- [x] FB7 RESOLVED (branch fix/sysex-listener-reregister): midi.js addSysexListener now tracks the input +
+- [x] FB7 RESOLVED (branch fix/sysex-listener-reregister, PR #88): midi.js addSysexListener now tracks the input +
       handler it attached and removes the previous 'sysex' listener (from whichever input it was on) before
       adding a new one, so repeated selectPorts runs (button + cached-config auto-run) and input switches
       can no longer stack listeners -> parseResponse fires exactly once per message and the dump-wave
@@ -165,7 +172,7 @@ reviewer agents swept all of src/; findings consolidated below.
       dumpComplete consumers depend on accurate wave counting. Tests: re-registration replaces (not stacks)
       + input-switch detaches from the old input; both fail pre-fix (verified). midi.test mock input now
       tracks add/removeListener.
-- [x] FB4 RESOLVED (branch fix/dump-watchdog-idle-reset): the midi.js dump watchdog was a fixed 1500ms hard
+- [x] FB4 RESOLVED (branch fix/dump-watchdog-idle-reset, PR #76): the midi.js dump watchdog was a fixed 1500ms hard
       ceiling that fired mid-response on large enumerations like the bank list (OBJECTINFO 10020012, ~70 names,
       ~4-6s). Replaced with an idle/silence watchdog (WATCHDOG_IDLE_MS 1500, rearmed on every send and receive)
       bounded by an absolute WATCHDOG_MAX_MS (10000) ceiling, so a healthy slow wave drains to all-received.
@@ -268,7 +275,7 @@ authoritative -> land on last-active DSP's preset -> EAGER-load that preset's tr
 config toggles lazy) -> render on dumpComplete.
 
 ### Batch 3.1 — dumpComplete events (headline perf + correctness; the substrate)
-- [x] C1  (branch refactor/dump-complete-render, GH #37) Render timing is now event-driven. The substrate
+- [x] C1  (branch refactor/dump-complete-render, GH #37, PR #89) Render timing is now event-driven. The substrate
       (midi.js per-wave outstanding counter + idle watchdog emitting dumpComplete; FB4) predated this batch
       and FB7 secured its exactly-once decrement; C1 is the consumer migration. event-bridge.js rebuilt:
       the per-message timer stack (RENDER_COALESCE_MS setTimeout chains + shared lodash debounce + the
@@ -307,7 +314,7 @@ config toggles lazy) -> render on dumpComplete.
       autoLoad=true but before the new menu's dump landed) renders the OLD subs and the autoload branch can
       descend from them. Narrow (stall-only); 3.3's explicit rootDumpComplete landing subsumes it — fold
       into C2's design.
-- [x] C4  (same branch, GH #40) isLoadingPreset deleted: store default, both renderer writes, and the
+- [x] C4  (same branch, GH #40, PR #89) isLoadingPreset deleted: store default, both renderer writes, and the
       event-bridge gating/clear are gone — hideLoading is driven solely by dumpComplete. The parser's
       Favorites re-order fix now gates on loadingPresetName alone; FINDING: no production code writes
       loadingPresetName (pre-existing — the path was already unreachable live since the gate required both),
@@ -315,7 +322,7 @@ config toggles lazy) -> render on dumpComplete.
 HUMAN-GATE: none
 
 ### Batch 3.2 — State-shape hardening
-- [x] C3  (branch refactor/keystack-normalize, GH #39) Normalized keyStack to always-objects: every entry is
+- [x] C3  (branch refactor/keystack-normalize, GH #39, PR #87) Normalized keyStack to always-objects: every entry is
       {key, tag, subs}, built by the new navigation.js makeKeyStackEntry(key, subs) (tag derived the way the
       renderer always derived parent tags — sub tag, else first statement word — falling back to the key
       when subs aren't loaded). All five push sites converted: renderer dsp-toggle/softkey-descend/
@@ -338,7 +345,7 @@ HUMAN-GATE: none
       itself"; back-pop recovers. Pre-existing at depth >=2; C3 made it reachable at depth 1 (the old
       raw-string entry made that click a dead TypeError instead). FIX: guard the descend branch with
       newKey !== appState.currentKey (no-op the click). CODE, low priority.
-- [x] C5  (branch fix/autoload-subs-param, GH #41) renderer autoload-descend now sources the keyStack parent
+- [x] C5  (branch fix/autoload-subs-param, GH #41, PR #82) renderer autoload-descend now sources the keyStack parent
       entry from the `subs` param it was invoked with, not the global appState.currentSubs. NOTE (from review):
       renderScreen re-pins currentSubs=subs at its top (render-pin), so global==param today and this was NOT an
       observable bug — the fix is correct-by-construction / defensive (robust if the pin is ever moved/removed).
@@ -361,7 +368,7 @@ HUMAN-GATE: none
       its parent — verified across all 8 OBJECTINFO fixtures). RESIDUAL (defer to C1): a VALID child dump
       can be dropped if a stale re-render re-pins currentSubs before it lands — harmless (next updateScreen
       refetch self-heals); request-correlated dumpComplete events are the real fix.
-- [x] C7  (branch refactor/meter-con-type-check, GH #43) Replaced the endsWith('0002') meter heuristic with
+- [x] C7  (branch refactor/meter-con-type-check, GH #43, PR #86) Replaced the endsWith('0002') meter heuristic with
       a type-based check: a VALUE_DUMP takes the CON immediate-render path iff the loaded subs type the key
       CON — looked up in currentSubs or any stored childSubs (the type comes from OBJECTINFO; non-CON child
       params keep their separate immediate fallback). Behavior change confined to 0002-suffixed keys that
@@ -382,17 +389,23 @@ HUMAN-GATE: none
 ### Batch 3.3 — Connect handshake + eager loader + landing  (replaces the autoLoad timer mechanism)
 DECISION RESOLVED (see phase3-state-model.md): land on the last-active DSP's preset, read authoritatively
 from the root dump (device boots into last-used preset). Cache is a provisional structure-only pre-paint.
-- [ ] C2  Remove the PORT_INIT_MS (500ms) timer + autoLoad flag mechanism (main.js); land via
+- [~] C2  Remove the PORT_INIT_MS (500ms) timer + autoLoad flag mechanism (main.js); land via
       rootDumpComplete -> active preset. NOTE: the race SYMPTOM (wrong landing menu) was eliminated by
       C1's synchronous root render (Batch 3.1), but the timer-driven mechanism it rode on is still in
       place — this item owns removing it.
+      NEXT: design the rootDumpComplete landing in phase3-state-model.md terms (connect -> request root ->
+      on the root wave's dumpComplete adopt DSP keys/names + land on the active preset, no timer, no
+      autoLoad flag), folding in the two C1-review items that C2 subsumes/validates: the
+      watchdog-mid-navigation autoload edge (Batch 3.1 NEW item) and, while on hardware for the throughput
+      gate, the wave-saturation smoke. Then implement on a branch with the startup characterization
+      updated in the same commit.
 - [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX
 - [ ] NEW `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
 - [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number
 HUMAN-GATE: needs-hardware (eager-load throughput on the real unit; offline parse/render half covered by replay harness)
 
 ### Batch 3.4 — Cycle cleanup   [branch: refactor/logcategories-off-appstate]  (GH #42)
-- [x] C6  Moved logLevel + logCategories off appState into logger.js (its own module state, defaults from
+- [x] C6  (PR #81) Moved logLevel + logCategories off appState into logger.js (its own module state, defaults from
       constants.DEFAULT_LOG_CATEGORIES). logger.js no longer imports state.js -> the store->logger->state->store
       cycle is collapsed. parser.js bitmap-log guard dropped (log() gates the category itself); main.js sets log
       prefs via setLogLevel/setLogCategories at boot + save; config @example updated. Tests updated (replay,

@@ -16,6 +16,9 @@ jest.mock('../src/logger.js', () => ({
 }));
 
 jest.mock('../src/navigation.js', () => ({
+  // Real makeKeyStackEntry so the 'parameter' nav test exercises the actual
+  // keyStack normalization (C3/#39); only toggleDspKey is stubbed.
+  ...jest.requireActual('../src/navigation.js'),
   toggleDspKey: jest.fn(() => '801000b'),
 }));
 
@@ -39,6 +42,16 @@ describe('controls', () => {
     appState.currentKey = '0';
     appState.presetKey = '401000b';
     appState.keyStack = [];
+    appState.currentSubs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '0',
+        parent: '0',
+        statement: 'ORVILLE ROOT OBJECT',
+        tag: 'ORVILLE',
+      },
+    ];
     appState.autoLoad = false;
     appState.fetchBitmap = true;
     sendKeypress.mockClear();
@@ -90,7 +103,9 @@ describe('controls', () => {
 
     expect(appState.currentKey).toBe('401000b');
     expect(appState.autoLoad).toBe(true);
-    expect(appState.keyStack).toEqual(['0']);
+    // Normalized entry, not a raw string (C3/#39): tag derived from the
+    // root dump's main line, subs snapshotted for breadcrumb/sibling logic.
+    expect(appState.keyStack).toEqual([{ key: '0', tag: 'ORVILLE', subs: appState.currentSubs }]);
   });
 
   test('fetchBitmap disabled skips the screen fetch', () => {

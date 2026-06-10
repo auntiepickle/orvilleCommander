@@ -271,7 +271,29 @@ config toggles lazy) -> render on dumpComplete.
 HUMAN-GATE: none
 
 ### Batch 3.2 — State-shape hardening
-- [ ] C3  Normalize keyStack mixed types (string@0, objects@1+) to always-objects or split structures (GH #39)
+- [x] C3  (branch refactor/keystack-normalize, GH #39) Normalized keyStack to always-objects: every entry is
+      {key, tag, subs}, built by the new navigation.js makeKeyStackEntry(key, subs) (tag derived the way the
+      renderer always derived parent tags — sub tag, else first statement word — falling back to the key
+      when subs aren't loaded). All five push sites converted: renderer dsp-toggle/softkey-descend/
+      autoload-descend (autoload keeps the C5 sourcing from the render's `subs` param), controls.js
+      parameter-nav and main.js select-ports-init (the two former raw-string '0' pushes). FIXES the latent
+      length-1-stack bugs those strings caused: "[undefined]" breadcrumb + back-link to key undefined on the
+      first preset render after parameter-nav/connect, and a TypeError in the sibling-softkey check
+      (parentEntry.subs.some on undefined) when a preset top menu has params (no autoload re-push).
+      startup.test's mixed-types known-bug pin updated to assert the normalized shape (header note marked
+      RESOLVED); controls.test asserts the normalized entry (fails pre-C3); new tests/navigation.test.js
+      covers the helper; new renderer test pins the real breadcrumb + working back-link. 111 tests / 13
+      suites green; snapshots unchanged (10). REVIEW ADDENDUM: a third (desirable) behavior change — a
+      depth-1 leaf menu now falls back to the root entry's tagged COLs as its softkey row (the raw-string
+      entry used to yield none) — pinned by an added renderer assertion; clicking the highlighted current
+      softkey can now self-push at depth 1 (pre-existing flaw at depth >=2, reach widened; logged as the
+      item below).
+- [ ] NEW (from C3 review) Softkey re-click of the CURRENT menu self-pushes a duplicate keyStack entry:
+      handleLcdClick's descend branch does not skip newKey === currentKey (the sibling branch does), so
+      re-clicking the highlighted softkey pushes {key: currentKey, ...} and renders the menu "inside
+      itself"; back-pop recovers. Pre-existing at depth >=2; C3 made it reachable at depth 1 (the old
+      raw-string entry made that click a dead TypeError instead). FIX: guard the descend branch with
+      newKey !== appState.currentKey (no-op the click). CODE, low priority.
 - [x] C5  (branch fix/autoload-subs-param, GH #41) renderer autoload-descend now sources the keyStack parent
       entry from the `subs` param it was invoked with, not the global appState.currentSubs. NOTE (from review):
       renderScreen re-pins currentSubs=subs at its top (render-pin), so global==param today and this was NOT an

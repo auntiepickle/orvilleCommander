@@ -13,7 +13,7 @@ import {
   sendObjectInfoDump,
 } from './midi.js';
 import { updateScreen } from './renderer.js';
-import { toggleDspKey } from './navigation.js';
+import { toggleDspKey, makeKeyStackEntry } from './navigation.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { denibble, renderBitmap } from './bitmap.js';
@@ -150,7 +150,10 @@ function selectPorts() {
   setTimeout(() => {
     setState(
       {
-        keyStack: [...appState.keyStack, appState.currentKey],
+        keyStack: [
+          ...appState.keyStack,
+          makeKeyStackEntry(appState.currentKey, appState.currentSubs),
+        ],
         currentKey: appState.presetKey,
         autoLoad: true,
       },

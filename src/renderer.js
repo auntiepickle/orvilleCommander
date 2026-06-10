@@ -5,6 +5,7 @@ import { TIMING, LAYOUT } from './constants.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { showLoading } from './main.js';
+import { makeKeyStackEntry } from './navigation.js';
 import { log } from './logger.js';
 
 /**
@@ -52,11 +53,9 @@ const handleLcdClick = (e) => {
       !appState.currentKey.startsWith(KEY_PREFIX.DSP_A) &&
       !appState.currentKey.startsWith(KEY_PREFIX.DSP_B)
     ) {
-      const parentMain = appState.currentSubs[0];
-      const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
       patch.keyStack = [
         ...appState.keyStack,
-        { key: appState.currentKey, tag: parentTag, subs: (appState.currentSubs || []).slice() },
+        makeKeyStackEntry(appState.currentKey, appState.currentSubs),
       ];
     }
     setState(patch, 'renderer:lcd-click-dsp-toggle');
@@ -91,13 +90,11 @@ const handleLcdClick = (e) => {
       'info',
       'general'
     );
-    const parentMain = appState.currentSubs[0];
-    const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
     setState(
       {
         keyStack: [
           ...appState.keyStack,
-          { key: appState.currentKey, tag: parentTag, subs: (appState.currentSubs || []).slice() },
+          makeKeyStackEntry(appState.currentKey, appState.currentSubs),
         ],
         currentKey: newKey,
         paramOffset: 0, // Reset offset for new menu
@@ -854,18 +851,9 @@ export function renderScreen(subs, ascii, logParam) {
       // diverges the global from this render's input (C5 / #41). currentKey stays
       // global: it is the key being loaded (e.g. the preset), distinct from
       // subs[0] (the rendered page's main object).
-      const parentMain = subs[0];
-      const parentTag = parentMain.tag.trim() || parentMain.statement.split(' ')[0].trim();
       setState(
         {
-          keyStack: [
-            ...appState.keyStack,
-            {
-              key: appState.currentKey,
-              tag: parentTag,
-              subs: subs.slice(),
-            },
-          ],
+          keyStack: [...appState.keyStack, makeKeyStackEntry(appState.currentKey, subs)],
           currentKey: softSubsLocal[0].key,
         },
         'renderer:autoload-descend'

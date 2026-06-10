@@ -15,8 +15,10 @@
  *   - autoload-vs-401000b landing-page race (renderer autoload on root
  *     flips currentKey to first short-tag COL before 401000b arrives; the
  *     401000b and 801000b dumps are silently dropped by parser gate)
- *   - keyStack holds mixed types: main.js:143 pushes a raw string, the
- *     renderer autoload pushes a {key, tag, subs} object
+ *   - (RESOLVED by C3/#39) keyStack used to hold mixed types: main.js
+ *     pushed a raw string while the renderer autoload pushed a {key, tag,
+ *     subs} object. All pushes now go through makeKeyStackEntry
+ *     (navigation.js) and every entry is {key, tag, subs}.
  *   - type=8 sub in root dump (key 10040000, empty tag) lands in
  *     currentSubs via parseSubObject; filtered out of autoload by the
  *     type==='COL' check
@@ -116,6 +118,7 @@ import { sendObjectInfoDump, sendSysEx } from '../src/midi.js';
 import { appState } from '../src/state.js';
 import { setState } from '../src/store.js';
 import { hideLoading } from '../src/main.js';
+import { makeKeyStackEntry } from '../src/navigation.js';
 import { registerEventBridge } from '../src/event-bridge.js';
 import {
   loadFixture,
@@ -261,7 +264,10 @@ describe('startup characterization (roadmap step 5.5)', () => {
     //     so this simulation tracks the production module.
     setState(
       {
-        keyStack: [...appState.keyStack, appState.currentKey],
+        keyStack: [
+          ...appState.keyStack,
+          makeKeyStackEntry(appState.currentKey, appState.currentSubs),
+        ],
         currentKey: appState.presetKey,
         autoLoad: true,
       },
@@ -319,13 +325,20 @@ describe('startup characterization (roadmap step 5.5)', () => {
     expect(appState.isLoadingPreset).toBe(false);
     expect(appState.childSubs).toEqual({});
 
-    // keyStack mixed-types bug pinned. If a future refactor normalizes
-    // keyStack entries to a single shape, this assertion is what breaks —
-    // update expectations in the same commit that does the normalization.
+    // keyStack normalized to a single shape (C3/#39): every entry is
+    // {key, tag, subs}, including the root entry main.js pushes at
+    // select-ports time. Entry 0's tag derives from the root dump's main
+    // line (loaded by the time the push happens in this flow).
     expect(appState.keyStack).toHaveLength(2);
-    expect(appState.keyStack[0]).toBe('0');
-    expect(typeof appState.keyStack[1]).toBe('object');
+    expect(appState.keyStack[0]).toMatchObject({ key: '0' });
+    expect(typeof appState.keyStack[0]).toBe('object');
+    expect(Array.isArray(appState.keyStack[0].subs)).toBe(true);
     expect(appState.keyStack[1]).toMatchObject({ key: '401000b' });
+    for (const entry of appState.keyStack) {
+      expect(typeof entry.key).toBe('string');
+      expect(typeof entry.tag).toBe('string');
+      expect(Array.isArray(entry.subs)).toBe(true);
+    }
 
     // Device-state-dependent (fixture-derived): values read from the root
     // dump so this assertion stays valid when fixtures are regenerated

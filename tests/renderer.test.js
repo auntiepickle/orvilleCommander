@@ -418,6 +418,81 @@ describe('renderer.js', () => {
     expect(appState.currentKey).toBe('10010000'); // descended to first child
   });
 
+  test('normalized root entry renders a real breadcrumb and a working back-link (C3/#39)', () => {
+    // Pre-C3, main.js/controls.js pushed the raw string '0' here, so a
+    // length-1 stack rendered "[undefined]" and the back-link's data-key was
+    // undefined. With every entry normalized to {key, tag, subs}, the
+    // breadcrumb shows the root tag and back navigates to '0'.
+    appState.currentKey = '401000b';
+    appState.keyStack = [
+      {
+        key: '0',
+        tag: 'ORVILLE',
+        subs: [
+          {
+            type: 'COL',
+            position: '0',
+            key: '0',
+            parent: '0',
+            statement: 'ORVILLE ROOT OBJECT',
+            tag: 'ORVILLE',
+          },
+          {
+            type: 'COL',
+            position: '1',
+            key: '10010000',
+            parent: '0',
+            statement: 'setup functions',
+            tag: 'setup',
+          },
+          {
+            type: 'COL',
+            position: '2',
+            key: '10020000',
+            parent: '0',
+            statement: 'program functions',
+            tag: 'program',
+          },
+        ],
+      },
+    ];
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '401000b',
+        parent: '401000b',
+        statement: 'Black Hole',
+        tag: '',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '4070001',
+        parent: '401000b',
+        statement: 'mix %3.0f',
+        tag: '',
+        value: '50',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    const lcd = document.getElementById('lcd');
+    expect(lcd.innerHTML).toContain('[ORVILLE]');
+    expect(lcd.innerHTML).not.toContain('undefined');
+    const back = document.querySelector('.back-link');
+    expect(back.dataset.key).toBe('0');
+
+    // Behavior change vs the raw-string entry (which yielded no parent
+    // softkeys): a depth-1 leaf menu now falls back to the root entry's
+    // tagged COLs as its softkey row, mirroring the device display.
+    expect(document.querySelector('.softkey[data-key="10010000"]')).toBeTruthy();
+    expect(document.querySelector('.softkey[data-key="10020000"]')).toBeTruthy();
+
+    back.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(appState.currentKey).toBe('0');
+  });
+
   test('lcd click on dsp-clickable swaps active preset and pushes keyStack', () => {
     appState.currentKey = '0';
     appState.dspAName = 'Reverb';

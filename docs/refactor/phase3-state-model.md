@@ -219,6 +219,59 @@ live connect on the real 31250-baud link (root dump arrival time vs the old
 500ms guess; landing correctness), the wave-saturation smoke (polling +
 bitmap-on-change vs the 10s watchdog ceiling), and eager-load throughput.
 
+## T1b design — tree-derived navigation (implementing; GH #105)
+
+The cure for the R-series bug class: the view derives from the device's
+object tree, not from recorded click history or message-arrival races.
+
+**Tree store (`src/tree.js`, module state like logger.js).** Every OBJECTINFO
+dump describes one node and names its direct children, so the parser records
+every dump unconditionally: `nodes[key] = subs`, and for each child line
+`parents[childKey] = { parentKey: main.key, sub: childLine }`. The parent
+linkage comes from the PARENT's dump (a dump cannot self-identify its parent —
+§3), which every click-path navigation has necessarily loaded. Newest dump
+wins (structure changes on preset load are absorbed by the per-visit
+refetch). API: `recordDump(subs)`, `getNode(key)`, `parentOf(key)`,
+`ancestorsOf(key)`, `findParamUnder(menuKey, paramKey)`, `labelFor(key)`,
+`reset()` (tests).
+
+**What derives from the tree:**
+
+- **keyStack becomes a derived view** (same `{key, tag, subs}` C3 shape, so
+  renderer consumers and test shapes hold): every navigation sets
+  `keyStack: deriveKeyStack(newKey)` = `ancestorsOf(newKey)` mapped through
+  `labelFor`/`getNode`. No handler pushes or pops history; the back-link
+  targets `parentOf(currentKey)`. Unknown ancestry (deep jump before the
+  parent's dump ever loaded) renders no breadcrumb — honest, and click paths
+  always have it.
+- **childSubs is deleted.** Its three read sites move to the tree: the embed
+  reads `getNode(candidate)`; the param-click lookup and the parser's C7
+  CON-classification use `findParamUnder(currentKey, key)`; the R7 bridge
+  trigger becomes `parentOf(key) === currentKey && getNode(key)`. The C8
+  correlation guard — childSubs' reason to exist — is replaced by tree
+  parentage: a dump is "a child of the current menu" iff the tree says so.
+  updateScreen stops clearing structure (the tree persists as a cache;
+  freshness comes from the per-visit child refetch); it still clears
+  currentValues (volatile).
+- **Labels:** `labelFor(key)` = `softkeyLabel` of the node's own main line or
+  of its line in the parent's dump; when BOTH are blank, derive from the
+  first labeled child (device precedent: the physical SETUP row labels the
+  blank container by its child, 'dsp B'), else a `...` placeholder until the
+  children load. Renderer softkey filters move from line-only `softkeyLabel`
+  to tree-aware `labelFor`, so every COL child has an affordance —
+  `unreachable-child` becomes structurally impossible. The parser fan-out
+  fetches ALL COL children (labels no longer gate fetching; blank nodes need
+  their children loaded to be labeled).
+
+**Out of scope (stays #106):** cache pre-paint on navigation, the
+unconfirmed-value render guard (R3), the eager loader, and request
+scheduling. Known open notes (#105): duplicate derived sibling labels
+('Post'/'Post'), clipped-label bracket overflow.
+
+**Acceptance:** offline suite green; then a maintainer-run
+`npm run tree-audit` against the device reporting ZERO violations (the last
+standing class — blank-node reachability — is resolved by the label policy).
+
 ## Validation / open items
 
 - Eager-load throughput on real hardware (many `OBJECTINFO`/`VALUE` round

@@ -1,6 +1,6 @@
 // parser.js
 import { appState } from './state.js';
-import { CMD, KEY, KEY_PREFIX, KEY_SUFFIX, SYSEX } from './sysex-commands.js';
+import { CMD, KEY, KEY_PREFIX, KEY_SUFFIX, SYSEX, TYPE_EMPTY } from './sysex-commands.js';
 import { TIMING } from './constants.js';
 import { setState } from './store.js';
 import { sendValuePut, sendValueDump, sendObjectInfoDump, notifyResponse } from './midi.js';
@@ -91,7 +91,7 @@ export function parseResponse(data) {
           if (isFresh(s.key)) {
             log(`Skipping refetch of fresh stable child ${s.key} (#113)`, 'debug', 'parsedDump');
             for (const line of (getNode(s.key) || []).slice(1)) {
-              if (line.key && !['COL', 'TRG', '8'].includes(line.type)) {
+              if (line.key && !['COL', 'TRG', TYPE_EMPTY].includes(line.type)) {
                 sendValueDump(line.key);
               }
             }
@@ -278,6 +278,22 @@ export function parseSubObject(line) {
     }
   } else {
     value = parts[6] || '';
+  }
+  // D1 (#118) field-shift canary. Positional parsing is safe because the
+  // device QUOTES any value containing a space — verified across all 52
+  // captured fixture lines (multi-word statements like 'Black Hole' always
+  // quoted, single words like MetallicChamber bare) and on hardware for
+  // multi-word STR puts (#104, quoted echoes). If that invariant ever
+  // breaks, fields shift: a COL line's trailing field is its HEX child
+  // count (e.g. setup's 'f' = 15), so a non-hex token there is the
+  // earliest detectable symptom — log loudly instead of corrupting every
+  // downstream consumer silently.
+  if (type === 'COL' && value && !/^[0-9a-f]+$/i.test(value)) {
+    log(
+      `Suspect COL line (non-hex child count — unquoted multi-word field shift? D1/#118): ${line}`,
+      'error',
+      'error'
+    );
   }
   return { type, position, key, parent, statement, tag, value, min, max, step, options };
 }

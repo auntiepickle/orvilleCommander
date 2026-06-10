@@ -1,6 +1,6 @@
 // renderer.js
 import { appState } from './state.js';
-import { CMD, KEY, KEY_PREFIX, ROOT_SOFTKEYS } from './sysex-commands.js';
+import { CMD, KEY, KEY_PREFIX, ROOT_SOFTKEYS, TYPE_EMPTY } from './sysex-commands.js';
 import { TIMING, LAYOUT, RENDER } from './constants.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
@@ -558,7 +558,7 @@ export function renderScreen(subs, ascii, logParam) {
         // no selects, and no value refetches (the real render issues those
         // when the live dump lands). 'a'-positioned NUMs already rendered
         // as the grouped graphic-EQ placeholder line above.
-        if (s.type === 'COL' || s.type === '8' || s.position === 'a') return;
+        if (s.type === 'COL' || s.type === TYPE_EMPTY || s.position === 'a') return;
         const text = placeholderLine(s);
         if (text) {
           paramLines.push(text);

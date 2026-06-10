@@ -662,12 +662,22 @@ HUMAN-GATE: none
 
 ## Phase 4 — Parser quirks & edge hardening
 
-### Batch 4.1
-- [ ] D1  (GH #118) Make splitLine robust to multi-word unquoted preset names (sysex-split.js), or
-      prove the device always quotes (hardware evidence: #104 multi-word STR puts echo QUOTED) and
-      document + assert the invariant. Offline.
-- [ ] D2  (GH #119) Handle/define root OBJECTINFO type=8 entry (key=10040000) in parseSubObject
-      dispatch; remove the scattered ad-hoc `'8'` exclusions (renderer, eager-loader, audit). Offline.
+### Batch 4.1   [branch: fix/parser-hardening-d1-d2]
+- [x] D1  (GH #118) RESOLVED as document + assert — the invariant is PROVEN, not patched around:
+      the device quotes a value iff it contains a space ('Black Hole' quoted, MetallicChamber bare;
+      verified across all 52 captured fixture lines and hardware multi-word STR-put echoes #104),
+      so positional splitLine parsing is safe. ASSERT: parseSubObject gains a field-shift canary —
+      a COL line's trailing field is its HEX child count (e.g. setup's 'f' = 15, a discovery of
+      this batch), so a non-hex token there logs loudly as the earliest symptom of an unquoted
+      multi-word shift. device-model line-grammar + §8 updated; tests pin quoted/bare parsing, the
+      real 'f' count passing, and the canary firing on a synthetic shifted line.
+- [x] D2  (GH #119) RESOLVED with live evidence: probed 10040000 directly — its OBJECTINFO returns
+      only its own line (8 0 10040000 10040000 '' '': no children, no count field) and its VALUE
+      returns empty. Type 8 = an empty/reserved leaf; render-skip is correct and now DEFINED:
+      sysex-commands.js TYPE_EMPTY names it with the probe evidence, and every ad-hoc '8' literal
+      (renderer pre-paint, parser warm-path value filter, audit detector, fixture helper) now
+      references the constant. The '8' lines stay in subs (subsCount semantics unchanged).
+      device-model §8 type-8 entry updated with the probe.
 HUMAN-GATE: none
 
 ---

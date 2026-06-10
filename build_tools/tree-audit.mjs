@@ -65,7 +65,7 @@ const { appState } = await import('../src/state.js');
 const { setState } = await import('../src/store.js');
 const { updateScreen } = await import('../src/renderer.js');
 const { deriveKeyStack, getNode, recordDump } = await import('../src/tree.js');
-const { KEY, CMD, SYSEX } = await import('../src/sysex-commands.js');
+const { KEY, CMD, SYSEX, TYPE_EMPTY } = await import('../src/sysex-commands.js');
 const { log } = await import('../src/logger.js');
 
 // ---------- real MIDI ------------------------------------------------------
@@ -269,7 +269,7 @@ for (const [key, node] of colNodes) {
   }
 
   // 2. Params rendered exactly once.
-  for (const p of children.filter((s) => s.type !== 'COL' && s.type !== '8')) {
+  for (const p of children.filter((s) => s.type !== 'COL' && s.type !== TYPE_EMPTY)) {
     const keyCount = mainKeys.filter((k) => k === p.key).length;
     const stmtFrag = p.statement ? p.statement.replace(/%.*$/, '').trim() : '';
     const tagFrag = (p.tag || '').trim();

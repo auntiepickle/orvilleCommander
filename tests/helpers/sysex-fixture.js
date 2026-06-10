@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { splitLine } from '../../src/sysex-split.js';
+import { TYPE_EMPTY } from '../../src/sysex-commands.js';
 
 const FIXTURES_DIR = path.join(process.cwd(), 'tests', 'fixtures');
 
@@ -81,7 +82,7 @@ export function extractParamKeysFromDump(bytes) {
   const subs = decodeSubs(bytes);
   return subs
     .slice(1)
-    .filter((s) => !['COL', '8'].includes(s.type))
+    .filter((s) => !['COL', TYPE_EMPTY].includes(s.type))
     .map((s) => s.key);
 }
 

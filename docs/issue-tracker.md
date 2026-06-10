@@ -402,7 +402,23 @@ from the root dump (device boots into last-used preset). Cache is a provisional 
       landing + descend exercised through the real bridge. 126 tests / 14 suites green. Hardware
       validation deferred to the consolidated session after 3.3 (landing timing on the real link +
       wave-saturation smoke + eager-load throughput).
-- [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX
+MAINTAINER DIRECTIVE (2026-06-10, governs the rest of Phase 3): "we should be rendering what exists in
+a tree... make sure we have good tree navigation since we are navigating a tree of states from the
+unit" — not one-off handler fixes. R1/R2/R6 were symptoms of view state assembled from click history
+and arrival races; the cure is view DERIVED from the device tree.
+- [~] T1  Tree audit + tree-derived navigation (the maintainer's audit ask: "render the html and audit
+      whether we have odd behavior that doesn't get us the full state of a tree and its leaves").
+      NEXT: (a) build the TREE AUDITOR on the headless live harness (logs/live-app.mjs -> promote to
+      build_tools/): walk every COL node bounded by depth + a visited set; at each node compare the
+      rendered LCD against the node's own dump — every tagged COL child present as a softkey or the
+      embed, every param rendered exactly once, no duplicated row sets, breadcrumb = the real ancestor
+      chain; emit violations as a machine-readable report. Run it against the device; file each
+      violation as an R-item. (b) Fold the audit invariants into the eager loader below: navigation
+      state becomes a KEY into the loaded tree; ancestors are COMPUTED from tree parent relations, not
+      recorded click history (keyStack becomes a derived view or is deleted); softkeys, embed, and
+      breadcrumb all derive from tree relations. The auditor then becomes the standing regression
+      harness (merges with G2).
+- [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX. Subordinate to T1's tree model; R5's pacing data (bitmap-in-wave stalls; bank-list fan-out starvation) constrains the request scheduling.
 - [ ] NEW `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
 - [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number
 HUMAN-GATE: needs-hardware (eager-load throughput on the real unit; offline parse/render half covered by replay harness)

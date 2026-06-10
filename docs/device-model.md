@@ -136,7 +136,9 @@ The object's **own** line ends with its **child count in hex**; child lines show
 
 A hex digit giving ordering, with special codes seen in captures: `'a'` marks
 graphic-EQ band NUMs that the UI groups onto one line `[V]`; `'e'` appears on the
-`info` child of presets `[V]`. Other hex values `[I]`.
+`info` child of presets `[V]`; `'c'` appears on empty-tag page/wrapper COLs
+(probed live 2026-06-10: the `Post D/A Gain` chain `10030601` -> `1003006b`/
+`1003006c`, whose statements carry the page names) `[V]`. Other hex values `[I]`.
 
 ### STATEMENT / TAG `[V]`
 

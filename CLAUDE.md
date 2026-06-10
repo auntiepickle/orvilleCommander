@@ -25,7 +25,7 @@ index.html
       ├─ event-bridge.js    subscribes to parser/midi events, renders on dumpComplete
       ├─ renderer.js        subs → LCD HTML, event handlers
       ├─ bitmap.js          screen-capture denibble + canvas render
-      ├─ navigation.js      toggleDspKey, makeKeyStackEntry
+      ├─ navigation.js      toggleDspKey, makeKeyStackEntry, softkeyLabel
       ├─ events.js          tiny pub/sub bus (emit / on)
       ├─ store.js           setState façade over appState (audited writes)
       ├─ state.js           appState singleton (re-exported from store.js)

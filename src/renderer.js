@@ -5,7 +5,7 @@ import { TIMING, LAYOUT } from './constants.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { showLoading } from './main.js';
-import { makeKeyStackEntry } from './navigation.js';
+import { makeKeyStackEntry, softkeyLabel } from './navigation.js';
 import { log } from './logger.js';
 
 /**
@@ -373,7 +373,7 @@ export function renderScreen(subs, ascii, logParam) {
     const softSubsUsed = subs.filter(
       (s) =>
         s.type === 'COL' &&
-        s.tag.trim() &&
+        softkeyLabel(s) &&
         s.key !== KEY.DSP_A_PRESET &&
         s.key !== KEY.DSP_B_PRESET &&
         s.key !== KEY.ROOT_META &&
@@ -385,7 +385,7 @@ export function renderScreen(subs, ascii, logParam) {
       const slice = softSubsUsed.slice(i, i + itemsPerLine);
       const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length);
       const softTags = slice.map((s) => {
-        const t = s.tag.trim();
+        const t = softkeyLabel(s);
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
         return text;
       });
@@ -399,7 +399,7 @@ export function renderScreen(subs, ascii, logParam) {
       const slice = softSubsUsed.slice(i, i + itemsPerLine);
       const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length);
       slice.forEach((s, idx) => {
-        const t = s.tag.trim();
+        const t = softkeyLabel(s);
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
         softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
       });
@@ -515,11 +515,7 @@ export function renderScreen(subs, ascii, logParam) {
     // which made mixed menus like 'program functions' (TRG + 8 position-0
     // COL children) unnavigable — the physical PROGRAM screen shows those
     // softkeys. Only the actually-embedded child is excluded, below.
-    localSoftSubs = subs
-      .slice(1)
-      .filter(
-        (s) => s.type === 'COL' && s.tag.trim().length <= LAYOUT.SHORT_TAG_MAX && s.tag.trim()
-      );
+    localSoftSubs = subs.slice(1).filter((s) => s.type === 'COL' && softkeyLabel(s));
     // Deterministic embed (R6, live-validated): only ever the FIRST
     // position-0 child in subs order may embed. The old loop embedded
     // whichever child's dump happened to have arrived — on 'program
@@ -533,14 +529,14 @@ export function renderScreen(subs, ascii, logParam) {
       .filter((s) => s.type === 'COL' && s.position === '0' && s.parent === appState.currentKey)
       .slice(0, 1);
     let embeddedKey = null;
-    // Proactively fetch the embed candidate ONLY when the parser's short-tag
-    // fan-out will not already fetch it (long/empty tag) — otherwise this
+    // Proactively fetch the embed candidate ONLY when the parser's fan-out
+    // will not already fetch it (no derivable label) — otherwise this
     // duplicated the same request in the same wave on every navigation, and
     // on 'program functions' the duplicated key is the giant bank list
-    // (R6 review).
+    // (R6 review; predicate kept in lockstep with softkeyLabel per R9).
     if (potentialEmbedSubs.length > 0) {
       const cand = potentialEmbedSubs[0];
-      const fanOutCovers = cand.tag.trim() && cand.tag.trim().length <= LAYOUT.SHORT_TAG_MAX;
+      const fanOutCovers = Boolean(softkeyLabel(cand));
       if (!fanOutCovers && !appState.childSubs[cand.key]) {
         sendObjectInfoDump(cand.key, logParam);
       }
@@ -638,7 +634,7 @@ export function renderScreen(subs, ascii, logParam) {
       const parentEntry = appState.keyStack[appState.keyStack.length - 1];
       const parentColSubs = (parentEntry.subs || [])
         .slice(1)
-        .filter((s) => s.type === 'COL' && s.tag.trim());
+        .filter((s) => s.type === 'COL' && softkeyLabel(s));
       softSubs = localSoftSubs.length > 0 ? localSoftSubs : parentColSubs;
     } else {
       softSubs = localSoftSubs;
@@ -653,7 +649,7 @@ export function renderScreen(subs, ascii, logParam) {
       const slice = softSubs.slice(i, i + itemsPerLine);
       const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
       const softTags = slice.map((s) => {
-        const t = s.tag.trim();
+        const t = softkeyLabel(s);
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
         return text;
       });
@@ -680,14 +676,14 @@ export function renderScreen(subs, ascii, logParam) {
         }
         const parentSoftSubs = (parentEntry.subs || [])
           .slice(1)
-          .filter((s) => s.type === 'COL' && s.tag.trim());
+          .filter((s) => s.type === 'COL' && softkeyLabel(s));
         const parentHighlightKey = appState.currentKey;
         let parentSoftTextLines = [];
         for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
           const slice = parentSoftSubs.slice(i, i + itemsPerLine);
           const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           const softTags = slice.map((s) => {
-            const t = s.tag.trim();
+            const t = softkeyLabel(s);
             const text = (s.key === parentHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
             return text;
           });
@@ -714,14 +710,14 @@ export function renderScreen(subs, ascii, logParam) {
         // Skip if grandparent is preset
         const upperSoftSubs = (upperEntry.subs || [])
           .slice(1)
-          .filter((s) => s.type === 'COL' && s.tag.trim());
+          .filter((s) => s.type === 'COL' && softkeyLabel(s));
         const upperHighlightKey = appState.keyStack[appState.keyStack.length - 1].key;
         let upperSoftTextLines = [];
         for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {
           const slice = upperSoftSubs.slice(i, i + itemsPerLine);
           const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           const softTags = slice.map((s) => {
-            const t = s.tag.trim();
+            const t = softkeyLabel(s);
             const text = (s.key === upperHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
             return text;
           });
@@ -763,7 +759,7 @@ export function renderScreen(subs, ascii, logParam) {
       const slice = softSubs.slice(i, i + itemsPerLine);
       const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
       slice.forEach((s, idx) => {
-        const t = (s.tag || '').trim();
+        const t = softkeyLabel(s);
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
         softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
       });
@@ -784,7 +780,7 @@ export function renderScreen(subs, ascii, logParam) {
         }
         const parentSoftSubs = (parentEntry.subs || [])
           .slice(1)
-          .filter((s) => s.type === 'COL' && s.tag.trim());
+          .filter((s) => s.type === 'COL' && softkeyLabel(s));
         const parentHighlightKey = appState.currentKey;
         let parentSoftHtmlLines = [];
         for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
@@ -792,7 +788,7 @@ export function renderScreen(subs, ascii, logParam) {
           const slice = parentSoftSubs.slice(i, i + itemsPerLine);
           const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           slice.forEach((s, idx) => {
-            const t = s.tag.trim();
+            const t = softkeyLabel(s);
             const text = (s.key === parentHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
             softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
           });
@@ -823,7 +819,7 @@ export function renderScreen(subs, ascii, logParam) {
         // Skip if grandparent is preset
         const upperSoftSubs = (upperEntry.subs || [])
           .slice(1)
-          .filter((s) => s.type === 'COL' && s.tag.trim());
+          .filter((s) => s.type === 'COL' && softkeyLabel(s));
         const upperHighlightKey = appState.keyStack[appState.keyStack.length - 1].key;
         let upperSoftHtmlLines = [];
         for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {
@@ -831,7 +827,7 @@ export function renderScreen(subs, ascii, logParam) {
           const slice = upperSoftSubs.slice(i, i + itemsPerLine);
           const columnWidth = Math.floor(LAYOUT.LCD_COLUMNS / slice.length) || 10;
           slice.forEach((s, idx) => {
-            const t = s.tag.trim();
+            const t = softkeyLabel(s);
             const text = (s.key === upperHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
             softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
           });

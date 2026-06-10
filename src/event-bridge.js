@@ -46,9 +46,8 @@ import { renderBitmap } from './bitmap.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendSysEx } from './midi.js';
-import { makeKeyStackEntry } from './navigation.js';
+import { makeKeyStackEntry, softkeyLabel } from './navigation.js';
 import { CMD, KEY, KEY_PREFIX, PARAM_TYPES } from './sysex-commands.js';
-import { LAYOUT } from './constants.js';
 import { log } from './logger.js';
 
 export function registerEventBridge({ hideLoading }) {
@@ -111,12 +110,10 @@ export function registerEventBridge({ hideLoading }) {
         setState({ pendingDescend: false, pendingLanding: null }, 'bridge:descend-consume');
         const children = subs.slice(1);
         const hasParams = children.some((s) => PARAM_TYPES.includes(s.type));
-        const softSubsLocal = children.filter(
-          (s) => s.type === 'COL' && s.tag.trim().length <= LAYOUT.SHORT_TAG_MAX && s.tag.trim()
-        );
+        const softSubsLocal = children.filter((s) => s.type === 'COL' && softkeyLabel(s));
         if (!hasParams && softSubsLocal.length > 1) {
           log(
-            `Auto-loading first menu: ${softSubsLocal[0].key} - ${softSubsLocal[0].tag}`,
+            `Auto-loading first menu: ${softSubsLocal[0].key} - ${softkeyLabel(softSubsLocal[0])}`,
             'info',
             'general'
           );

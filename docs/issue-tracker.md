@@ -607,7 +607,9 @@ in logs/ (program-screen.png).
       device UI — any press may be a mutating sequence) + Sync/selectPorts markAllStableDirty
       (device-side mutations the app cannot observe: physical panel, card swap, external MIDI
       program changes). FUTURE HOOK: the device's uncaptured bank-change SysEx (§12) would give
-      automatic invalidation.
+      automatic invalidation. RESIDUAL (GH #121, low): an in-flight dump racing a mutating put can
+      record pre-mutation structure as fresh — bounded recovery; generation-counter fix sketched
+      in the issue.
       LIVE ACCEPTANCE (2026-06-10, logs/live-prog-113b.log, live-app 'prog' mode): COLD visit
       (stale = pre-#113 behavior) 17 waves / 41 sends / settled 17919ms; WARM visit 1 wave /
       27 sends (1 objectinfo + the small per-param VALUE refreshes) / settled 646ms — ~28x,

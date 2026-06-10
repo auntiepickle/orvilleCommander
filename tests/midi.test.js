@@ -203,19 +203,32 @@ describe('midi.js SysEx byte contract', () => {
   });
 });
 
+// Listener-tracking input mock: stacks every added 'sysex' callback and
+// supports removal, so the FB7 re-registration guard is observable.
+const makeInput = () => {
+  const listeners = [];
+  return {
+    listeners,
+    addListener: (type, cb) => {
+      if (type === 'sysex') listeners.push(cb);
+    },
+    removeListener: (type, cb) => {
+      const i = listeners.indexOf(cb);
+      if (i !== -1) listeners.splice(i, 1);
+    },
+  };
+};
+
 describe('addSysexListener multi-packet reassembly', () => {
+  let input;
   let handler;
 
   beforeEach(() => {
     parseResponse.mockClear();
-    handler = null;
-    const input = {
-      addListener: (type, cb) => {
-        if (type === 'sysex') handler = cb;
-      },
-    };
+    input = makeInput();
     setMidiPorts({ sendSysex: jest.fn() }, input, 1);
     addSysexListener();
+    handler = input.listeners[0];
   });
 
   test('passes a complete single-packet SysEx straight through', () => {
@@ -262,5 +275,30 @@ describe('addSysexListener multi-packet reassembly', () => {
     handler({ data: [0xf0, 0x1c, 0x70, 1, 0x2e, 0x41, 0xf7] }); // then a real message
     expect(parseResponse).toHaveBeenCalledTimes(1);
     expect(parseResponse).toHaveBeenCalledWith([0xf0, 0x1c, 0x70, 1, 0x2e, 0x41, 0xf7]);
+  });
+
+  test('re-registration replaces the listener instead of stacking (FB7)', () => {
+    // selectPorts runs from both the button and the cached-config auto-run;
+    // pre-FB7 each run stacked another listener and parseResponse fired
+    // once per stacked copy, over-decrementing the dump-wave counter.
+    addSysexListener();
+    expect(input.listeners).toHaveLength(1);
+
+    const msg = [0xf0, 0x1c, 0x70, 1, 0x2e, 0x41, 0xf7];
+    input.listeners.forEach((cb) => cb({ data: msg }));
+    expect(parseResponse).toHaveBeenCalledTimes(1);
+  });
+
+  test('selecting a different input detaches the listener from the old one (FB7)', () => {
+    const newInput = makeInput();
+    setMidiPorts({ sendSysex: jest.fn() }, newInput, 1);
+    addSysexListener();
+
+    expect(input.listeners).toHaveLength(0); // detached from the old input
+    expect(newInput.listeners).toHaveLength(1);
+
+    const msg = [0xf0, 0x1c, 0x70, 1, 0x2e, 0x41, 0xf7];
+    newInput.listeners.forEach((cb) => cb({ data: msg }));
+    expect(parseResponse).toHaveBeenCalledTimes(1);
   });
 });

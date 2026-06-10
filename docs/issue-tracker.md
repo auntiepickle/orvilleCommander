@@ -410,7 +410,7 @@ MAINTAINER DIRECTIVE (2026-06-10, governs the rest of Phase 3): "we should be re
 a tree... make sure we have good tree navigation since we are navigating a tree of states from the
 unit" — not one-off handler fixes. R1/R2/R6 were symptoms of view state assembled from click history
 and arrival races; the cure is view DERIVED from the device tree.
-- [~] T1  (GH #105 for the (b) half) Tree audit + tree-derived navigation (the maintainer's audit ask: "render the html and audit
+- [x] T1  (GH #105 for the (b) half; closed) Tree audit + tree-derived navigation (the maintainer's audit ask: "render the html and audit
       whether we have odd behavior that doesn't get us the full state of a tree and its leaves").
       (a) DONE — TREE AUDITOR SHIPPED: build_tools/tree-audit.mjs (npm run tree-audit) on the headless
       harness build_tools/live-app.mjs (both promoted from prototypes). Phase 1 fetches the ground-truth
@@ -421,7 +421,7 @@ and arrival races; the cure is view DERIVED from the device tree.
       pure-format INFs match on value; bar CONs match on tag. FIRST FULL RUN (depth 2, 42 nodes,
       41 audited): 4 violations, all real, 0 false positives -> R8 + R9 below. Report:
       logs/tree-audit-report.json (gitignored; rerun to regenerate).
-      (b) IMPLEMENTED (branch refactor/t1b-tree-navigation, PR DRAFT — awaiting maintainer review +
+      (b) SHIPPED (PR #109, squash-merged to main 2026-06-10 with maintainer approval after the
       device-on acceptance run): src/tree.js persistent tree (recordDump on EVERY 0x32; parents map
       from the parent's dump — a dump cannot self-identify its parent, device-model §3). keyStack is
       now DERIVED (tree.js:deriveKeyStack from tree ancestry, canonical {key, tag, subs} entries) at
@@ -446,9 +446,9 @@ and arrival races; the cure is view DERIVED from the device tree.
       structurally in the auditor: settling is now bounded by link IDLENESS — while messages keep
       arriving the window stays open; give up only after 8s of total silence without the node
       pinning (GIVE_UP_IDLE_MS), with capMs demoted to a 120s runaway ceiling. Verified: defaults
-      now pass clean, no hand-tuned caps.) Awaiting maintainer PR review (#109) before merge. The
-      auditor stays the standing regression loop afterward (merges with G2). App-side request
-      scheduling for the backlog itself stays with #106 (R5's data feeds it).
+      now pass clean, no hand-tuned caps.) The auditor stays the standing regression loop (merges
+      with G2). App-side request scheduling for the backlog itself stays with #106 (R5's data
+      feeds it).
 - [x] R8  (branch feat/str-rendering) STR string-edit fields RENDERED + EDITABLE: put semantics
       confirmed live first (put 10020052 'TestName' -> 0x2e echo + readback; restored after). Renderer
       STR branches (top-level + embedded child): formatted value as a clickable param-value; click

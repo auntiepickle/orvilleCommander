@@ -11,6 +11,10 @@ import { log } from './logger.js';
  * Updates the current screen by requesting OBJECTINFO_DUMP and VALUE_DUMP for the current key.
  * Clears childSubs and currentValues to refresh data. Optionally clears softkeys at root/top levels.
  *
+ * This is the single clear point for childSubs/currentValues (C8/#44): every
+ * navigation path (LCD clicks, keypress controls, sync, connect, polling)
+ * funnels through here, so per-handler clears are redundant by construction.
+ *
  * @param {Function} [logParam=null] - Optional logging function (defaults to global log).
  *
  * @example
@@ -42,8 +46,7 @@ const handleLcdClick = (e) => {
       presetKey: newPresetKey,
       currentKey: newPresetKey,
       autoLoad: true,
-      currentSoftkeys: [], // Clear softkeys on DSP switch
-      childSubs: {}, // Clear child subs on DSP switch
+      currentSoftkeys: [], // Clear softkeys on DSP switch; childSubs cleared by updateScreen below
     };
     if (
       !appState.currentKey.startsWith(KEY_PREFIX.DSP_A) &&
@@ -76,7 +79,6 @@ const handleLcdClick = (e) => {
             currentKey: newKey,
             paramOffset: 0,
             autoLoad: true,
-            childSubs: {},
           },
           'renderer:lcd-click-softkey-sibling'
         );
@@ -100,7 +102,6 @@ const handleLcdClick = (e) => {
         currentKey: newKey,
         paramOffset: 0, // Reset offset for new menu
         autoLoad: true,
-        childSubs: {}, // Clear child subs on navigation
       },
       'renderer:lcd-click-softkey-descend'
     );

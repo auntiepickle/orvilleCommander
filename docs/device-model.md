@@ -99,6 +99,14 @@ Tokenized like a shell line: whitespace-separated, single/double quotes group a
 multi-word field (so `'space parameters'` is one token). This is `splitLine` in
 `src/sysex-split.js`.
 
+On the object's **own** line, the `PARENT` field echoes the object's **own key**
+(self-referential), not its real parent — verified across every captured dump,
+including root (`COL 0 0 0 …`, `COL 0 4040001 4040001 …`). `[V]` Only the child
+lines carry a real parent (the dump's main key). Consequence: a dump does not
+identify where it sits in the tree, so a consumer correlating an unsolicited or
+late `OBJECTINFO` reply to a parent menu must use its own request/view state —
+the dump itself cannot be trusted for that.
+
 The object's **own** line ends with its **child count in hex**; child lines show
 `0` for that field until you query them. Verified across fixtures:
 

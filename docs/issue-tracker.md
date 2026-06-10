@@ -280,7 +280,19 @@ HUMAN-GATE: none
       renderer.test forces a divergent stale global (no-op setter) to prove the descend reads the param —
       verified fail-on-old / pass-on-fix. RESIDUAL (minor, follow-up): the entry's `key` still reads the global
       appState.currentKey, the same staleness class, but no param carries the loaded key.
-- [ ] C8  Clear childSubs on navigation (GH #44 — partial clears exist in renderer; some nav paths bypass them)
+- [x] C8  (branch fix/childsubs-nav-clear, GH #44) FINDING: the filed premise ("some nav paths bypass the
+      clear") no longer holds — every nav path (LCD clicks, keypress controls, sync, connect, polling)
+      funnels through updateScreen(), which clears childSubs+currentValues unconditionally and predates the
+      refactor. Cross-menu stale stores were also already blocked by the parser guard, but only implicitly
+      (a child entry's parent always equals the dump's main key, so the membership check can only pass when
+      currentSubs IS currentKey's dump). Shipped: removed the three redundant childSubs:{} patches in the
+      renderer click handlers (updateScreen documented as the single clear point); made the parser guard's
+      consistency precondition explicit (currentSubs[0].key === currentKey — fail-closed for late dumps
+      after navigation; new test proven fail-on-old); pinned the clear across descend/sibling/back/DSP-toggle
+      paths; documented the main-line PARENT self-echo in device-model.md §3 (a dump cannot self-identify
+      its parent — verified across all 8 OBJECTINFO fixtures). RESIDUAL (defer to C1): a VALID child dump
+      can be dropped if a stale re-render re-pins currentSubs before it lands — harmless (next updateScreen
+      refetch self-heals); request-correlated dumpComplete events are the real fix.
 - [ ] C7  Replace endsWith('0002') meter heuristic with a protocol-based check (GH #43 — "heuristic
       masquerading as protocol"; literal already named KEY_SUFFIX.METER in #57, deeper fix = detect CON-type
       from loaded subs rather than key suffix; needs more VALUE_DUMP coverage first)

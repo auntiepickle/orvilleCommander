@@ -250,6 +250,7 @@ describe('renderer.js', () => {
       },
     ];
     renderScreen(subs, '', mockLog);
+    appState.childSubs = { 10010011: [{ key: '10010011', type: 'NUM' }] };
 
     const back = document.querySelector('.back-link');
     expect(back).toBeTruthy();
@@ -261,8 +262,110 @@ describe('renderer.js', () => {
     expect(appState.keyStack.length).toBe(0);
     expect(appState.autoLoad).toBe(true);
     expect(appState.currentSoftkeys).toEqual([]);
+    expect(appState.childSubs).toEqual({}); // single clear point in updateScreen (C8/#44)
     expect(sendObjectInfoDump).toHaveBeenCalledWith('10010000', null);
     expect(sendValueDump).toHaveBeenCalledWith('10010000', null);
+  });
+
+  test('softkey descend clears childSubs via the updateScreen single clear point (C8/#44)', () => {
+    appState.currentKey = '10010000';
+    appState.childSubs = { stale: [{ key: 'stale', type: 'NUM' }] };
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010000',
+        parent: '10010000',
+        statement: 'Setup',
+        tag: 'setup',
+      },
+      {
+        type: 'COL',
+        position: '1',
+        key: '10010010',
+        parent: '10010000',
+        statement: 'Input',
+        tag: 'input',
+      },
+      {
+        type: 'COL',
+        position: '2',
+        key: '10010020',
+        parent: '10010000',
+        statement: 'Output',
+        tag: 'output',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    const softkey = document.querySelector('.softkey[data-key="10010010"]');
+    expect(softkey).toBeTruthy();
+    softkey.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(appState.currentKey).toBe('10010010');
+    expect(appState.keyStack.length).toBe(1);
+    expect(appState.childSubs).toEqual({});
+  });
+
+  test('sibling softkey navigation clears childSubs via the updateScreen single clear point (C8/#44)', () => {
+    const parentSubs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010000',
+        parent: '10010000',
+        statement: 'Setup',
+        tag: 'setup',
+      },
+      {
+        type: 'COL',
+        position: '1',
+        key: '10010010',
+        parent: '10010000',
+        statement: 'Input',
+        tag: 'input',
+      },
+      {
+        type: 'COL',
+        position: '2',
+        key: '10010020',
+        parent: '10010000',
+        statement: 'Output',
+        tag: 'output',
+      },
+    ];
+    appState.currentKey = '10010010';
+    appState.keyStack = [{ key: '10010000', tag: 'setup', subs: parentSubs }];
+    appState.childSubs = { stale: [{ key: 'stale', type: 'NUM' }] };
+    // Leaf menu: params only, so the parent's COLs render as the softkeys.
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010010',
+        parent: '10010010',
+        statement: 'Input',
+        tag: 'input',
+      },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10010011',
+        parent: '10010010',
+        statement: 'lvl %3.0f',
+        tag: '',
+        value: '5',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    const sibling = document.querySelector('.softkey[data-key="10010020"]');
+    expect(sibling).toBeTruthy();
+    sibling.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(appState.currentKey).toBe('10010020');
+    expect(appState.keyStack.length).toBe(1); // sibling nav does not push
+    expect(appState.childSubs).toEqual({});
   });
 
   test('autoload-descend sources the keyStack entry from the param subs, not the global (#41)', () => {

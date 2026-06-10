@@ -72,11 +72,12 @@ describe('parseResponse', () => {
   test('handles valid OBJECTINFO_DUMP for child sub-menu and stores in childSubs', () => {
     appState.currentKey = '10010000'; // Set to parent key
     appState.currentSubs = [
-      { key: '10010000', type: 'COL', parent: '0' }, // Main
+      { key: '10010000', type: 'COL', parent: '10010000' }, // Main (own line echoes own key in parent slot)
       { key: '10010010', type: 'COL', parent: '10010000' }, // Child reference in parent menu
     ];
-    // Mock SysEx: child sub under current
-    const asciiString = 'COL 1 10010010 10010000 "Child" "Child"';
+    // Mock SysEx: child sub under current. The dump's own line echoes its own
+    // key in the parent slot (device-model.md §3), matching hardware captures.
+    const asciiString = 'COL 1 10010010 10010010 "Child" "Child"';
     const asciiData = asciiString.split('').map((c) => c.charCodeAt(0));
     const data = [0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7];
     parseResponse(data);
@@ -88,6 +89,37 @@ describe('parseResponse', () => {
     );
     expect(appState.childSubs['10010010']).toBeDefined();
     expect(emit).toHaveBeenCalledWith('objectinfo:received', { key: '10010010' });
+  });
+
+  test('late child OBJECTINFO arriving after navigation is dropped, not stored (C8/#44)', () => {
+    // User navigated to the B preset; currentSubs still describes the old
+    // setup menu (it is only replaced when the new menu's dump lands). The
+    // old menu's in-flight child dump must not be stored under the new view.
+    appState.currentKey = '801000b';
+    appState.currentSubs = [
+      { key: '10010000', type: 'COL', parent: '10010000' },
+      { key: '10010010', type: 'COL', parent: '10010000' },
+    ];
+    const asciiString = 'COL 1 10010010 10010010 "Child" "Child"';
+    const asciiData = asciiString.split('').map((c) => c.charCodeAt(0));
+    parseResponse([0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7]);
+    expect(appState.childSubs).toEqual({});
+    expect(emit).not.toHaveBeenCalledWith('objectinfo:received', { key: '10010010' });
+  });
+
+  test('child store requires currentSubs to describe the current menu (C8/#44)', () => {
+    // Defensive pin: even if view state were inconsistent (an entry matching
+    // key+parent inside subs whose own line is NOT the current key — e.g. a
+    // stale re-pin), the guard must fail closed rather than trust it.
+    appState.currentKey = '10010000';
+    appState.currentSubs = [
+      { key: 'deadbeef', type: 'COL', parent: 'deadbeef' },
+      { key: '10010010', type: 'COL', parent: '10010000' },
+    ];
+    const asciiString = 'COL 1 10010010 10010010 "Child" "Child"';
+    const asciiData = asciiString.split('').map((c) => c.charCodeAt(0));
+    parseResponse([0xf0, 0x1c, 0x70, 0x00, 0x32, ...asciiData, 0xf7]);
+    expect(appState.childSubs).toEqual({});
   });
 
   test('handles valid VALUE_DUMP and updates currentValues', () => {

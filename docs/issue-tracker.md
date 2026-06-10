@@ -303,11 +303,27 @@ config toggles lazy) -> render on dumpComplete.
       every dumpComplete let value-only meter-poll waves (every METER_POLL_MS) clear the loading
       indicator mid-navigation; midi.js now counts OBJECTINFO sends per wave (payload.objectinfoSends)
       and the bridge hides loading only on structure waves or watchdog stalls.
-- [ ] NEW (C1 review, needs-hardware, GH #107) Wave-saturation smoke: with meter polling + updateBitmapOnChange on,
-      confirm `outstanding` still reaches 0 between ticks on the real 31250-baud link (link-busy periods
-      like a ~1.2s 0x17 transfer could keep waves merged until the WATCHDOG_MAX_MS 10s ceiling, freezing
-      settled renders for up to 10s; pre-C1 CONs rendered per message regardless). If saturation is real,
-      either skip poll ticks while a wave is open or re-admit a per-CON render path.
+- [x] NEW (C1 review, GH #107; branch fix/poll-wave-gate) Wave-saturation smoke RUN + SATURATION FIXED.
+      The hypothesis was real and worse: 3min of meter polling + a 0x18 every 2s measured 44% watchdog
+      ratio (criterion >5%), waves merged to the 10s WATCHDOG_MAX_MS ceiling, settled renders frozen
+      for the duration. Five defect classes isolated by iterating the live smoke
+      (build_tools/live-app.mjs smoke mode; logs/live-smoke-107*.log):
+      (1) poll ticks joined waves faster than the link drains -> ticks now SKIP while a wave is open
+      (midi.js isWaveOpen; the ledger's own named fix);
+      (2) GET_SCREEN was not wave-counted -> its ~1.2s 0x17 transfer was invisible link time that
+      watchdogged poll ticks; now counted (parser 0x17 notifyResponse);
+      (3) the idle watchdog rearmed only on complete parsed messages -> a STREAMING bitmap's partial
+      packets read as silence; now rearms on every raw inbound packet (it is a silence detector);
+      (4) the device DROPS requests that collide with its own bitmap transmission (send=7 recv=4
+      waves riding to the 10s cap) -> GET_SCREEN now defers + coalesces while a wave is open and
+      fires on the drain (R5's "serialize bitmap requests after waves");
+      (5) NUM value fetches lacked the !s.value guard SET/INF/STR always had -> every settled render
+      resent dump-valued NUMs and each solo wave's watchdog render resent again (self-perpetuating
+      refetch loop); NUM/graphic-EQ now follow the same rule (dump value suffices; per-visit menu
+      refetch covers freshness, same as SET).
+      ACCEPTANCE (2026-06-10, logs/live-smoke-107h.log): 168 waves/180s, watchdog 3.57% (<5%), avg
+      wave 1037ms, max 4146ms — vs baseline 36 waves, 44%, max 10021ms. The residual watchdogs are
+      isolated slow device responses, no systemic class. All five fixes test-pinned (152 suite).
 - [x] NEW (C1 review, minor) RESOLVED BY C2: the autoload branch is deleted, so a watchdog-stall render can
       no longer descend from stale subs; the bridge additionally clears any pending landing/descend
       one-shot on a watchdog dumpComplete (pinned by event-bridge tests).

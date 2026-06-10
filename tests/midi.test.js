@@ -38,6 +38,7 @@ import {
   sendValueDump,
   notifyResponse,
   getDumpStats,
+  isWaveOpen,
   setMidiPorts,
   sendSysEx,
   sendValuePut,
@@ -123,6 +124,44 @@ describe('midi.js per-wave counter and watchdog (7c)', () => {
     expect(received[0]).toMatchObject({ reason: 'watchdog' });
   });
 
+  test('raw inbound packets rearm the idle watchdog — partial packets are not silence (#107)', () => {
+    // A streaming multi-packet bitmap must keep the wave alive: the idle
+    // watchdog is a silence detector, and rearm-on-parse-only watchdogged
+    // the bitmap itself plus everything queued behind it (measured live).
+    let handler;
+    const input = {
+      addListener: (type, fn) => {
+        handler = fn;
+      },
+      removeListener: jest.fn(),
+    };
+    setMidiPorts({ sendSysex: jest.fn() }, input, 0);
+    addSysexListener();
+
+    sendObjectInfoDump('a'); // idle watchdog armed: would fire at t=1500
+    jest.advanceTimersByTime(1000); // t=1000
+    handler({ data: [0x01, 0x02, 0x03] }); // partial packet (no F0/F7): rearm -> t=2500
+    jest.advanceTimersByTime(1400); // t=2400
+    expect(received).toHaveLength(0); // still alive
+    jest.advanceTimersByTime(100); // t=2500: genuine silence since the packet
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({ reason: 'watchdog' });
+  });
+
+  test('isWaveOpen tracks outstanding across send/receive/watchdog (#107 poll gate)', () => {
+    expect(isWaveOpen()).toBe(false);
+    sendObjectInfoDump('a');
+    expect(isWaveOpen()).toBe(true);
+    sendValueDump('b');
+    notifyResponse('objectinfo', 'a');
+    expect(isWaveOpen()).toBe(true); // b still outstanding
+    notifyResponse('valuedump', 'b');
+    expect(isWaveOpen()).toBe(false); // drained
+    sendObjectInfoDump('c');
+    jest.advanceTimersByTime(1500); // idle watchdog force-completes
+    expect(isWaveOpen()).toBe(false); // watchdog resets outstanding too
+  });
+
   test('notifyResponse with outstanding===0 is a no-op', () => {
     notifyResponse('objectinfo', 'nothing');
     expect(received).toHaveLength(0);
@@ -175,6 +214,33 @@ describe('midi.js SysEx byte contract', () => {
   test('sendObjectInfoDump emits cmd 0x31 with the key as ASCII bytes', () => {
     sendObjectInfoDump('0');
     expect(output.sendSysex).toHaveBeenCalledWith([0x1c, 0x70], [0x00, 0x31, 0x30]);
+  });
+
+  test('GET_SCREEN (0x18) is wave-counted; the 0x17 response drains it (#107)', () => {
+    // The ~1.2s bitmap transfer must keep the wave open so poll ticks gate
+    // behind it instead of watchdogging into invisible link time.
+    expect(isWaveOpen()).toBe(false);
+    sendSysEx(0x18, []);
+    expect(isWaveOpen()).toBe(true);
+    notifyResponse('screen', null); // parser's 0x17 branch
+    expect(isWaveOpen()).toBe(false);
+  });
+
+  test('GET_SCREEN mid-wave is deferred, coalesced, and fired after the drain (#107)', () => {
+    // The device drops requests that collide with its own bitmap
+    // transmission (measured live: send=7 recv=4 waves riding to the 10s
+    // cap), so bitmap fetches serialize after the open wave — R5's fix.
+    sendObjectInfoDump('a'); // wave open
+    output.sendSysex.mockClear();
+    sendSysEx(0x18, []);
+    sendSysEx(0x18, []); // coalesces with the first
+    expect(output.sendSysex).not.toHaveBeenCalled(); // deferred, not sent
+    notifyResponse('objectinfo', 'a'); // wave drains -> deferred fetch fires
+    expect(output.sendSysex).toHaveBeenCalledTimes(1); // exactly one
+    expect(output.sendSysex).toHaveBeenCalledWith([0x1c, 0x70], [0x00, 0x18]);
+    expect(isWaveOpen()).toBe(true); // the fired fetch is its own counted wave
+    notifyResponse('screen', null);
+    expect(isWaveOpen()).toBe(false);
   });
 
   test('sendValueDump emits cmd 0x2d with the key as ASCII bytes', () => {

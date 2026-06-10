@@ -198,7 +198,10 @@ export function parseResponse(data) {
         emit('value:received', { key, immediate: false });
       }
     } else if (data[3] === appState.deviceId && data[4] === CMD.SCREEN_BITMAP) {
-      // Screen dump response
+      // Screen dump response. Wave-counted since #107: GET_SCREEN sends are
+      // recorded as requests, so the ~1.2s transfer keeps the wave open
+      // instead of being invisible link time that watchdogs poll ticks.
+      notifyResponse('screen', null);
       const nibbles = data.slice(SYSEX.FRAME_PREFIX_LEN, data.length - 1);
       if (nibbles.length % 2 !== 0) {
         log('[ERROR] Odd number of nibbles in screen dump', 'error', 'error');

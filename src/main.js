@@ -4,7 +4,14 @@ import { CMD, KEY } from './sysex-commands.js';
 import { TIMING, DEFAULT_LOG_CATEGORIES } from './constants.js';
 import { loadConfig, saveConfig, clearConfig, mergeLogCategories } from './config.js';
 import { setupKeypressControls, testKeypress } from './controls.js';
-import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut } from './midi.js';
+import {
+  setMidiPorts,
+  addSysexListener,
+  sendSysEx,
+  sendValueDump,
+  sendValuePut,
+  isWaveOpen,
+} from './midi.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
@@ -51,6 +58,12 @@ let pollingInterval = null;
 function startPolling() {
   if (pollingInterval) clearInterval(pollingInterval);
   pollingInterval = setInterval(() => {
+    // #107 saturation gate: skip the tick while responses are outstanding.
+    // Without this, ticks join the open wave faster than the 31250-baud
+    // link drains it — outstanding never reaches 0, waves merge to the 10s
+    // watchdog ceiling, and settled renders freeze (measured live: 44%
+    // watchdog ratio). Skipping self-paces polling to link capacity.
+    if (isWaveOpen()) return;
     const conSubs = appState.currentSubs.filter((s) => s.type === 'CON');
     conSubs.forEach((sub) => {
       const key = sub.key;

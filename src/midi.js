@@ -35,6 +35,10 @@ let waveReceives = 0;
 let waveStart = 0;
 let waveLastKey = null;
 let watchdogHandle = null;
+// One coalesced GET_SCREEN deferred while a wave is open (#107) — fired by
+// finishWave. Multiple requests during one wave collapse into one fetch
+// (the newest screen is the only one that matters).
+let pendingScreenFetch = false;
 const dumpStats = { all: 0, watchdog: 0 };
 
 // (Re)arm the idle watchdog for WATCHDOG_IDLE_MS, never extending past the
@@ -94,6 +98,16 @@ function forceComplete() {
   finishWave('watchdog');
 }
 
+// #107: the idle watchdog is a SILENCE detector, so any raw inbound packet
+// must rearm it — a multi-packet 0x17 bitmap streams continuously for
+// ~1.2-1.5s before the complete message parses, and rearm-on-parse-only
+// made that look like a stall: the smoke measured the bitmap itself and
+// every response queued behind it being watchdogged (recv=0 waves). The
+// WATCHDOG_MAX_MS absolute cap still bounds a runaway chatterer.
+function noteLinkActivity() {
+  if (outstanding > 0 && watchdogHandle !== null) rearmWatchdog();
+}
+
 function finishWave(reason) {
   if (watchdogHandle !== null) {
     clearTimeout(watchdogHandle);
@@ -121,6 +135,14 @@ function finishWave(reason) {
     'info',
     'general'
   );
+  // Fire the deferred screen fetch only if the dumpComplete handlers above
+  // did not open a new wave (a settled render's value refetches take
+  // priority — the bitmap re-defers behind them and goes out on a later
+  // drain, alone on the link).
+  if (pendingScreenFetch && outstanding === 0) {
+    pendingScreenFetch = false;
+    sendSysEx(CMD.GET_SCREEN, []);
+  }
 }
 
 /**
@@ -133,6 +155,21 @@ function finishWave(reason) {
  */
 export function getDumpStats() {
   return { ...dumpStats };
+}
+
+/**
+ * Whether a request wave is currently open (responses outstanding). The
+ * meter-poll gate (#107): the live saturation smoke measured poll ticks
+ * joining waves faster than the 31250-baud link drains them — outstanding
+ * never reached 0, waves merged to the 10s WATCHDOG_MAX_MS ceiling (44%
+ * watchdog ratio), and settled renders froze for the duration. Pollers
+ * must skip their tick while this is true, which self-paces polling to
+ * link capacity.
+ *
+ * @returns {boolean}
+ */
+export function isWaveOpen() {
+  return outstanding > 0;
 }
 
 /**
@@ -188,6 +225,7 @@ export function addSysexListener() {
   // docs/protocol.md "Capturing screens (HIL)".)
   let sysexBuffer = [];
   const handler = (e) => {
+    noteLinkActivity(); // #107: partial packets are not silence
     const data = Array.from(e.data);
     if (data[0] === SYSEX.START) sysexBuffer = data;
     else sysexBuffer = sysexBuffer.concat(data);
@@ -217,6 +255,24 @@ export function sendSysEx(cmd, dataBytes = []) {
   if (!selectedOutput) {
     log('Error: MIDI output not set', 'error', 'error');
     return;
+  }
+  // #107: a GET_SCREEN expects a ~3.9KB 0x17 response (~1.2s of link
+  // time). Two rules keep the wave model sane around it (both live-
+  // measured): (1) it is wave-COUNTED — the 0x17 branch in parser.js
+  // notifyResponse()s it — so the transfer is visible link time; (2) it is
+  // SERIALIZED after the open wave (R5's fix): the device drops requests
+  // that collide with its own bitmap transmission (send=7 recv=4 waves
+  // riding to the 10s cap), so a fetch requested mid-wave is deferred,
+  // coalesced, and fired by finishWave once the link is clear.
+  // OBJECTINFO/VALUE callers count themselves before calling here, so
+  // GET_SCREEN is the only command handled at this layer.
+  if (cmd === CMD.GET_SCREEN) {
+    if (outstanding > 0) {
+      pendingScreenFetch = true;
+      log('GET_SCREEN deferred until the open wave drains (#107)', 'debug', 'bitmap');
+      return;
+    }
+    recordRequest('screen');
   }
   try {
     const sysex = [appState.deviceId, cmd, ...dataBytes];

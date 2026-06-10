@@ -565,14 +565,26 @@ in logs/ (program-screen.png).
 - [x] R4  NEW PROTOCOL TYPE observed live: `STR` (string-edit field) — `STR 0 10020052 10020050
       name:%-22s name Favorites` under 'save bank'. SPEC HALF DONE: device-model §3 TYPE table documents
       STR (shipped with the T1a harness PR). The rendering half is R8 below.
-- [ ] R5  Link-contention data (feeds the 3.3 eager-loader design): (a) a 0x18 bitmap fetch mid-wave
-      stalls the wave past WATCHDOG_IDLE_MS (observed watchdog dumpComplete send=21 recv=13 dur=2489ms
-      at connect with fetchBitmap on) — bitmap transfer is ~1.2s of link time; (b) the parser's
-      unbounded child fan-out on menu entry is expensive — 'program functions' prefetches 9 children
-      including 'load new preset', whose response (the ~70-bank + ~28-program SETs) monopolizes the
-      link for seconds and starves subsequent navigation (watchdog send=2 recv=0). Eager loader must
-      bound/queue fan-out (e.g. skip SET-heavy prefetch, serialize bitmap requests after waves).
-      System self-heals in all observed cases (next wave drains all-received).
+- [x] R5  ABSORBED (data item, purpose fulfilled): link-contention measurements that constrained the
+      #106 eager-loader scheduling (one request in flight, start after the landing drain, arm
+      survives the R5a stall) — shipped in PR #112. The data, kept for reference: (a) a 0x18 bitmap
+      fetch mid-wave stalls the wave past WATCHDOG_IDLE_MS (observed watchdog dumpComplete send=21
+      recv=13 dur=2489ms at connect with fetchBitmap on) — bitmap transfer is ~1.2s of link time;
+      (b) the parser's unbounded child fan-out on menu entry is expensive — 'program functions'
+      prefetches 9 children including 'load new preset', whose response (the ~70-bank + ~28-program
+      SETs) monopolizes the link for seconds and starves subsequent navigation (watchdog send=2
+      recv=0). System self-heals in all observed cases (next wave drains all-received). The (b)
+      per-visit-refetch cost is now the subject of #113 below (program-subtree caching).
+- [ ] NEW (GH #113) Program-subtree caching (maintainer report, 2026-06-10 hands-on: "loading
+      program takes a ton of time... only a handful of actions can cause a change to program"):
+      every visit re-fans-out all 8 program children incl. the bank-list dump (multi-second on the
+      31250-baud link) even though the tree already holds them — structure renders from cache
+      (T1b/R3) but the refetch wave keeps the loading state + link busy. Design sketch (in the GH
+      issue): per-subtree freshness policy — skip fan-out OBJECTINFO for tree-cached children of
+      the STABLE program subtree (values stay per-visit); invalidate on the enumerable mutating
+      actions (save/delete program/bank, card ops, link, STR name edits — TRG/STR puts under
+      10020xxx); known gap: front-panel changes outside the app (mitigate via Sync button /
+      reconnect refetch). Possibly also clear hideLoading earlier when content is cache-served.
 NOTE: C2 landing validated LIVE end to end on this session: root dump -> landing -> descend ->
 'space parameters' with values matching the physical LCD capture (logs/hil-shot.png). Perf reported
 good by the maintainer. The B10g.3 §12 item "CON range" still open (no audio signal connected;
@@ -605,7 +617,10 @@ HUMAN-GATE: none
 ## Phase 5 — Features
 
 ### Batch 5.1 — Preset taxonomy cache
-- [ ] G1  Build cache from device OBJECTINFO_DUMP fan-out at connect (not hand-curated JSON); leans on 3.1 substrate
+- [x] G1  SUPERSEDED by the T1b tree (#105) + eager loader (#106): the persistent tree IS the
+      device-built cache (recordDump on every OBJECTINFO; eager loader warms the active preset
+      subtree at connect; no hand-curated JSON anywhere). Smarter retention policy continues as
+      #113 (program-subtree caching).
 HUMAN-GATE: none
 
 ### Batch 5.2 — HIL screenshot regression + live self-loop

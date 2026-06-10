@@ -91,8 +91,9 @@ relies on. C1 is the consumer migration.
 
 **Render triggers (event-bridge.js).** The per-message timer stack
 (`RENDER_COALESCE_MS` setTimeout chains + the shared lodash debounce + the
-`render:request` indirection) is gone. The bridge now renders on exactly two
-signals:
+`render:request` indirection) is gone. The bridge now renders on these
+signals (a third was added by R7 — child-of-current-menu arrival — after live
+validation showed slow child dumps landing after the wave had settled):
 
 1. `objectinfo:received` with `key === currentKey` — the **progressive
    structure paint**: the menu you navigated to paints the instant its dump

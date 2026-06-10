@@ -7,6 +7,7 @@ design live in the plan; this file is the operational ledger.
 ## How to use this file
 
 **Status legend:** `[ ]` todo · `[~]` in progress (has a one-line **NEXT:**) · `[x]` done (with PR ref).
+A `[ ]` item marked **PARKED** is deliberately deferred — skip it when scanning for the next item.
 
 **Gate tags:** `needs-hardware` = fix is coded + replay-tested but final confirmation needs the
 physical Orville. `needs-decision` = a product/UX or irreversible call for the maintainer.
@@ -40,7 +41,12 @@ HUMAN-GATE: none
 - [x] F2  ESLint flat config (no-unused-vars / no-console / no-useless-assignment warn) + `npm run lint`
 - [x] F2  Prettier config + project-wide format pass over code (markdown excluded); `format`/`format:check` scripts; .git-blame-ignore-revs
 - [x] F3  In-range dependency refresh (npm update) — cleared baseline-browser-mapping warning + all vulnerabilities
-- [ ] F3  Major upgrades each on own branch, tested (Vite 8, Jest 30, archiver 8)   -> Batches 0.2a/0.2b/0.2c
+- [ ] F3  PARKED (not a resume point — Phase 3 work takes precedence; the [~] NEXT item governs): major
+      upgrades each on own branch, tested (Vite 8, Jest 30, archiver 8)   -> Batches 0.2a/0.2b/0.2c
+- [ ] F4  PARKED (same): bump GitHub Actions to Node-24-ready versions (actions/checkout@v4 +
+      actions/setup-node@v4 emit deprecation warnings; GitHub forces Node 24 by default starting
+      2026-06-16 and removes Node 20 from runners 2026-09-16 — update to the current major of each).
+      Low risk; do on its own chore branch and confirm CI green.
 - [x] B9  Moved `jest-environment-jsdom` to devDependencies
 NOTE: ESLint warnings are the live Phase 1 prune worklist (`npm run lint`); promote no-* rules back to error at end of Phase 1.
 HUMAN-GATE: none
@@ -157,7 +163,7 @@ reviewer agents swept all of src/; findings consolidated below.
       Covers every inbound SysEx type, not just the screen. Tested (complete pass-through, split reassembly,
       buffer reset on new F0, Uint8Array data). NOT yet verified whether Chrome actually chunks on this device
       (would need an in-browser test against the unit); the fix is correct either way (defensive + matches FB5).
-- [x] FB7 RESOLVED (branch fix/sysex-listener-reregister): midi.js addSysexListener now tracks the input +
+- [x] FB7 RESOLVED (branch fix/sysex-listener-reregister, PR #88): midi.js addSysexListener now tracks the input +
       handler it attached and removes the previous 'sysex' listener (from whichever input it was on) before
       adding a new one, so repeated selectPorts runs (button + cached-config auto-run) and input switches
       can no longer stack listeners -> parseResponse fires exactly once per message and the dump-wave
@@ -268,7 +274,7 @@ authoritative -> land on last-active DSP's preset -> EAGER-load that preset's tr
 config toggles lazy) -> render on dumpComplete.
 
 ### Batch 3.1 — dumpComplete events (headline perf + correctness; the substrate)
-- [x] C1  (branch refactor/dump-complete-render, GH #37) Render timing is now event-driven. The substrate
+- [x] C1  (branch refactor/dump-complete-render, GH #37, PR #89) Render timing is now event-driven. The substrate
       (midi.js per-wave outstanding counter + idle watchdog emitting dumpComplete; FB4) predated this batch
       and FB7 secured its exactly-once decrement; C1 is the consumer migration. event-bridge.js rebuilt:
       the per-message timer stack (RENDER_COALESCE_MS setTimeout chains + shared lodash debounce + the
@@ -307,7 +313,7 @@ config toggles lazy) -> render on dumpComplete.
       autoLoad=true but before the new menu's dump landed) renders the OLD subs and the autoload branch can
       descend from them. Narrow (stall-only); 3.3's explicit rootDumpComplete landing subsumes it — fold
       into C2's design.
-- [x] C4  (same branch, GH #40) isLoadingPreset deleted: store default, both renderer writes, and the
+- [x] C4  (same branch, GH #40, PR #89) isLoadingPreset deleted: store default, both renderer writes, and the
       event-bridge gating/clear are gone — hideLoading is driven solely by dumpComplete. The parser's
       Favorites re-order fix now gates on loadingPresetName alone; FINDING: no production code writes
       loadingPresetName (pre-existing — the path was already unreachable live since the gate required both),
@@ -315,7 +321,7 @@ config toggles lazy) -> render on dumpComplete.
 HUMAN-GATE: none
 
 ### Batch 3.2 — State-shape hardening
-- [x] C3  (branch refactor/keystack-normalize, GH #39) Normalized keyStack to always-objects: every entry is
+- [x] C3  (branch refactor/keystack-normalize, GH #39, PR #87) Normalized keyStack to always-objects: every entry is
       {key, tag, subs}, built by the new navigation.js makeKeyStackEntry(key, subs) (tag derived the way the
       renderer always derived parent tags — sub tag, else first statement word — falling back to the key
       when subs aren't loaded). All five push sites converted: renderer dsp-toggle/softkey-descend/
@@ -361,7 +367,7 @@ HUMAN-GATE: none
       its parent — verified across all 8 OBJECTINFO fixtures). RESIDUAL (defer to C1): a VALID child dump
       can be dropped if a stale re-render re-pins currentSubs before it lands — harmless (next updateScreen
       refetch self-heals); request-correlated dumpComplete events are the real fix.
-- [x] C7  (branch refactor/meter-con-type-check, GH #43) Replaced the endsWith('0002') meter heuristic with
+- [x] C7  (branch refactor/meter-con-type-check, GH #43, PR #86) Replaced the endsWith('0002') meter heuristic with
       a type-based check: a VALUE_DUMP takes the CON immediate-render path iff the loaded subs type the key
       CON — looked up in currentSubs or any stored childSubs (the type comes from OBJECTINFO; non-CON child
       params keep their separate immediate fallback). Behavior change confined to 0002-suffixed keys that
@@ -382,10 +388,16 @@ HUMAN-GATE: none
 ### Batch 3.3 — Connect handshake + eager loader + landing  (replaces the autoLoad timer mechanism)
 DECISION RESOLVED (see phase3-state-model.md): land on the last-active DSP's preset, read authoritatively
 from the root dump (device boots into last-used preset). Cache is a provisional structure-only pre-paint.
-- [ ] C2  Remove the PORT_INIT_MS (500ms) timer + autoLoad flag mechanism (main.js); land via
+- [~] C2  Remove the PORT_INIT_MS (500ms) timer + autoLoad flag mechanism (main.js); land via
       rootDumpComplete -> active preset. NOTE: the race SYMPTOM (wrong landing menu) was eliminated by
       C1's synchronous root render (Batch 3.1), but the timer-driven mechanism it rode on is still in
       place — this item owns removing it.
+      NEXT: design the rootDumpComplete landing in phase3-state-model.md terms (connect -> request root ->
+      on the root wave's dumpComplete adopt DSP keys/names + land on the active preset, no timer, no
+      autoLoad flag), folding in the two C1-review items that C2 subsumes/validates: the
+      watchdog-mid-navigation autoload edge (Batch 3.1 NEW item) and, while on hardware for the throughput
+      gate, the wave-saturation smoke. Then implement on a branch with the startup characterization
+      updated in the same commit.
 - [ ] NEW Eager loader: traverse active preset tree (OBJECTINFO each COL + VALUE_DUMP each param), bounded by depth + visited set, completion via dumpComplete; show loading UX
 - [ ] NEW `eagerLoad` config flag (default on; persisted in midiConfig) toggles eager vs lazy
 - [ ] NEW Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number

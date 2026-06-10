@@ -43,11 +43,11 @@ HUMAN-GATE: none
 - [x] F3  In-range dependency refresh (npm update) — cleared baseline-browser-mapping warning + all vulnerabilities
 - [ ] F3  PARKED (not a resume point — Phase 3 work takes precedence; the [~] NEXT item governs): major
       upgrades each on own branch, tested (Vite 8, Jest 30, archiver 8)   -> Batches 0.2a/0.2b/0.2c
-- [ ] F4  PARKED (same): bump GitHub Actions to Node-24-ready versions (actions/checkout@v4 +
-      actions/setup-node@v4 emit deprecation warnings; GitHub forces Node 24 by default starting
-      2026-06-16 and removes Node 20 from runners 2026-09-16 — update to the current major of each).
-      Same pass: bump ci.yml's `node-version: 20` (Node 20 reached end-of-life 2026-04-30) to an
-      active LTS. Low risk; do on its own chore branch and confirm CI green.
+- [x] F4  (branch chore/actions-node24) Bumped ci.yml ahead of GitHub's Node-24 forced default
+      (2026-06-16; Node 20 leaves runners 2026-09-16): actions/checkout v4 -> v6, actions/setup-node
+      v4 -> v6 (latest majors, Node-24 runtimes — no deprecation warnings), and `node-version` 20 -> 24
+      (Node 20 reached end-of-life 2026-04-30; 24 is the current LTS). CI green on the PR is the
+      verification — the same lint/format/test suite now runs on Node 24.
 - [x] B9  Moved `jest-environment-jsdom` to devDependencies
 NOTE: ESLint warnings are the live Phase 1 prune worklist (`npm run lint`); promote no-* rules back to error at end of Phase 1.
 HUMAN-GATE: none

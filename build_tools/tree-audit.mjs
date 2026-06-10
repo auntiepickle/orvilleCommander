@@ -54,7 +54,7 @@ const { appState } = await import('../src/state.js');
 const { setState } = await import('../src/store.js');
 const { updateScreen } = await import('../src/renderer.js');
 const { makeKeyStackEntry } = await import('../src/navigation.js');
-const { KEY } = await import('../src/sysex-commands.js');
+const { KEY, CMD, SYSEX } = await import('../src/sysex-commands.js');
 const { LAYOUT } = await import('../src/constants.js');
 const { log } = await import('../src/logger.js');
 
@@ -83,20 +83,27 @@ input.on('message', () => {
 const DEV = 1;
 function requestObjectinfo(key) {
   const ascii = key.split('').map((c) => c.charCodeAt(0));
-  output.sendMessage([0xf0, 0x1c, 0x70, DEV, 0x31, ...ascii, 0xf7]);
+  output.sendMessage([
+    SYSEX.START,
+    ...SYSEX.MANUFACTURER,
+    DEV,
+    CMD.OBJECTINFO_DUMP,
+    ...ascii,
+    SYSEX.END,
+  ]);
 }
 function awaitDump(forKey, timeoutMs = 12000) {
   return new Promise((resolve) => {
     let buf = [];
     const onMsg = (dt, msg) => {
       const data = Array.from(msg);
-      if (data[0] === 0xf0) buf = data;
+      if (data[0] === SYSEX.START) buf = data;
       else buf = buf.concat(data);
-      if (buf[0] === 0xf0 && buf[buf.length - 1] === 0xf7) {
+      if (buf[0] === SYSEX.START && buf[buf.length - 1] === SYSEX.END) {
         const frame = buf;
         buf = [];
-        if (frame[4] !== 0x32) return; // not an OBJECTINFO dump
-        const ascii = String.fromCharCode(...frame.slice(5, -1))
+        if (frame[4] !== CMD.OBJECTINFO) return; // not an OBJECTINFO dump
+        const ascii = String.fromCharCode(...frame.slice(SYSEX.FRAME_PREFIX_LEN, -1))
           .replace(/\0+$/, '')
           .trim();
         const subs = ascii
@@ -163,7 +170,7 @@ input.on('message', (dt, msg) => {
   for (const cb of inAdapter.listeners) cb({ data: msg });
 });
 const outAdapter = {
-  sendSysex: (mfr, data) => output.sendMessage([0xf0, ...mfr, ...data, 0xf7]),
+  sendSysex: (mfr, data) => output.sendMessage([SYSEX.START, ...mfr, ...data, SYSEX.END]),
 };
 setMidiPorts(outAdapter, inAdapter, DEV);
 addSysexListener();
@@ -200,6 +207,13 @@ const colNodes = [...tree.entries()].filter(
 console.log(`[audit] phase 2: auditing ${colNodes.length} COL nodes...`);
 
 for (const [key, node] of colNodes) {
+  // Drain the link BEFORE navigating so the previous node's backlog (e.g.
+  // the program fan-out's bank list, or a no-render timeout's stragglers)
+  // cannot starve this node's settle window (R5).
+  {
+    const t0 = Date.now();
+    while (Date.now() - lastMsgAt < QUIET_MS && Date.now() - t0 < CAP_MS) await sleep(150);
+  }
   // Navigate with TREE-computed ancestors (the T1 principle): the view we
   // audit is positioned exactly where the tree says the node lives.
   const keyStack = ancestorsOf(key).map((aKey) =>
@@ -247,7 +261,7 @@ for (const [key, node] of colNodes) {
     const textHit =
       (stmtFrag && mainText.includes(stmtFrag)) ||
       (p.type === 'INF' && valFrag && mainText.includes(valFrag)) || // INF renders its value
-      (tagFrag && mainText.includes(tagFrag)); // bar CONs render tag-only, no data-key
+      (tagFrag && mainText.includes(tagFrag)); // blanket short-text fallback (bar CONs render tag-only, no data-key)
     if (keyCount === 0 && !textHit) {
       flag(key, 'param-missing', `${p.type} ${p.key} '${p.statement}' not rendered`);
     } else if (keyCount > 1) {
@@ -259,13 +273,6 @@ for (const [key, node] of colNodes) {
   const softkeyKeys = [...(main?.querySelectorAll('.softkey') || [])].map((e) => e.dataset.key);
   const dupes = softkeyKeys.filter((k, i) => softkeyKeys.indexOf(k) !== i);
   if (dupes.length) flag(key, 'duplicate-softkeys', [...new Set(dupes)].join(','));
-
-  // Drain the link before the next node so one menu's backlog (e.g. the
-  // program fan-out's bank list) cannot starve the next audit (R5).
-  {
-    const t0 = Date.now();
-    while (Date.now() - lastMsgAt < QUIET_MS && Date.now() - t0 < CAP_MS) await sleep(150);
-  }
 
   // 4. Breadcrumb = real tree parent.
   const back = document.querySelector('.back-link');

@@ -53,7 +53,7 @@ await import('../src/main.js'); // connectMidi(null) fails harmlessly (no WebMID
 const { appState } = await import('../src/state.js');
 const { setState } = await import('../src/store.js');
 const { updateScreen } = await import('../src/renderer.js');
-const { KEY } = await import('../src/sysex-commands.js');
+const { KEY, SYSEX } = await import('../src/sysex-commands.js');
 const { log } = await import('../src/logger.js');
 
 // --- real MIDI via @julusian/midi, adapted to midi.js's port contract ----
@@ -87,7 +87,7 @@ input.on('message', (dt, msg) => {
   for (const cb of inAdapter.listeners) cb({ data: msg });
 });
 const outAdapter = {
-  sendSysex: (mfr, data) => output.sendMessage([0xf0, ...mfr, ...data, 0xf7]),
+  sendSysex: (mfr, data) => output.sendMessage([SYSEX.START, ...mfr, ...data, SYSEX.END]),
 };
 
 // --- connect: mirror main.js selectPorts (not exported) ------------------
@@ -102,7 +102,7 @@ setState(
     pendingLanding: 'root',
     pendingDescend: false,
   },
-  'main:select-ports-reset'
+  'live-app:select-ports-reset'
 );
 updateScreen(log);
 console.log('[live] connected; landing armed');

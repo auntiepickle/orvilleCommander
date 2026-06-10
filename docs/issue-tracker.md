@@ -480,9 +480,9 @@ in logs/ (program-screen.png).
       breadcrumb, e.g. "[program] program functions" while currentKey=10030000) until the new dump
       lands — on a backed-up link that is seconds. This is the "never render an unconfirmed value"
       invariant violation the 3.3 render guard owns; live evidence captured.
-- [ ] R4  NEW PROTOCOL TYPE observed live: `STR` (string-edit field) — `STR 0 10020052 10020050
-      name:%-22s name Favorites` under 'save bank'. Not in device-model §3's TYPE table; parser's
-      default branch treats it INF-like (value=parts[6]). Add to the spec + decide rendering.
+- [x] R4  NEW PROTOCOL TYPE observed live: `STR` (string-edit field) — `STR 0 10020052 10020050
+      name:%-22s name Favorites` under 'save bank'. SPEC HALF DONE: device-model §3 TYPE table documents
+      STR (shipped with the T1a harness PR). The rendering half is R8 below.
 - [ ] R5  Link-contention data (feeds the 3.3 eager-loader design): (a) a 0x18 bitmap fetch mid-wave
       stalls the wave past WATCHDOG_IDLE_MS (observed watchdog dumpComplete send=21 recv=13 dur=2489ms
       at connect with fetchBitmap on) — bitmap transfer is ~1.2s of link time; (b) the parser's

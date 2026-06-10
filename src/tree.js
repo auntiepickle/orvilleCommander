@@ -37,7 +37,8 @@ export function recordDump(subs) {
 }
 
 /**
- * The node's own dump, if it has ever been fetched.
+ * The node's own dump, if it has ever been fetched. Returns the stored
+ * array itself — treat it as read-only; mutating it corrupts the tree.
  *
  * @param {string} key
  * @returns {Object[]|undefined}
@@ -101,7 +102,7 @@ export function findParamUnder(menuKey, paramKey) {
 
 /**
  * Display label for a node (T1b blank-node policy, live-grounded): the
- * softkeyLabel of its own main line or of its line in the parent's dump;
+ * clipped label of its own main line or of its line in the parent's dump;
  * when BOTH are blank, the first labeled child's label (the physical SETUP
  * row labels the blank container by its child, 'dsp B'); else a '...'
  * placeholder until the children load. Never returns '' for a known node,
@@ -111,9 +112,10 @@ export function findParamUnder(menuKey, paramKey) {
  * @returns {string}
  */
 // Label from a single sub line: tag, else first statement word — and unlike
-// the line-level softkeyLabel, a LONG tag clips instead of excluding. With
-// the tree, the label is presentation only: every known COL gets an
-// affordance, so 'unreachable-child' is structurally impossible (T1b).
+// the old navigation.js softkeyLabel rule (deleted in T1b), a LONG tag
+// clips instead of excluding. With the tree, the label is presentation
+// only: every known COL gets an affordance, so 'unreachable-child' is
+// structurally impossible (T1b).
 const clipLine = (line) => {
   if (!line) return '';
   const lbl = (line.tag || '').trim() || ((line.statement || '').trim().split(' ')[0] || '').trim();

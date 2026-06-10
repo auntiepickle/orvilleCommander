@@ -12,6 +12,7 @@ import { denibble, renderBitmap } from './bitmap.js';
 import { log, setLogLevel, setLogCategories, getLogCategories } from './logger.js';
 import { registerEventBridge } from './event-bridge.js';
 import { extractNibblesFromHex } from './hex-extract.js';
+import { deriveKeyStack } from './tree.js';
 
 const lcdEl = document.getElementById('lcd');
 const logArea = document.getElementById('log-area');
@@ -212,7 +213,9 @@ testKeypressBtn.addEventListener('click', () => {
 });
 
 syncBtn.addEventListener('click', () => {
-  setState({ currentKey: KEY.ROOT }, 'main:sync-root');
+  // Root has no ancestors, so the derived stack is [] by definition; set it
+  // explicitly so a sync never leaves a previous menu's stack behind (T1b).
+  setState({ currentKey: KEY.ROOT, keyStack: [] }, 'main:sync-root');
   updateScreen(log);
   log('Synced to root', 'info', 'general');
 });
@@ -275,12 +278,18 @@ if (testTRateBtn) {
   testTRateBtn.addEventListener('click', async () => {
     log('Starting t_rate test...', 'info', 'general');
     // Navigate to Auto Tape Flanger
-    setState({ currentKey: KEY.DSP_B_PRESET }, 'main:test-trate-nav');
+    setState(
+      { currentKey: KEY.DSP_B_PRESET, keyStack: deriveKeyStack(KEY.DSP_B_PRESET) },
+      'main:test-trate-nav'
+    );
     updateScreen(log);
     await new Promise((r) => setTimeout(r, TIMING.SYNC_STEP_MS));
     log('Navigated to Auto Tape Flanger', 'info', 'general');
     // Navigate to delay parameters
-    setState({ currentKey: KEY.DELAY_PARAMS }, 'main:test-trate-nav');
+    setState(
+      { currentKey: KEY.DELAY_PARAMS, keyStack: deriveKeyStack(KEY.DELAY_PARAMS) },
+      'main:test-trate-nav'
+    );
     updateScreen(log);
     await new Promise((r) => setTimeout(r, TIMING.SYNC_STEP_MS));
     log('Navigated to delay parameters', 'info', 'general');

@@ -12,9 +12,10 @@
 //      drained ('all-received') or stalled out ('watchdog'); render the
 //      confirmed state once. Value-only waves (meter poll ticks, value
 //      refetches) render here — one render per wave, not per message.
-//   3. objectinfo:received for a key stored in childSubs (R7): a child of
-//      the on-screen menu arrived — repaint so embeds/child data show the
-//      moment they land, not on the next unrelated render.
+//   3. objectinfo:received for a key the tree records as a child of the
+//      on-screen menu (R7; condition via T1b tree parentage): a child
+//      arrived — repaint so embeds/child data show the moment they land,
+//      not on the next unrelated render.
 //
 // Navigation one-shots (C2 — replaces the PORT_INIT_MS timer and the sticky
 // autoLoad flag; see docs/refactor/phase3-state-model.md "C2 design"):
@@ -24,9 +25,10 @@
 //     persisted presetKey prefix — the cached KEY itself is only a hint),
 //     prefetch the other DSP, optional screen fetch.
 //   - pendingDescend + the currentKey dump arrives: consume the one-shot;
-//     if the menu is COL-only with >1 short-tag children, descend once into
-//     the first (the old autoload semantics, but triggered by the dump for
-//     the navigated-to menu — never by a stale render).
+//     if the menu is COL-only with >1 COL children, descend once into the
+//     first (the old autoload semantics minus the T1b-removed label gate,
+//     triggered by the dump for the navigated-to menu — never by a stale
+//     render).
 //   - A watchdog dumpComplete clears both one-shots: never land or descend
 //     from stale state, and a pending descend must not fire on a much
 //     later, unrelated dump.

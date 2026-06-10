@@ -30,7 +30,8 @@ export const appState = {
   // breadcrumb for observability/tests — the post-landing descend rides the
   // generic pendingDescend below, and the watchdog clear sweeps both.
   // pendingDescend: consume on the next currentKey dump; descend once if the
-  // menu is COL-only with >1 short-tag children (old autoload semantics).
+  // menu is COL-only with >1 COL children (old autoload semantics; T1b
+  // removed the label gate).
   pendingLanding: null,
   pendingDescend: false,
   keyStack: [],

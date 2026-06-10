@@ -320,7 +320,8 @@ HUMAN-GATE: none
 
 ### Batch 3.2 — State-shape hardening
 - [x] C3  (branch refactor/keystack-normalize, GH #39, PR #87) Normalized keyStack to always-objects: every entry is
-      {key, tag, subs}, built by the new navigation.js makeKeyStackEntry(key, subs) (tag derived the way the
+      {key, tag, subs}, built by the new navigation.js makeKeyStackEntry(key, subs) (superseded by T1b/#105:
+      entries are now built by tree.js deriveKeyStack — the {key, tag, subs} shape is unchanged) (tag derived the way the
       renderer always derived parent tags — sub tag, else first statement word — falling back to the key
       when subs aren't loaded). All five push sites converted: renderer dsp-toggle/softkey-descend/
       autoload-descend (autoload keeps the C5 sourcing from the render's `subs` param), controls.js
@@ -352,7 +353,8 @@ HUMAN-GATE: none
 - [x] C8  (branch fix/childsubs-nav-clear, GH #44, PR #85) FINDING: the filed premise ("some nav paths bypass the
       clear") no longer holds — every nav path (LCD clicks, keypress controls, sync, connect, polling)
       funnels through updateScreen(), which clears childSubs+currentValues unconditionally and predates the
-      refactor. Cross-menu stale stores were also already blocked by the parser guard, but only implicitly
+      refactor (superseded by T1b/#105: childSubs is deleted, updateScreen clears only currentValues, and
+      the parser guard below is now tree parentage — parentOf(key) === currentKey). Cross-menu stale stores were also already blocked by the parser guard, but only implicitly
       (a child entry's parent always equals the dump's main key, so the membership check can only pass when
       currentSubs IS currentKey's dump). Shipped: removed the three redundant childSubs:{} patches in the
       renderer click handlers (updateScreen documented as the single clear point); made the parser guard's
@@ -366,7 +368,8 @@ HUMAN-GATE: none
       refetch self-heals); request-correlated dumpComplete events are the real fix.
 - [x] C7  (branch refactor/meter-con-type-check, GH #43, PR #86) Replaced the endsWith('0002') meter heuristic with
       a type-based check: a VALUE_DUMP takes the CON immediate-render path iff the loaded subs type the key
-      CON — looked up in currentSubs or any stored childSubs (the type comes from OBJECTINFO; non-CON child
+      CON — looked up in currentSubs or any stored childSubs (since T1b/#105: tree.js findParamUnder)
+      (the type comes from OBJECTINFO; non-CON child
       params keep their separate immediate fallback). Behavior change confined to 0002-suffixed keys that
       are neither typed CON in a loaded dump nor stored child params — chiefly keys absent from every
       loaded dump, which now coalesce (an unknown key has no on-screen line an immediate render could
@@ -422,7 +425,10 @@ and arrival races; the cure is view DERIVED from the device tree.
       device-on acceptance run): src/tree.js persistent tree (recordDump on EVERY 0x32; parents map
       from the parent's dump — a dump cannot self-identify its parent, device-model §3). keyStack is
       now DERIVED (tree.js:deriveKeyStack from tree ancestry, canonical {key, tag, subs} entries) at
-      every navigation site (renderer x5, bridge landing/descend, controls parameter-nav); childSubs
+      every navigation site (renderer x4, bridge landing/descend, controls parameter-nav, main sync +
+      t_rate debug; ONE deliberate exception — the static bottom-row jump keeps its R2 stack RESET,
+      since the bottom row is itself the root affordance and a derived [root] entry would re-render
+      root's children above the identical static row); childSubs
       DELETED from appState (embeds/param lookups read getNode/findParamUnder); parser fan-out widened
       short-tag -> ALL COLs (presets still excluded at root); C8 correlation guard replaced by tree
       parentage (parentOf === currentKey); R6 renderer embed prefetch deleted (fan-out covers it);
@@ -454,7 +460,9 @@ and arrival races; the cure is view DERIVED from the device tree.
       labels). New navigation.js:softkeyLabel — tag, else first statement word ('Post D/A Gain' ->
       'Post'); used by the renderer's softkey filters/labels, the bridge descend predicate, the parser
       fan-out (lockstep: prefetch = navigability), and the fixture helper (Option B expectations track
-      the rule). Side effect: root's fan-out now also prefetches the two presets (statement-labeled).
+      the rule). (Superseded by T1b/#105: softkeyLabel deleted — labels via tree.js labelFor/labelForSub,
+      the filters/predicates/fan-out no longer gate on labels, and root's fan-out excludes the presets.)
+      Side effect at the time: root's fan-out also prefetched the two presets (statement-labeled).
       ACCEPTANCE: tree audit rerun — the 10030601 violation is GONE (4 -> 3 violations). RESIDUAL:
       fully-blank nodes (setup's 100100d0 — statement AND tag empty, children are DSP A/B i/p routing)
       stay unlabeled and audit-flagged; label policy (derive from children? device shows 'dsp B') is a
@@ -493,13 +501,15 @@ in logs/ (program-screen.png).
       the menu's default view); while its dump is in flight the children stay navigable softkeys (R1).
       Review hardening: the embed prefetch fires only when the parser's short-tag fan-out will NOT fetch
       the candidate (long/empty tag) — the unconditional version duplicated the heaviest dump on the
-      wire once per navigation. Two-phase test pins arrival-order independence (fails pre-fix).
+      wire once per navigation (prefetch since deleted by T1b/#105 — the all-COL fan-out covers it).
+      Two-phase test pins arrival-order independence (fails pre-fix).
 - [x] R7  (branch fix/render-on-child-arrival; maintainer live repro "not seeing the embed until I
       navigate elsewhere and come back") MISSING RENDER TRIGGER FIXED: C1's bridge rendered only on the
       current menu's own dump and on wave end — a slow CHILD dump (the multi-second bank list the
       program menu embeds) lands after the wave has watchdogged and settled, so nothing ever repainted.
       Third trigger added: objectinfo:received for a key present in childSubs (the C8 guard guarantees
-      it belongs to the on-screen menu) repaints. The embed now appears the moment its data arrives.
+      it belongs to the on-screen menu; condition since T1b/#105: tree parentage, parentOf(key) ===
+      currentKey) repaints. The embed now appears the moment its data arrives.
       Bridge test pins it (fails pre-fix).
 - [ ] R3  (owned by GH #106, the render guard) Stale-menu render: clicking a menu renders the OLD menu under the NEW key (wrong title and
       breadcrumb, e.g. "[program] program functions" while currentKey=10030000) until the new dump

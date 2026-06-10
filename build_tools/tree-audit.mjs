@@ -129,7 +129,12 @@ function awaitDump(forKey, timeoutMs = 12000) {
 }
 
 console.log(`[audit] phase 1: fetching tree (depth <= ${MAX_DEPTH})...`);
-const tree = new Map(); // key -> { subs, depth, parentKey }
+const tree = new Map(); // key -> { subs, depth, parentKey } (parentKey = BFS-first lister)
+// key -> Set of EVERY fetched node that lists it. The device cross-lists
+// nodes (setup's dump lists pedals/tempo, resident in other subtrees), and
+// the app's parentOf is last-dump-wins — so a breadcrumb is correct if it
+// targets ANY listing parent, not just the BFS-first one.
+const listingParents = new Map();
 const queue = [{ key: KEY.ROOT, depth: 0, parentKey: null }];
 const visited = new Set();
 while (queue.length) {
@@ -143,11 +148,12 @@ while (queue.length) {
     continue;
   }
   tree.set(key, { subs, depth, parentKey });
-  if (depth < MAX_DEPTH) {
-    for (const s of subs.slice(1)) {
-      if (s.type === 'COL' && !visited.has(s.key)) {
-        queue.push({ key: s.key, depth: depth + 1, parentKey: key });
-      }
+  for (const s of subs.slice(1)) {
+    if (s.type !== 'COL') continue;
+    if (!listingParents.has(s.key)) listingParents.set(s.key, new Set());
+    listingParents.get(s.key).add(key);
+    if (depth < MAX_DEPTH && !visited.has(s.key)) {
+      queue.push({ key: s.key, depth: depth + 1, parentKey: key });
     }
   }
   await sleep(120); // polite gap; keeps the link drained between nodes
@@ -229,8 +235,12 @@ for (const [key, node] of colNodes) {
   const mainKeys = [...(main?.querySelectorAll('[data-key]') || [])].map((e) => e.dataset.key);
   const children = node.subs.slice(1);
 
-  // 1. Child reachability: every COL child needs a UI affordance.
-  const embedCandidate = children.find((s) => s.type === 'COL' && s.position === '0');
+  // 1. Child reachability: every COL child needs a UI affordance. The embed
+  // candidate mirrors the renderer's rule exactly (COL, position 0, parent
+  // field naming this menu — cross-listed children don't embed).
+  const embedCandidate = children.find(
+    (s) => s.type === 'COL' && s.position === '0' && s.parent === key
+  );
   for (const c of children.filter((s) => s.type === 'COL')) {
     const asSoftkey = mainKeys.includes(c.key);
     const asEmbed = c.key === embedCandidate?.key && (getNode(c.key)?.length || 0) > 0;
@@ -267,13 +277,19 @@ for (const [key, node] of colNodes) {
   const dupes = softkeyKeys.filter((k, i) => softkeyKeys.indexOf(k) !== i);
   if (dupes.length) flag(key, 'duplicate-softkeys', [...new Set(dupes)].join(','));
 
-  // 4. Breadcrumb = real tree parent.
+  // 4. Breadcrumb targets a real listing parent (any of them — cross-listed
+  // nodes have several, and the app's last-dump-wins parentOf may point at a
+  // later lister than phase 1's BFS-first parentKey).
   const back = document.querySelector('.back-link');
-  const treeParent = node.parentKey;
-  if (treeParent && back && back.dataset.key !== treeParent) {
-    flag(key, 'wrong-breadcrumb', `back-link -> ${back.dataset.key}, tree parent is ${treeParent}`);
-  } else if (treeParent && !back) {
-    flag(key, 'no-breadcrumb', `expected back-link to ${treeParent}`);
+  const okParents = listingParents.get(key) || new Set(node.parentKey ? [node.parentKey] : []);
+  if (okParents.size && back && !okParents.has(back.dataset.key)) {
+    flag(
+      key,
+      'wrong-breadcrumb',
+      `back-link -> ${back.dataset.key}, listing parents: ${[...okParents].join(',')}`
+    );
+  } else if (okParents.size && !back) {
+    flag(key, 'no-breadcrumb', `expected back-link to one of ${[...okParents].join(',')}`);
   }
 }
 

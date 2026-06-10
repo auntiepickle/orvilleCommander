@@ -61,11 +61,12 @@ const handleLcdClick = (e) => {
     // the menu "inside itself" (C3 review finding).
     if (newKey === appState.currentKey) return;
     // The static bottom row (program/setup/levels/bypass) is a top-level
-    // JUMP, not a descend (R2, live-validated): descending pushed the
-    // previous menu as "parent", growing the keyStack without bound and
-    // rendering the old menu's COL row set twice (once stale-current, once
-    // as the parent row). Jumping resets the stack — these are root's own
-    // children; the static row itself is the way back around.
+    // JUMP, not a descend (R2, live-validated): the bottom row is itself
+    // the root affordance, so the jump RESETS the stack instead of deriving
+    // it — deriving would yield [root] and re-render root's children (the
+    // presets included) as crumb/fallback rows above the identical static
+    // row, the exact duplicate-row class R2 removed. This is the one
+    // deliberate exception to the T1b derive-everywhere rule.
     if (ROOT_SOFTKEYS.some((s) => s.key === newKey)) {
       log(
         `User clicked root softkey: ${newKey} - ${e.target.textContent.trim()}`,
@@ -74,7 +75,7 @@ const handleLcdClick = (e) => {
       );
       setState(
         {
-          keyStack: deriveKeyStack(newKey), // T1b: [root entry] once the tree knows root
+          keyStack: [],
           currentKey: newKey,
           paramOffset: 0,
           pendingDescend: true,
@@ -260,15 +261,15 @@ const handleParamClick = (e) => {
         }, TIMING.DEVICE_LOAD_MS); // Increased delay for device to process load
       } else if (sub.type === 'STR') {
         // String-edit (R8): free-text put, confirmed live (the device echoes
-        // the new value as a 0x2e). Single-token strings verified on
-        // hardware; multi-word strings are untested on the wire (the PUT
-        // payload is key SPACE value — see the ledger R8 note).
+        // the new value as a 0x2e). Multi-word strings confirmed on hardware
+        // too — the device quotes them in the echo, so readback is safe
+        // (#104).
         const title = sub.statement.replace(/%.*s/, '').trim() || sub.tag;
         const currentValue = appState.currentValues[key] ?? sub.value ?? '';
         const rawValue = prompt(`Enter new value for ${title}:`, currentValue);
-        // Empty string is rejected like prompt-cancel: whether the device
-        // accepts an empty-string PUT (clear semantics) is untested — see
-        // the ledger R8 needs-hardware note.
+        // Empty string is rejected like prompt-cancel: the device ignores
+        // empty-string puts (value unchanged — probed live, #104), so
+        // rejecting here matches hardware exactly.
         if (rawValue !== null && rawValue !== '') {
           // SysEx data bytes must be 7-bit: reject non-ASCII rather than
           // throwing mid-flow with the loading overlay up. Clamp to the

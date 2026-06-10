@@ -539,8 +539,8 @@ describe('renderer.js', () => {
     // Live-validated: on 'program functions' the first child's dump (the
     // giant bank list) arrives last, so the old first-loaded-wins loop
     // embedded a later sibling ('link program') and the embedded UI varied
-    // run to run. Pin: a later sibling with loaded childSubs must NOT embed
-    // while the first candidate's data is absent.
+    // run to run. Pin: a later sibling with a tree-recorded dump must NOT
+    // embed while the first candidate's data is absent.
     appState.currentKey = '10020000';
     const subs = [
       {
@@ -618,7 +618,22 @@ describe('renderer.js', () => {
 
   test('static root softkeys jump (reset the stack), never descend (R2)', () => {
     // Live-validated: descending grew the keyStack without bound (2 -> 6 in
-    // one walk) and duplicated the previous menu's COL row set.
+    // one walk) and duplicated the previous menu's COL row set. T1b keeps
+    // this as the one non-derived navigation: the tree is seeded with root
+    // here exactly so the assertion proves the jump RESETS instead of
+    // deriving [root] (which would re-render root's children as crumb rows
+    // above the identical static row).
+    recordDump([
+      { type: 'COL', position: '0', key: '0', parent: '0', statement: 'ORVILLE ROOT', tag: '' },
+      {
+        type: 'COL',
+        position: '0',
+        key: '10030000',
+        parent: '0',
+        statement: 'levels menus',
+        tag: 'levels',
+      },
+    ]);
     appState.currentKey = '10010010';
     appState.keyStack = [
       { key: '0', tag: 'ORVILLE', subs: [] },

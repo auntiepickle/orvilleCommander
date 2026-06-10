@@ -175,7 +175,8 @@ wrong-landing symptom; C2 removes the mechanism — both the timer and the flag.
 2. On `objectinfo:received` with `key === KEY.ROOT` while `pendingLanding ===
    'root'`: the parser has already adopted authoritative DSP keys/names from
    the dump. Land: push the root keyStack entry
-   (`makeKeyStackEntry(KEY.ROOT, currentSubs)`), set `currentKey` to the active
+   (`makeKeyStackEntry(KEY.ROOT, currentSubs)` — since T1b:
+   `deriveKeyStack(landKey)`), set `currentKey` to the active
    DSP's preset key **from the root dump** (`dspAKey`/`dspBKey`, chosen by the
    app-side active-DSP view state — fold Batch 3.2's "persist active DSP
    (default A)" item in here; the cached `presetKey` becomes a pre-paint hint
@@ -183,7 +184,8 @@ wrong-landing symptom; C2 removes the mechanism — both the timer and the flag.
    the other-DSP prefetch and optional `0x18`, as today.
 3. On `objectinfo:received` for the preset while `pendingLanding ===
    'preset'`: clear `pendingLanding`; if the preset top has no params and >1
-   short-tag COL menus, descend once into the first (exactly what the
+   COL menus (short-tag-gated until T1b removed the label gate), descend
+   once into the first (exactly what the
    autoload branch did, but triggered by explicit landing state, not a sticky
    flag read by every render). The renderer autoload branch and the
    `autoLoad` field are then deleted — every writer migrates to the same
@@ -243,7 +245,11 @@ refetch). API: `recordDump(subs)`, `getNode(key)`, `parentOf(key)`,
   `labelFor`/`getNode`. No handler pushes or pops history; the back-link
   targets `parentOf(currentKey)`. Unknown ancestry (deep jump before the
   parent's dump ever loaded) renders no breadcrumb — honest, and click paths
-  always have it.
+  always have it. One deliberate exception (R2, live-validated): the static
+  bottom-row jump RESETS the stack to `[]` instead of deriving — the bottom
+  row is itself the root affordance, and a derived `[root]` entry would
+  re-render root's children (presets included) as crumb/fallback rows above
+  the identical static row, the duplicate-row class R2 removed.
 - **childSubs is deleted.** Its three read sites move to the tree: the embed
   reads `getNode(candidate)`; the param-click lookup and the parser's C7
   CON-classification use `findParamUnder(currentKey, key)`; the R7 bridge
@@ -264,8 +270,10 @@ refetch). API: `recordDump(subs)`, `getNode(key)`, `parentOf(key)`,
   is blank (keeps direct renders tree-independent; snapshots byte-identical).
   Softkey filters drop label gating entirely (`type === 'COL'`), so every
   COL child has an affordance — `unreachable-child` becomes structurally
-  impossible. The parser fan-out fetches ALL COL children (labels no longer
-  gate fetching; blank nodes need their children loaded to be labeled);
+  impossible. The parser fan-out fetches ALL COL children (presets excluded
+  at root — they render as header tabs and the landing fetches the active
+  one; labels no longer gate fetching, and blank nodes need their children
+  loaded to be labeled);
   `navigation.js` keeps only `toggleDspKey` (`makeKeyStackEntry` and
   `softkeyLabel` are deleted, replaced by the tree equivalents).
 

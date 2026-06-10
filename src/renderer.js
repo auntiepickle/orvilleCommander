@@ -62,12 +62,15 @@ const handleLcdClick = (e) => {
     updateScreen();
   } else if (e.target.classList.contains('softkey')) {
     const newKey = e.target.dataset.key;
+    // Re-clicking the highlighted CURRENT softkey is a no-op: the sibling
+    // branch below excludes it, so it used to fall through to the descend
+    // branch and push a duplicate self-entry onto the keyStack, rendering
+    // the menu "inside itself" (C3 review finding).
+    if (newKey === appState.currentKey) return;
     if (appState.keyStack.length > 0) {
       const parentEntry = appState.keyStack[appState.keyStack.length - 1];
-      if (
-        parentEntry.subs.some((s) => s.key === newKey && s.type === 'COL') &&
-        newKey !== appState.currentKey
-      ) {
+      // (newKey === currentKey is impossible here — the early return above.)
+      if (parentEntry.subs.some((s) => s.key === newKey && s.type === 'COL')) {
         log(
           `User clicked sibling softkey: ${newKey} - ${e.target.textContent.trim()}`,
           'info',

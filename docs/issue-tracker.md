@@ -335,12 +335,11 @@ HUMAN-GATE: none
       entry used to yield none) — pinned by an added renderer assertion; clicking the highlighted current
       softkey can now self-push at depth 1 (pre-existing flaw at depth >=2, reach widened; logged as the
       item below).
-- [ ] NEW (from C3 review) Softkey re-click of the CURRENT menu self-pushes a duplicate keyStack entry:
-      handleLcdClick's descend branch does not skip newKey === currentKey (the sibling branch does), so
-      re-clicking the highlighted softkey pushes {key: currentKey, ...} and renders the menu "inside
-      itself"; back-pop recovers. Pre-existing at depth >=2; C3 made it reachable at depth 1 (the old
-      raw-string entry made that click a dead TypeError instead). FIX: guard the descend branch with
-      newKey !== appState.currentKey (no-op the click). CODE, low priority.
+- [x] NEW (from C3 review; branch fix/softkey-self-push) Softkey re-click of the CURRENT menu used to
+      self-push a duplicate keyStack entry (descend branch did not skip newKey === currentKey) and render
+      the menu "inside itself". The softkey handler now no-ops on the current key before either branch
+      (also skips the pointless refetch). Renderer test pins no-self-push/no-refetch; fails pre-fix
+      (verified).
 - [x] C5  (branch fix/autoload-subs-param, GH #41, PR #82) renderer autoload-descend now sources the keyStack parent
       entry from the `subs` param it was invoked with, not the global appState.currentSubs. NOTE (from review):
       renderScreen re-pins currentSubs=subs at its top (render-pin), so global==param today and this was NOT an
@@ -387,7 +386,7 @@ HUMAN-GATE: none
 ### Batch 3.3 — Connect handshake + eager loader + landing  (replaces the autoLoad timer mechanism)
 DECISION RESOLVED (see phase3-state-model.md): land on the last-active DSP's preset, read authoritatively
 from the root dump (device boots into last-used preset). Cache is a provisional structure-only pre-paint.
-- [x] C2  (branch refactor/c2-landing, GH #38) Implemented per phase3-state-model.md "C2 design": the
+- [x] C2  (branch refactor/c2-landing, GH #38, PR #94) Implemented per phase3-state-model.md "C2 design": the
       PORT_INIT_MS timer and the sticky autoLoad flag are DELETED. selectPorts resets the view to root
       (re-runnable: forces the parser's full root branch on reconnect) and arms a one-shot
       pendingLanding='root'; the bridge lands when the root dump ARRIVES — keyStack root entry,

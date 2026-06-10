@@ -423,11 +423,14 @@ and arrival races; the cure is view DERIVED from the device tree.
       history (keyStack becomes a derived view or is deleted); softkeys, embed, and breadcrumb all
       derive from tree relations. The auditor is the acceptance harness for that refactor and the
       standing regression loop afterward (merges with G2).
-- [ ] R8  (from the tree audit; upgrades R4's rendering half) STR string-edit fields are not rendered:
-      'save program' name field (STR 10020023 'name:%-19s') and 'save bank' name field (STR 10020052) —
-      users cannot name anything when saving. Renderer needs an STR branch (text input -> VALUE_PUT of
-      the string; confirm put semantics on hardware first). Spec updated: device-model §3 TYPE table now
-      documents STR.
+- [x] R8  (branch feat/str-rendering) STR string-edit fields RENDERED + EDITABLE: put semantics
+      confirmed live first (put 10020052 'TestName' -> 0x2e echo + readback; restored after). Renderer
+      STR branches (top-level + embedded child): formatted value as a clickable param-value; click
+      prompts for free text and PUTs the string (mirrors the NUM edit flow). STR added to PARAM_TYPES
+      (descend predicate counts it). ACCEPTANCE: tree audit rerun — both STR param-missing violations
+      GONE; the board is down to ONE violation (the fully-blank 100100d0 label policy, T1b).
+      needs-hardware NOTE: multi-word strings untested on the wire (PUT payload is key SPACE value;
+      single tokens verified) — try a two-word name on the unit when convenient.
 - [x] R9  (branch fix/empty-tag-softkey-labels) Empty-tag children UNREACHABLE — FIXED with derived
       labels: probing showed 10030601 is position 'c' (a new position code, like 'e'), so it was never
       an embed candidate, and the tag-only softkey filter dropped it; its children (the per-output gain

@@ -203,6 +203,46 @@ describe('renderer.js', () => {
     jest.useRealTimers();
   });
 
+  test('STR field renders the formatted value and edits via prompt -> string PUT (R8)', () => {
+    // Live-discovered type (device-model §3): the save program/bank name
+    // editors. String PUTs verified on hardware (echoed as a 0x2e).
+    window.prompt = jest.fn(() => 'NewName');
+    appState.currentKey = '10020050';
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020050',
+        parent: '10020050',
+        statement: 'save bank',
+        tag: 'savebank',
+      },
+      {
+        type: 'STR',
+        position: '0',
+        key: '10020052',
+        parent: '10020050',
+        statement: 'name:%-22s',
+        tag: 'name',
+        value: 'Favorites',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+
+    const field = document.querySelector('.param-value[data-key="10020052"]');
+    expect(field).toBeTruthy();
+    expect(field.textContent).toContain('Favorites');
+
+    appState.currentSubs = subs;
+    jest.useFakeTimers();
+    field.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(window.prompt).toHaveBeenCalledWith(expect.stringContaining('name'), 'Favorites');
+    expect(sendValuePut).toHaveBeenCalledWith('10020052', 'NewName');
+    expect(appState.currentValues['10020052']).toBe('NewName');
+    jest.useRealTimers();
+  });
+
   test('lcd click on back-link pops keyStack and refreshes', () => {
     appState.currentKey = '10010001';
     appState.keyStack = [

@@ -344,9 +344,15 @@ the UI on a warm-up would invert its purpose. `appState.eagerLoad`
 
 ## Validation / open items
 
-- (RESOLVED 2026-06-10) Eager-load throughput on real hardware: validated
-  live (logs/live-eager-acceptance2.log) — armed through the R5a landing
-  stall, started on the next clean drain, zero duplicate requests against
-  the fan-out's cache; serialized scheduling pinned by startup Tier A.
+- (RESOLVED 2026-06-10) Eager-load throughput on real hardware: production
+  trigger validated live (logs/live-eager-acceptance2.log) — armed through
+  the R5a landing stall, started on the next clean drain, zero duplicate
+  requests against the fan-out's cache. A forced deep walk from ROOT (a
+  stress path production does not take; logs/live-eager-acceptance4.log)
+  walked 75 nodes / 79 fetches in ~37s with one-retry-at-tail absorbing the
+  slow-dump backlog cascade; 6 nodes whose retry also raced the backlog
+  stay un-walked (their late dumps still tree-record; children only —
+  per-visit refetch covers correctness). Revisit pacing only if a root-wide
+  eager walk ever ships.
 - Whether any device value key reports the active DSP (would upgrade active-DSP
   from app-guess to device-confirmed). Hardware exploration, optional.

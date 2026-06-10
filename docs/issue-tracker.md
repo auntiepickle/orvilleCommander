@@ -493,11 +493,20 @@ and arrival races; the cure is view DERIVED from the device tree.
       per-visit volatile by design (updateScreen clears it, C8), so eager values would be discarded
       unseen; structure is the durable half and is what R3 pre-paints. No loading UX: the walk is
       background traffic behind the connect overlay the landing already shows.
-      LIVE ACCEPTANCE (2026-06-10, logs/live-eager-acceptance2.log): armed through the R5a stall
-      (watchdog send=21 recv=13), started on the next clean drain, 4 nodes walked 0 fetched (fan-out
-      had cached the shallow Black Hole subtree — zero duplicate requests), warmth 3/3 children;
-      cold-click pre-paint then served structure from cache mid-flight. Startup Tier A pins the
-      one-in-flight scheduling; 6 unit tests cover skip/serial/depth/watchdog/supersede/stop.
+      LIVE ACCEPTANCE (2026-06-10): production trigger (logs/live-eager-acceptance2.log) — armed
+      through the R5a stall (watchdog send=21 recv=13), started on the next clean drain, 4 nodes
+      walked 0 fetched (fan-out had cached the shallow Black Hole subtree — zero duplicate
+      requests), warmth 3/3 children; cold-click pre-paint then served structure from cache
+      mid-flight. STRESS (forced deep walk from ROOT, logs/live-eager-acceptance4.log — not a
+      production path): 75 nodes walked, 79 fetched, self-terminated cleanly in ~37s; slow program
+      dumps outlast the 1.5s wave watchdog and the backlog cascades, so misses RETRY ONCE at the
+      queue tail (usually free — the late response is tree-recorded by then); 6 nodes whose retry
+      also raced the backlog stayed un-walked (their own late dumps still land in the tree; only
+      their children go unwalked — per-visit refetch covers correctness). KNOWN LIMIT, acceptable:
+      the production trigger walks only the preset subtree, where dumps are small and the cascade
+      does not occur; revisit pacing only if a root-wide eager walk ever ships (G2 idea). Startup
+      Tier A pins the one-in-flight scheduling; 8 unit tests cover
+      skip/serial/depth/watchdog-advance/retry/dead-node/supersede/stop.
 - [x] NEW (GH #106) (same branch) `eagerLoad` config flag: persisted in midiConfig (default on,
       pre-#106 caches stay eager), checkbox in index.html, appState.eagerLoad gates the bridge arm.
 - [x] NEW (GH #106) Render guard enforcing the invariant: unconfirmed values render as a loading placeholder, never a stale cached number — shipped with R3 below (branch fix/r3-render-guard)

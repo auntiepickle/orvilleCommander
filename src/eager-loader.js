@@ -41,11 +41,17 @@ import { EAGER } from './constants.js';
 import { log } from './logger.js';
 
 // Walk state. One load at a time; a new start resets and supersedes.
-let queue = []; // [{ key, depth }]
+let queue = []; // [{ key, depth, retry? }]
 let visited = new Set();
 let pendingKey = null; // the single in-flight OBJECTINFO key
 let pendingDepth = 0; // its depth, for bounding the children it reveals
 let fetched = 0;
+// Keys whose decision point found no dump and were re-queued at the tail.
+// Live finding: slow dumps (the program children behind the bank list)
+// outlast the 1.5s wave watchdog and the backlog cascades onto followers —
+// but the late responses ARE tree-recorded, so a tail retry usually hits
+// the cache for free. One retry per key; a second miss is a dead node.
+let retried = new Set();
 let unsubscribers = [];
 // Stale-handler guard: events.js emits over a snapshot, so a handler torn
 // down DURING an emit still receives that in-flight event once; a handler
@@ -58,6 +64,7 @@ function teardown() {
   unsubscribers = [];
   queue = [];
   visited = new Set();
+  retried = new Set();
   pendingKey = null;
   pendingDepth = 0;
   fetched = 0;
@@ -78,8 +85,8 @@ function enqueueChildren(key, depth) {
 // the first uncached one, or finish when the queue is empty.
 function step() {
   while (queue.length > 0) {
-    const { key, depth } = queue.shift();
-    if (visited.has(key)) continue;
+    const { key, depth, retry } = queue.shift();
+    if (visited.has(key) && !retry) continue;
     visited.add(key);
     if (getNode(key)) {
       enqueueChildren(key, depth);
@@ -124,8 +131,15 @@ export function startEagerLoad(rootKey) {
       pendingKey = null;
       if (getNode(key)) {
         enqueueChildren(key, depth);
+      } else if (!retried.has(key)) {
+        // The response may merely be queued behind the link backlog (slow
+        // dumps cascade — live finding): retry at the queue TAIL, where the
+        // by-then-recorded late response costs no second request.
+        retried.add(key);
+        queue.push({ key, depth, retry: true });
+        log(`Eager load: no dump for ${key} yet; will retry at queue tail`, 'info', 'general');
       } else {
-        log(`Eager load: no dump recorded for ${key}; skipping`, 'info', 'general');
+        log(`Eager load: no dump for ${key} after retry; skipping`, 'info', 'general');
       }
       step();
     })

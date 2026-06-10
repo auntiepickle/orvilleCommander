@@ -85,7 +85,10 @@ describe('eager-loader', () => {
     expect(sendObjectInfoDump).toHaveBeenCalledTimes(2);
   });
 
-  test('a drain WITHOUT the dump recorded skips the node and keeps walking', () => {
+  test('a missing dump is retried at the queue tail — free when the response landed late', () => {
+    // Live finding: slow dumps outlast the wave watchdog and the backlog
+    // cascades; the late responses are still tree-recorded, so the tail
+    // retry usually hits the cache without a second request.
     recordDump([
       col('401000b', '401000b', 'Black Hole'),
       col('4040001', '401000b', 'space'),
@@ -94,10 +97,32 @@ describe('eager-loader', () => {
     startEagerLoad('401000b');
     expect(sentKeys()).toEqual(['4040001']);
 
-    // Wave drained but the response never landed (drop/miscount): the node
-    // is not coming — skip, move to the next sibling.
+    // Drain with nothing recorded: 4040001 is re-queued at the tail and the
+    // walk moves on.
     emit('dumpComplete', { reason: 'all-received' });
     expect(sentKeys()).toEqual(['4040001', '4050001']);
+
+    // 4040001's LATE response lands (tree-recorded) while 4050001 is in
+    // flight; when the retry comes up it costs no second request and its
+    // children still get walked.
+    recordDump([col('4040001', '4040001', 'space'), col('4041000', '4040001', 'late sub')]);
+    recordDump([col('4050001', '4050001', 'in eq'), num('40c0001', '4050001')]);
+    emit('dumpComplete', { reason: 'all-received' });
+    expect(sentKeys()).toEqual(['4040001', '4050001', '4041000']); // retry was free
+  });
+
+  test('a dead node is fetched twice, then permanently skipped', () => {
+    recordDump([col('401000b', '401000b', 'Black Hole'), col('4040001', '401000b', 'space')]);
+    startEagerLoad('401000b');
+    expect(sentKeys()).toEqual(['4040001']);
+
+    emit('dumpComplete', { reason: 'all-received' }); // miss -> retry: second send
+    expect(sentKeys()).toEqual(['4040001', '4040001']);
+
+    emit('dumpComplete', { reason: 'all-received' }); // miss again -> skip, complete
+    expect(sendObjectInfoDump).toHaveBeenCalledTimes(2);
+    emit('dumpComplete', { reason: 'all-received' }); // post-completion no-op
+    expect(sendObjectInfoDump).toHaveBeenCalledTimes(2);
   });
 
   test('a watchdog WITH the dump recorded still advances and enqueues its children (no coverage loss)', () => {

@@ -201,7 +201,10 @@ export function registerEventBridge({ hideLoading }) {
       // NEW active preset.
       if (eagerLoadArmed && payload?.reason === 'all-received') {
         eagerLoadArmed = false;
-        startEagerLoad(appState.presetKey);
+        // Also warm the program menu (#138): its bank-list dump is the
+        // slowest on the link, so prefetching it makes the first PROGRAM
+        // visit instant instead of an on-demand multi-second fetch.
+        startEagerLoad(appState.presetKey, [KEY.PROGRAM]);
       } else if (eagerLoadArmed) {
         log(
           'Eager load still armed: landing wave stalled; waiting for a clean drain.',

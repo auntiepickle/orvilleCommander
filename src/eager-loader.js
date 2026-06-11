@@ -113,7 +113,7 @@ function step() {
  *
  * @param {string} rootKey - Subtree root (e.g. '401000b').
  */
-export function startEagerLoad(rootKey) {
+export function startEagerLoad(rootKey, warmKeys = []) {
   teardown();
   if (!rootKey) return;
   const token = ++walkId;
@@ -145,6 +145,15 @@ export function startEagerLoad(rootKey) {
     })
   );
   queue.push({ key: rootKey, depth: 0 });
+  // Extra warm roots (#138): the program/load menu, whose ~70-name bank
+  // list is the slowest dump on the link. Warming it in the background
+  // (serialized like everything else, and skipped when already cached)
+  // means the first PROGRAM visit renders instantly from the tree instead
+  // of fetching the bank list on-demand. Cached nodes (e.g. right after a
+  // library sync) cost no request.
+  for (const k of warmKeys) {
+    if (k) queue.push({ key: k, depth: 0 });
+  }
   step();
 }
 

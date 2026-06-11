@@ -222,6 +222,14 @@ const handleSelectChange = (e) => {
       // (~4-5s) — the program field's memo (revisited bank, instant) or
       // loading line (unseen bank) must show immediately.
       renderScreen(appState.currentSubs, appState.lastAscii);
+    } else if (key === KEY.PROGRAM_SELECT) {
+      // Choosing a program only moves the highlight (no load now — the
+      // auto-load was removed). It does NOT change the menu, so skip the
+      // full updateScreen refetch (the "syncing with the system" lag the
+      // maintainer saw): the optimistic hex cache already shows the pick,
+      // so repaint immediately and just confirm the value on the wire.
+      renderScreen(appState.currentSubs, appState.lastAscii);
+      sendValueDump(KEY.PROGRAM_SELECT);
     } else {
       updateScreen();
     }

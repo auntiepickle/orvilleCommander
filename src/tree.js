@@ -69,13 +69,22 @@ export function recordDump(subs) {
   for (const s of subs.slice(1)) {
     if (s.key) parents.set(s.key, { parentKey: main.key, sub: s });
   }
-  // #141: memoize the program list under the bank it was listed FOR.
-  if (main.key === KEY.FAVORITES) {
+  // #141: memoize the program list under the bank it was listed FOR —
+  // gated by the SAME #121 generation trust as the structure check above
+  // (review): an in-flight pre-mutation dump (e.g. racing a program-load
+  // trigger that reorders Favorites) must not launder a pre-load list
+  // into the memo.
+  if (
+    main.key === KEY.FAVORITES &&
+    (markGeneration === 0 || requestGeneration.get(main.key) === markGeneration)
+  ) {
     const bankSub = subs.find((s) => s.key === KEY.BANK_SELECT);
     const progSub = subs.find((s) => s.key === KEY.PROGRAM_SELECT);
     const bankIdx = parseInt(String(bankSub?.value || '').split(' ')[0], 16);
     if (!isNaN(bankIdx) && progSub?.options?.length) {
-      bankProgramLists.set(bankIdx, { options: progSub.options, value: progSub.value });
+      // Shallow copy: the memo must hold its own snapshot, independent of
+      // the treat-as-read-only tree node it came from.
+      bankProgramLists.set(bankIdx, { options: [...progSub.options], value: progSub.value });
     }
   }
 }

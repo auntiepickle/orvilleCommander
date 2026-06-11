@@ -1,4 +1,4 @@
-import { renderScreen } from '../src/renderer.js';
+import { renderScreen, resetProgramSelectView } from '../src/renderer.js';
 import { appState } from '../src/state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from '../src/midi.js';
 import { showLoading } from '../src/main.js';
@@ -57,6 +57,7 @@ describe('renderer.js', () => {
     consoleLogSpy.mockClear();
 
     document.body.innerHTML = '<div id="lcd"></div>';
+    resetProgramSelectView();
   });
 
   afterEach(() => {
@@ -282,6 +283,59 @@ describe('renderer.js', () => {
     expect(document.querySelector('select[data-key="10020011"]')).toBeNull();
     expect(document.getElementById('lcd').textContent).toContain('loading programs ...');
     expect(document.getElementById('lcd').textContent).not.toContain('Adaptive Reverb');
+  });
+
+  test('the memo is keyed by the HEX bank index — a high bank revisits correctly (#141 review)', () => {
+    appState.currentKey = '10020000';
+    recordDump(programMenu);
+    // Bank 50's dump carries value token '32' (hex) — the memo key and
+    // the chosen-bank parse must agree on radix or bank >= 10 never hits.
+    recordDump(loadMenuDump('32 50 Reverbs - Unusual', ['10 Adaptive Reverb', '11 AlienShift']));
+    recordDump(loadMenuDump('0 0 Favorites', ['0 Techno Rumble']));
+
+    appState.currentValues['10020012'] = '32 50 Reverbs - Unusual';
+    renderScreen(programMenu, '', mockLog);
+    const progSel = document.querySelector('select[data-key="10020011"]');
+    expect([...progSel.options].map((o) => o.text)).toEqual([
+      '10 Adaptive Reverb',
+      '11 AlienShift',
+    ]);
+  });
+
+  test('the top-level SET branch (descended into the load menu) resolves the memo too (#141 review)', () => {
+    recordDump(loadMenuDump('0 0 Favorites', ['0 Techno Rumble']));
+    const bank50Dump = loadMenuDump('32 50 Reverbs - Unusual', ['10 Adaptive Reverb']);
+    recordDump(bank50Dump);
+
+    appState.currentKey = '10020010'; // user descended into the load menu
+    appState.currentValues['10020012'] = '0 0 Favorites'; // chose Favorites; dump is bank 50
+    renderScreen(bank50Dump, '', mockLog);
+    const progSel = document.querySelector('select[data-key="10020011"]');
+    expect([...progSel.options].map((o) => o.text)).toEqual(['0 Techno Rumble']);
+  });
+
+  test('the chosen bank survives a currentValues wipe mid-transfer (#141 review)', () => {
+    appState.currentKey = '10020000';
+    recordDump(programMenu);
+    recordDump(loadMenuDump('32 50 Reverbs - Unusual', ['10 Adaptive Reverb']));
+    recordDump(loadMenuDump('0 0 Favorites', ['0 Techno Rumble']));
+    // The dump in the tree is now bank 0; the user picks bank 50 through
+    // the REAL select path (sets the wipe-proof module state).
+    renderScreen(programMenu, '', mockLog);
+    const bankSel = document.querySelector('select[data-key="10020012"]');
+    jest.useFakeTimers();
+    bankSel.value = '50';
+    bankSel.dispatchEvent(new Event('change', { bubbles: true }));
+    jest.advanceTimersByTime(200);
+
+    // A program pick (or any refresh) wipes currentValues wholesale —
+    // the old-bank list must STILL not repaint (review: the cache-only
+    // check fell back to the dump here).
+    appState.currentValues = {};
+    renderScreen(programMenu, '', mockLog);
+    const progSel = document.querySelector('select[data-key="10020011"]');
+    expect([...progSel.options].map((o) => o.text)).toEqual(['10 Adaptive Reverb']);
+    jest.useRealTimers();
   });
 
   test('a bank-selection put does NOT clear the memo — it is the action the memo accelerates (#141)', () => {

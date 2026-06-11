@@ -203,6 +203,10 @@ const handleSelectChange = (e) => {
       delete pruned[KEY.PROGRAM_SELECT];
       delete pruned[KEY.FAVORITES];
       setState({ currentValues: pruned }, 'renderer:bank-change-prune');
+      // Wipe-proof copy of the choice (#141 review): currentValues can be
+      // cleared mid-transfer by any updateScreen; programSelectView falls
+      // back to this until the load-menu dump converges.
+      chosenBankIdx = parseInt(selectedIndex, 10);
       sendObjectInfoDump(KEY.FAVORITES);
       sendValueDump(KEY.FAVORITES);
       // Paint NOW (#141, live finding): puts do not join waves, so without
@@ -662,21 +666,39 @@ function renderGangInline(colSub, depth, paramLines, paramHtmlLines, logParam) {
 
 // Program-select view resolution (#141): the device's load-menu dump
 // carries ONLY the currently-selected bank's program list, so when the
-// user's chosen bank (optimistic/echo cache) differs from the bank the
-// dump was taken in, the dump's options are the OLD bank's — never show
-// them. Serve the session memo (tree.js) when this bank has been seen,
-// else an honest loading line until the targeted dump lands ("its the
-// fact we keep the old stuff around thats the issue" — maintainer).
+// user's chosen bank differs from the bank the dump was taken in, the
+// dump's options are the OLD bank's — never show them. Serve the session
+// memo (tree.js) when this bank has been seen, else an honest loading
+// line until the targeted dump lands ("its the fact we keep the old
+// stuff around thats the issue" — maintainer).
 // Returns: {stale:false} = render the dump as usual; {loading:true} =
 // render RENDER.LOADING_PROGRAMS; {options,value} = render the memo.
+//
+// The chosen bank lives in MODULE state, not only the optimistic cache
+// (review): a program pick from the memoized list runs the generic
+// updateScreen refresh, which wipes currentValues wholesale mid-transfer
+// — the cache-only check then fell back to the dump and repainted the
+// old bank's list. Set by the bank-change handler; self-clears when the
+// load-menu dump converges on the chosen bank.
+let chosenBankIdx = null;
+
+/** Clears the chosen-bank module state (tests). */
+export function resetProgramSelectView() {
+  chosenBankIdx = null;
+}
+
 function programSelectView(s, siblings) {
   if (s.key !== KEY.PROGRAM_SELECT) return { stale: false };
-  const chosenRaw = appState.currentValues[KEY.BANK_SELECT];
   const bankSub = siblings.find((x) => x.key === KEY.BANK_SELECT);
-  if (!chosenRaw || !bankSub?.value) return { stale: false };
-  const chosen = parseInt(String(chosenRaw).split(' ')[0], 16);
+  if (!bankSub?.value) return { stale: false };
+  const cachedRaw = appState.currentValues[KEY.BANK_SELECT];
+  const cached = cachedRaw ? parseInt(String(cachedRaw).split(' ')[0], 16) : NaN;
+  const chosen = !isNaN(cached) ? cached : chosenBankIdx;
   const inDump = parseInt(String(bankSub.value).split(' ')[0], 16);
-  if (isNaN(chosen) || isNaN(inDump) || chosen === inDump) return { stale: false };
+  if (chosen === null || isNaN(inDump) || chosen === inDump) {
+    if (chosen !== null && chosen === inDump) chosenBankIdx = null; // converged
+    return { stale: false };
+  }
   const memo = bankProgramsFor(chosen);
   if (memo) return { stale: true, options: memo.options, value: memo.value };
   return { stale: true, loading: true };
@@ -890,8 +912,10 @@ export function renderScreen(subs, ascii, logParam) {
           fullHtml = fullText;
         } else {
           const options = progView.options ?? s.options;
+          // Stale branch: a program the user just picked from the memoized
+          // list (optimistic cache) beats the memo's remembered selection.
           let value = progView.stale
-            ? progView.value
+            ? appState.currentValues[s.key] || progView.value
             : appState.currentValues[s.key] || s.value || '';
           if (!progView.stale && appState.currentValues[s.key] === undefined && !s.value)
             sendValueDump(s.key, logParam);
@@ -1043,8 +1067,10 @@ export function renderScreen(subs, ascii, logParam) {
               childFullHtml = childFullText;
             } else {
               const options = progView.options ?? cs.options;
+              // A just-picked program (optimistic cache) beats the memo's
+              // remembered selection — same rule as the top-level branch.
               let value = progView.stale
-                ? progView.value
+                ? appState.currentValues[cs.key] || progView.value
                 : appState.currentValues[cs.key] || cs.value || '';
               if (!progView.stale && appState.currentValues[cs.key] === undefined && !cs.value)
                 sendValueDump(cs.key, logParam);

@@ -15,11 +15,13 @@
   --led-green: #44e05a;
   --led-red: #ff4136;
   --led-amber: #ffb000;
-  /* Option A: green-phosphor negative-mode LCD */
+  /* Option A: green-phosphor negative-mode LCD. Every alpha/glow variant
+     below derives from these via color-mix, so the theme engine
+     (theme.js) retints whole families by overriding the base tokens. */
   --lcd-bg: #06140b;
   --lcd-px: #3bf06e;
   --lcd-px-dim: #1e7a3c;
-  --lcd-glow: rgba(59, 240, 110, 0.45);
+  --lcd-glow: color-mix(in srgb, var(--lcd-px) 45%, transparent);
   /* The hardware cell is 6x8 and so is the font's, so at x3 the natural
      advance is 18px — EXACTLY the x3 canvas pitch (720/40 = 18px per
      column), no letter-spacing tricks. All in-LCD widths derive from this
@@ -206,8 +208,8 @@ body {
   box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.9);
 }
 .meter i:first-child {
-  background: #1c3a22;
-  box-shadow: 0 0 3px rgba(68, 224, 90, 0.25);
+  background: color-mix(in srgb, var(--led-green) 26%, #101113);
+  box-shadow: 0 0 3px color-mix(in srgb, var(--led-green) 25%, transparent);
 }
 .meter b {
   margin-left: 6px;
@@ -235,7 +237,7 @@ body {
 }
 .clock-led.lit i {
   background: var(--led-green);
-  box-shadow: 0 0 4px rgba(68, 224, 90, 0.5);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--led-green) 50%, transparent);
 }
 .clock-led-ext i {
   border-radius: 1px; /* square EXT lamp, distinct from the rate dots */
@@ -268,7 +270,7 @@ body {
   border-radius: 2px;
   background: #101113;
   margin-left: auto; /* switched to ON */
-  box-shadow: 0 0 4px rgba(68, 224, 90, 0.4);
+  box-shadow: 0 0 4px color-mix(in srgb, var(--led-green) 40%, transparent);
 }
 .power-switch b {
   font-size: 9px;
@@ -298,7 +300,7 @@ body {
 }
 .status-led.busy.lit i {
   background: var(--led-amber);
-  box-shadow: 0 0 5px rgba(255, 176, 0, 0.6);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--led-amber) 60%, transparent);
 }
 
 /* ---------- the display -------------------------------------------------- */
@@ -315,7 +317,11 @@ body {
      surround — the faint green wash plus #lcd's outer glow below are
      the "diffusion" that keeps the recess from reading as dead black. */
   background:
-    radial-gradient(65% 75% at 50% 45%, rgba(59, 240, 110, 0.05), transparent 72%),
+    radial-gradient(
+      65% 75% at 50% 45%,
+      color-mix(in srgb, var(--lcd-px) 5%, transparent),
+      transparent 72%
+    ),
     linear-gradient(#101113, #0b0c0d);
   border: 1px solid #000;
   border-radius: 6px;
@@ -375,7 +381,11 @@ body {
   -webkit-font-smoothing: none;
   text-rendering: optimizeSpeed;
   background:
-    radial-gradient(ellipse 90% 70% at 50% 35%, rgba(59, 240, 110, 0.07), transparent 70%),
+    radial-gradient(
+      ellipse 90% 70% at 50% 35%,
+      color-mix(in srgb, var(--lcd-px) 7%, transparent),
+      transparent 70%
+    ),
     var(--lcd-bg);
   color: var(--lcd-px);
   /* Two-layer phosphor: a tight full-color bloom that fattens the lit
@@ -389,7 +399,7 @@ body {
   min-height: calc(8 * var(--lcd-row-h) + 2 * var(--lcd-pad));
   padding: var(--lcd-pad);
   /* Diffusion: the lit phosphor bleeds into the bezel recess. */
-  box-shadow: 0 0 28px rgba(59, 240, 110, 0.14);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--lcd-px) 14%, transparent);
   display: flex;
   flex-direction: column;
   border-radius: 2px;
@@ -763,7 +773,7 @@ body {
 }
 .util-btn-primary {
   color: var(--led-green);
-  border-color: #1c3a22;
+  border-color: color-mix(in srgb, var(--led-green) 26%, #101113);
 }
 .util-input {
   font-family: var(--legend-font);
@@ -824,7 +834,7 @@ body {
 }
 .service-body {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto 1fr;
   gap: 24px;
   padding: 20px;
   margin-top: 2px;
@@ -875,11 +885,46 @@ body {
   font-weight: 600;
   letter-spacing: 0.12em;
   color: var(--led-green);
-  text-shadow: 0 0 6px rgba(68, 224, 90, 0.6);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--led-green) 60%, transparent);
 }
 .led-label::before {
   content: '● ';
 }
+/* IDE-style theme editor (theme.js): one swatch row per registry token. */
+.theme-tokens {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.theme-token {
+  display: grid;
+  grid-template-columns: 28px auto 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--legend-dim);
+  cursor: pointer;
+}
+.theme-token input[type='color'] {
+  width: 26px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--panel-line);
+  border-radius: 2px;
+  background: none;
+  cursor: pointer;
+}
+.theme-token code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px;
+  color: var(--legend-dim);
+  opacity: 0.6;
+  justify-self: end;
+}
+
 #log-area {
   width: 100%;
   height: 220px;

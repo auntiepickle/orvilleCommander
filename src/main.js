@@ -2,7 +2,14 @@
 import { WebMidi } from 'webmidi';
 import { CMD, KEY } from './sysex-commands.js';
 import { TIMING, DEFAULT_LOG_CATEGORIES } from './constants.js';
-import { loadConfig, saveConfig, clearConfig, mergeLogCategories } from './config.js';
+import {
+  loadConfig,
+  saveConfig,
+  saveThemeConfig,
+  clearConfig,
+  mergeLogCategories,
+} from './config.js';
+import { setupThemeEditor } from './theme.js';
 import { setupKeypressControls, setupDataKnob, testKeypress, meterPollTick } from './controls.js';
 import {
   setMidiPorts,
@@ -411,6 +418,17 @@ setState(
     presetKey: cachedConfig?.presetKey || KEY.DSP_A_PRESET,
   },
   'main:boot-init'
+);
+// Theme editor (theme.js): applies the persisted theme at boot, then saves
+// on every preset/swatch change — independent of the Save Config button.
+setupThemeEditor(
+  {
+    presetSelect: document.getElementById('theme-preset'),
+    resetButton: document.getElementById('theme-reset'),
+    tokensContainer: document.getElementById('theme-tokens'),
+  },
+  cachedConfig?.theme,
+  saveThemeConfig
 );
 // #48: the settings checkboxes sync to appState LIVE — previously the sync
 // happened only at boot-init, so toggling mid-session was a silent no-op

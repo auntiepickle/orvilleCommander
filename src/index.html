@@ -198,6 +198,16 @@
             </div>
           </div>
           <div class="service-col">
+            <h3 class="service-heading">Theme</h3>
+            <div class="service-row">
+              <label class="util-label" for="theme-preset">PRESET</label>
+              <select id="theme-preset" class="util-input"></select>
+              <button id="theme-reset" class="util-btn">Reset Overrides</button>
+            </div>
+            <!-- One swatch row per registry token (theme.js THEME_TOKENS) -->
+            <div id="theme-tokens" class="theme-tokens"></div>
+          </div>
+          <div class="service-col">
             <h3 class="service-heading">Diagnostics</h3>
             <div class="service-row">
               <input

@@ -71,7 +71,11 @@ export function saveConfig(
   presetKey,
   eagerLoad
 ) {
+  // Preserve keys other writers own (the theme editor persists via
+  // saveThemeConfig) — a positional full save must not drop them.
+  const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
   const config = {
+    ...existing,
     outputId,
     inputId,
     deviceId,
@@ -84,6 +88,20 @@ export function saveConfig(
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
   log('Config saved to localStorage.', 'info', 'general');
+}
+
+/**
+ * Persists the theme (preset + per-token overrides) into midiConfig
+ * without touching the rest of the config — the theme editor saves on
+ * every change, independent of the Save Config button.
+ *
+ * @param {{preset: string, overrides: Object}} theme
+ */
+export function saveThemeConfig(theme) {
+  const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  existing.theme = theme;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+  log(`Theme saved: ${theme.preset}`, 'debug', 'general');
 }
 
 /**

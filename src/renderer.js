@@ -789,10 +789,12 @@ export function renderScreen(subs, ascii, logParam) {
           fullHtml = fullText;
         } else {
           // No format spec anywhere: an indicator CON (the Tempo 'Beat'
-          // flasher is the only live-observed case) — render the bar,
-          // treating the value as a 0-1 fraction, clamped.
+          // flasher is the only live-observed case) — render a compact
+          // flash block, treating the value as a 0-1 fraction, clamped.
+          // Width-capped (live external-clock test): the binary flasher as
+          // a full-LCD slab overwhelmed the page.
           const tagLength = s.tag.length;
-          const barSpace = LAYOUT.LCD_COLUMNS - tagLength - 1;
+          const barSpace = Math.min(RENDER.INDICATOR_BAR_CELLS, LAYOUT.LCD_COLUMNS - tagLength - 1);
           let barLength = Math.round(meterValue * barSpace);
           barLength = Math.max(0, Math.min(barSpace, barLength)); // Clamp to prevent invalid repeat counts
           const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
@@ -923,8 +925,12 @@ export function renderScreen(subs, ascii, logParam) {
               childFullText = formatValue(conFormat, meterValue); // '%%' collapses in formatValue
               childFullHtml = childFullText;
             } else {
+              // Same compact indicator block as the top-level CON branch.
               const tagLength = cs.tag.length;
-              const barSpace = LAYOUT.LCD_COLUMNS - tagLength - 1;
+              const barSpace = Math.min(
+                RENDER.INDICATOR_BAR_CELLS,
+                LAYOUT.LCD_COLUMNS - tagLength - 1
+              );
               let barLength = Math.round(meterValue * barSpace);
               barLength = Math.max(0, Math.min(barSpace, barLength)); // Clamp to prevent invalid repeat counts
               const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);

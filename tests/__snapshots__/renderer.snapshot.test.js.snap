@@ -35,8 +35,8 @@ Amt <span class="param-value" data-key="10010511"> 10</span>
 
 exports[`renderScreen golden snapshots leaf menu with CON meter subs (bar rendering branch) 1`] = `
 "<div id="lcd"><div class="top-docked"></div><div class="main-content"><span class="back-link" data-key="10030000">[levels]</span> Meters
-<span class="param-label">L</span> <span class="meter-bar">███████████████████░░░░░░░░░░░░░░░░░░░</span>
-<span class="param-label">R</span> <span class="meter-bar">█████████████████████████████░░░░░░░░░</span>
+<span class="param-label">L</span> <span class="meter-bar">████░░░░</span>
+<span class="param-label">R</span> <span class="meter-bar">██████░░</span>
 
 <span class="softkey" data-key="10030001" data-idx="0">[meters]                                </span>
 </div><div class="bottom-docked"><span class="softkey" data-key="10020000" data-idx="0">program   </span><span class="softkey" data-key="10010000" data-idx="1">setup     </span><span class="softkey" data-key="10030000" data-idx="2">levels    </span><span class="softkey" data-key="10030500" data-idx="3">bypass    </span></div></div>"

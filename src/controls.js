@@ -68,10 +68,23 @@ export const keypressMasks = {
  *
  * @returns {boolean} Whether the tick ran (false = gated). For tests/logs.
  */
+// Param types the slow poll lane refreshes — the on-page values the device
+// can change on its own (midiclock Tempo, ganged siblings). COL/TRG/empty
+// carry no refreshable value.
+const POLLABLE_PARAM_TYPES = ['NUM', 'SET', 'INF', 'STR'];
+let pollTickCount = 0;
+
 export function meterPollTick() {
   if (isWaveOpen()) return false;
-  for (const sub of appState.currentSubs.filter((s) => s.type === 'CON')) {
-    sendValueDump(sub.key);
+  pollTickCount++;
+  // Slow lane (live-observed under external clock): the device updates
+  // values by itself — the midiclock-measured Tempo BPM was frozen at its
+  // navigation-time value because only CONs ever re-polled. Every Nth tick
+  // refreshes the page's other params too.
+  const refreshParams = pollTickCount % TIMING.PARAM_REFRESH_TICKS === 0;
+  for (const sub of appState.currentSubs) {
+    if (sub.type === 'CON') sendValueDump(sub.key);
+    else if (refreshParams && POLLABLE_PARAM_TYPES.includes(sub.type)) sendValueDump(sub.key);
   }
   return true;
 }

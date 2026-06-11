@@ -14,6 +14,12 @@ export const TIMING = {
   DEVICE_LOAD_MS: 500, // wait for the device to process a preset load
   VALUE_DUMP_WAIT_MS: 500, // wait for a VALUE_DUMP to arrive after a change
   POLL_INTERVAL_MS: 500, // meter-polling re-request interval
+  PARAM_REFRESH_TICKS: 10, // every Nth meter-poll tick also refreshes the on-page NUM/SET/INF/STR
+  //                          values (at METER_POLL_MS=100 -> once per second): the device changes
+  //                          values on its own (midiclock-measured Tempo BPM, ganged siblings) and
+  //                          CON-only polling left them frozen at navigation time (live-observed
+  //                          under external clock). Nth-tick pacing keeps the added traffic far
+  //                          below the #107 saturation regime; the wave-open gate still applies.
   REDUMP_MS: 200, // parser re-dump after the Favorites re-order fix
   WATCHDOG_IDLE_MS: 1500, // dump-complete idle/silence watchdog, rearmed on each send and receive;
   //                         well over the sub-second gap between responses in a healthy wave, so it
@@ -37,6 +43,11 @@ export const LAYOUT = {
 export const RENDER = {
   VALUE_PLACEHOLDER: '...',
   LOADING_STATEMENT: 'loading ...',
+  INDICATOR_BAR_CELLS: 8, // max bar width for spec-less indicator CONs: the only live-observed
+  //                         case (the Tempo 'Beat' flasher) is binary 0/1, and a full-LCD-width
+  //                         flashing slab overwhelmed the page (maintainer report, external-clock
+  //                         test); 8 cells reads as a flash block while keeping 8-step resolution
+  //                         for a hypothetical fractional indicator
 };
 
 // Stable-subtree cache policy (#113). Subtrees whose STRUCTURE rarely

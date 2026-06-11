@@ -147,6 +147,31 @@ describe('controls', () => {
     expect(sendValueDump.mock.calls.map((c) => c[0])).toEqual(['10020027', '10020028']); // CONs only
   });
 
+  test('every Nth poll tick also refreshes the on-page param values (live-clock fix)', () => {
+    // Live-observed under external MIDI clock: the device updates the
+    // midiclock-measured Tempo BPM by itself, but CON-only polling left the
+    // NUM frozen at its navigation-time value.
+    appState.currentSubs = [
+      { type: 'COL', position: '0', key: '40090000', parent: '40090000', statement: 'Tempo' },
+      { type: 'CON', position: '10', key: '40090004', parent: '40090000', statement: '' },
+      { type: 'NUM', position: '0', key: '40090002', parent: '40090000', statement: 'T %4.0f' },
+      { type: 'SET', position: '2', key: '40090001', parent: '40090000', statement: 'S %-9s' },
+      { type: 'TRG', position: '0', key: '40090009', parent: '40090000', statement: 'go' },
+    ];
+    isWaveOpen.mockReturnValue(false);
+    sendValueDump.mockClear();
+
+    // 20 ticks (the tick counter is module state, so assert on counts, not
+    // positions): the CON fans every tick; the NUM/SET ride only the two
+    // Nth-tick refreshes; TRG never.
+    for (let i = 0; i < 20; i++) meterPollTick();
+    const keys = sendValueDump.mock.calls.map((c) => c[0]);
+    expect(keys.filter((k) => k === '40090004')).toHaveLength(20); // CON: every tick
+    expect(keys.filter((k) => k === '40090002')).toHaveLength(2); // NUM: Nth ticks only
+    expect(keys.filter((k) => k === '40090001')).toHaveLength(2); // SET: Nth ticks only
+    expect(keys).not.toContain('40090009'); // TRG: never
+  });
+
   test('fetchBitmap disabled skips the screen fetch', () => {
     appState.fetchBitmap = false;
     const btn = addButton('enter-btn');

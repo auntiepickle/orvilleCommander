@@ -140,7 +140,11 @@ describe('renderer.js', () => {
           { index: '0', desc: '0 Favorites' },
           { index: '50', desc: '50 Reverbs - Unusual' },
         ],
-        value: '32 50 Reverbs - Unusual',
+        // Starts on a DIFFERENT bank than the one the test selects, so the
+        // mid-transfer repaint assertion below can actually discriminate
+        // kept-cache vs old-tree-value (review: with old === chosen the
+        // pin was vacuous).
+        value: '0 0 Favorites',
       },
     ];
     renderScreen(subs, '', mockLog);

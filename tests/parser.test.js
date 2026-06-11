@@ -412,6 +412,52 @@ describe('parseResponse', () => {
     expect(sendObjectInfoDump).toHaveBeenCalledWith('10010010'); // freshness = per-visit
   });
 
+  test('quoting invariant: quoted multi-word fields parse intact, bare single words positionally (D1/#118)', () => {
+    // The device quotes a value iff it contains a space (verified across
+    // all captured fixtures + hardware STR echoes, #104).
+    const quoted = parseSubObject("COL 0 401000b 0 'Black Hole' '' 3");
+    expect(quoted.statement).toBe('Black Hole');
+    expect(quoted.value).toBe('3'); // the hex child count lands in value
+
+    const bare = parseSubObject("COL 0 801000b 0 MetallicChamber '' 4");
+    expect(bare.statement).toBe('MetallicChamber');
+    expect(bare.value).toBe('4');
+
+    // Real capture: setup's count is hex 'f' (15 children) — no canary.
+    mockLog.mockClear();
+    const setup = parseSubObject("COL 0 10010000 10010000 'setup functions' setup f");
+    expect(setup.value).toBe('f');
+    expect(mockLog).not.toHaveBeenCalledWith(
+      expect.stringContaining('Suspect COL line'),
+      'error',
+      'error'
+    );
+  });
+
+  test('the COL hex-count canary logs loudly on a field shift (D1/#118)', () => {
+    // A hypothetical UNQUOTED multi-word statement shifts every field: the
+    // trailing slot stops being a hex count — the earliest detectable
+    // symptom, logged instead of silently corrupting downstream consumers.
+    mockLog.mockClear();
+    parseSubObject('COL 0 9990000 0 Two Words tag 3'); // 'tag' lands in the count slot
+    expect(mockLog).toHaveBeenCalledWith(
+      expect.stringContaining('Suspect COL line'),
+      'error',
+      'error'
+    );
+
+    // The motivating shape (review finding): a TWO-word unquoted name with
+    // a quoted-empty tag shifts '' into the count slot — empty must fire
+    // too (every observed COL line carries a count).
+    mockLog.mockClear();
+    parseSubObject("COL 0 401000b 0 Black Hole '' 0");
+    expect(mockLog).toHaveBeenCalledWith(
+      expect.stringContaining('Suspect COL line'),
+      'error',
+      'error'
+    );
+  });
+
   test('handles screen dump (bitmap) and calls renderBitmap', () => {
     // Mock SysEx: device 0, cmd 0x17 (screen dump), some nibbles
     const nibbles = [0x00, 0x01, 0x02, 0x03]; // Simplified even nibbles

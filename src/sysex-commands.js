@@ -77,6 +77,14 @@ export const KEY_SUFFIX = {
 // STR = string-edit field, observed live under save program/bank (R8).
 export const PARAM_TYPES = ['NUM', 'SET', 'CON', 'TRG', 'INF', 'STR'];
 
+// The EMPTY object type (D2/#119, probed live 2026-06-10): the root dump
+// carries an `8 0 10040000 0 '' ''` line. Its own OBJECTINFO returns only
+// that line (no children, no trailing count field) and its VALUE returns an
+// empty value — an empty/reserved leaf the device exposes but gives no
+// content for. Correct handling everywhere is render-skip; consumers
+// reference this constant instead of a bare '8' literal.
+export const TYPE_EMPTY = '8';
+
 // Root-level menus, in softkey order, used both as a "is this a top-level menu"
 // set and as the static bottom softkey row.
 export const ROOT_SOFTKEYS = [

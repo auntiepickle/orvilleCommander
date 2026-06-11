@@ -773,6 +773,13 @@ HUMAN-GATE: none
   Every open issue now maps to a ledger item or carries a current-state comment; #12/#14 are
   UI-polish enhancements with no ledger batch (schedule ad hoc).
 
+2026-06-11 update — BUG BOARD AT ZERO. Shipped since the sweep: #113 (PR #122, program-subtree
+caching), #118/#119 (PR #123, D1/D2 parser hardening), G2a (PR #124, golden screenshot
+regression), #3/#48 (PR #125), #47 (PR #126), #121 (PR #128; #127 was its stacked predecessor,
+auto-closed by GitHub when the base branch merged). #45 (G2b live loop) remains open behind its
+needs-decision gate. OPEN BOARD: #9, #10, #12, #14 — all four are feature enhancements; every
+bug-class issue ever logged is closed.
+
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24
 - 8-step decoupling refactor — PR #23

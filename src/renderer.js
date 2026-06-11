@@ -477,12 +477,41 @@ let prePainting = false;
 // instead — handleSelectChange's own updateScreen supersedes it.
 let deferredPaint = null;
 
+// Which #lcd select currently has its native popup OPEN — inferred, since
+// Chrome exposes no API. mousedown on a select toggles its popup; change
+// and blur always close it. Inference matters (live bug, reproduced in
+// logs/probe-bank-focus.mjs): a select RETAINS focus after its popup
+// closes (after picking, after Esc, after a look), and parking on mere
+// focus froze every repaint indefinitely — the user watched the program
+// list never refilter after a bank change. Known gap: a keyboard-opened
+// popup (Alt+Down) is not inferred and may be closed by a repaint.
+let openLcdSelect = null;
+const handleSelectMousedown = (e) => {
+  const wasOpen = openLcdSelect === e.target;
+  openLcdSelect = wasOpen ? null : e.target;
+  if (wasOpen) flushDeferredPaint(); // toggle-close releases parked paints
+};
+const noteSelectClosed = (el) => {
+  if (openLcdSelect === el) openLcdSelect = null;
+};
+// change/blur both mean the popup is closed; they pair the close marker
+// with the existing #131 discard/flush semantics.
+const handleSelectChangeClosed = (e) => {
+  noteSelectClosed(e.target);
+  discardDeferredPaint();
+};
+const handleSelectBlurClosed = (e) => {
+  noteSelectClosed(e.target);
+  flushDeferredPaint();
+};
+
 function lcdSelectFocused(lcdEl) {
   const active = document.activeElement;
   if (!active || !lcdEl.contains(active)) return false;
-  // An open dropdown OR an in-glass inline editor (both are mid-interaction
-  // DOM a repaint would destroy).
-  return active.tagName === 'SELECT' || active.classList.contains('lcd-edit');
+  // The in-glass inline editor parks while focused (focus = mid-edit);
+  // a dropdown parks only while its popup is actually open.
+  if (active.classList.contains('lcd-edit')) return true;
+  return active.tagName === 'SELECT' && active === openLcdSelect;
 }
 
 const discardDeferredPaint = () => {
@@ -1271,13 +1300,16 @@ export function renderScreen(subs, ascii, logParam) {
   // handleSelectChange (registration order) so a stale parked paint never
   // replays over the post-change refresh; blur replays the latest deferred
   // paint when the user closes the dropdown without changing (#131).
+  // mousedown drives the popup-open inference; change/blur mark it closed.
   lcdEl.querySelectorAll('select[data-key]').forEach((select) => {
+    select.removeEventListener('mousedown', handleSelectMousedown);
+    select.addEventListener('mousedown', handleSelectMousedown);
     select.removeEventListener('change', handleSelectChange);
     select.addEventListener('change', handleSelectChange);
-    select.removeEventListener('change', discardDeferredPaint);
-    select.addEventListener('change', discardDeferredPaint);
-    select.removeEventListener('blur', flushDeferredPaint);
-    select.addEventListener('blur', flushDeferredPaint);
+    select.removeEventListener('change', handleSelectChangeClosed);
+    select.addEventListener('change', handleSelectChangeClosed);
+    select.removeEventListener('blur', handleSelectBlurClosed);
+    select.addEventListener('blur', handleSelectBlurClosed);
   });
   // Add click listeners to param-value for NUM and TRG editing
   lcdEl.querySelectorAll('.param-value').forEach((span) => {

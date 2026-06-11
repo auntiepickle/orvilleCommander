@@ -214,11 +214,26 @@ describe('renderer.js', () => {
     },
   ];
 
-  test('repaint defers while a SET dropdown is focused and flushes on blur (#131)', () => {
+  test('a focused-but-CLOSED dropdown never parks repaints (live bug: frozen program list)', () => {
+    // Chrome keeps focus on a select after its popup closes (after picking,
+    // after Esc, after a look) — parking on mere focus froze every repaint
+    // until a blur that never came (reproduced: logs/probe-bank-focus.mjs).
+    appState.currentKey = '10020000';
+    renderScreen(dropdownGuardSubs('Program'), '', mockLog);
+    const select = document.querySelector('select[data-key="10020011"]');
+    select.focus(); // focused, but no mousedown = popup never opened
+    expect(document.activeElement).toBe(select);
+
+    renderScreen(dropdownGuardSubs('ProgramRepainted'), '', mockLog);
+    expect(document.getElementById('lcd').innerHTML).toContain('ProgramRepainted');
+  });
+
+  test('repaint defers while a SET dropdown is OPEN and flushes on blur (#131)', () => {
     jest.useFakeTimers();
     appState.currentKey = '10020000';
     renderScreen(dropdownGuardSubs('Program'), '', mockLog);
     const select = document.querySelector('select[data-key="10020011"]');
+    select.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); // popup opens
     select.focus();
     expect(document.activeElement).toBe(select);
 
@@ -241,6 +256,7 @@ describe('renderer.js', () => {
     appState.currentKey = '10020000';
     renderScreen(dropdownGuardSubs('Program'), '', mockLog);
     const select = document.querySelector('select[data-key="10020011"]');
+    select.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); // popup opens
     select.focus();
 
     renderScreen(dropdownGuardSubs('StaleParkedPaint'), '', mockLog);

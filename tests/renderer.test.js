@@ -1,9 +1,14 @@
-import { renderScreen } from '../src/renderer.js';
+import { renderScreen, resetProgramSelectView } from '../src/renderer.js';
 import { appState } from '../src/state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from '../src/midi.js';
 import { showLoading } from '../src/main.js';
 import { log as mockLog } from '../src/logger.js';
-import { recordDump, reset as treeReset } from '../src/tree.js';
+import {
+  recordDump,
+  markAllStableDirty,
+  markDirtyIfStable,
+  reset as treeReset,
+} from '../src/tree.js';
 
 jest.mock('../src/midi.js', () => ({
   sendObjectInfoDump: jest.fn(),
@@ -52,6 +57,7 @@ describe('renderer.js', () => {
     consoleLogSpy.mockClear();
 
     document.body.innerHTML = '<div id="lcd"></div>';
+    resetProgramSelectView();
   });
 
   afterEach(() => {
@@ -189,6 +195,174 @@ describe('renderer.js', () => {
     const repainted = document.querySelector('select[data-key="10020012"]');
     expect(repainted.options[repainted.selectedIndex].text).toBe('50 Reverbs - Unusual');
     jest.useRealTimers();
+  });
+
+  // #141: per-bank program-list memo + honest loading. The device's dump
+  // carries only the CURRENT bank's program list; a chosen bank that
+  // differs from the dump's bank renders its memoized list (seen this
+  // session) or a loading line — never the old bank's options.
+  const loadMenuDump = (bankValue, programs) => [
+    {
+      type: 'COL',
+      position: '0',
+      key: '10020010',
+      parent: '10020010',
+      statement: 'load new preset',
+      tag: 'load',
+    },
+    {
+      type: 'SET',
+      position: '1',
+      key: '10020012',
+      parent: '10020010',
+      statement: 'Bank: %-20s',
+      tag: 'Bank',
+      options: [
+        { index: '0', desc: '0 Favorites' },
+        { index: '5', desc: '5 Delays' },
+        { index: '50', desc: '50 Reverbs - Unusual' },
+      ],
+      value: bankValue,
+    },
+    {
+      type: 'SET',
+      position: '2',
+      key: '10020011',
+      parent: '10020010',
+      statement: '%-20s',
+      tag: 'Program',
+      options: programs.map((desc, i) => ({ index: `${i}`, desc })),
+      value: `0 ${programs[0]}`,
+    },
+  ];
+  const programMenu = [
+    {
+      type: 'COL',
+      position: '0',
+      key: '10020000',
+      parent: '10020000',
+      statement: 'program functions',
+      tag: 'program',
+    },
+    {
+      type: 'COL',
+      position: '0',
+      key: '10020010',
+      parent: '10020000',
+      statement: 'load new preset',
+      tag: 'load',
+    },
+  ];
+
+  test('program field renders the memoized list for a revisited bank (#141)', () => {
+    appState.currentKey = '10020000';
+    recordDump(programMenu);
+    recordDump(loadMenuDump('0 0 Favorites', ['0 Techno Rumble', '1 St DistortionTwo']));
+    // The device switched to bank 50; its dump is now the tree's latest.
+    recordDump(loadMenuDump('32 50 Reverbs - Unusual', ['10 Adaptive Reverb', '11 AlienShift']));
+
+    // The user re-chooses bank 0 (optimistic hex cache) — its list was
+    // seen this session, so it renders INSTANTLY from the memo.
+    appState.currentValues['10020012'] = '0 0 Favorites';
+    renderScreen(programMenu, '', mockLog);
+    const progSel = document.querySelector('select[data-key="10020011"]');
+    expect([...progSel.options].map((o) => o.text)).toEqual([
+      '0 Techno Rumble',
+      '1 St DistortionTwo',
+    ]);
+  });
+
+  test('program field shows LOADING for an unseen bank — never the old list (#141)', () => {
+    appState.currentKey = '10020000';
+    recordDump(programMenu);
+    recordDump(loadMenuDump('32 50 Reverbs - Unusual', ['10 Adaptive Reverb', '11 AlienShift']));
+
+    // The user chooses bank 5, never seen this session.
+    appState.currentValues['10020012'] = '5 5 Delays';
+    renderScreen(programMenu, '', mockLog);
+    expect(document.querySelector('select[data-key="10020011"]')).toBeNull();
+    expect(document.getElementById('lcd').textContent).toContain('loading programs ...');
+    expect(document.getElementById('lcd').textContent).not.toContain('Adaptive Reverb');
+  });
+
+  test('the memo is keyed by the HEX bank index — a high bank revisits correctly (#141 review)', () => {
+    appState.currentKey = '10020000';
+    recordDump(programMenu);
+    // Bank 50's dump carries value token '32' (hex) — the memo key and
+    // the chosen-bank parse must agree on radix or bank >= 10 never hits.
+    recordDump(loadMenuDump('32 50 Reverbs - Unusual', ['10 Adaptive Reverb', '11 AlienShift']));
+    recordDump(loadMenuDump('0 0 Favorites', ['0 Techno Rumble']));
+
+    appState.currentValues['10020012'] = '32 50 Reverbs - Unusual';
+    renderScreen(programMenu, '', mockLog);
+    const progSel = document.querySelector('select[data-key="10020011"]');
+    expect([...progSel.options].map((o) => o.text)).toEqual([
+      '10 Adaptive Reverb',
+      '11 AlienShift',
+    ]);
+  });
+
+  test('the top-level SET branch (descended into the load menu) resolves the memo too (#141 review)', () => {
+    recordDump(loadMenuDump('0 0 Favorites', ['0 Techno Rumble']));
+    const bank50Dump = loadMenuDump('32 50 Reverbs - Unusual', ['10 Adaptive Reverb']);
+    recordDump(bank50Dump);
+
+    appState.currentKey = '10020010'; // user descended into the load menu
+    appState.currentValues['10020012'] = '0 0 Favorites'; // chose Favorites; dump is bank 50
+    renderScreen(bank50Dump, '', mockLog);
+    const progSel = document.querySelector('select[data-key="10020011"]');
+    expect([...progSel.options].map((o) => o.text)).toEqual(['0 Techno Rumble']);
+  });
+
+  test('the chosen bank survives a currentValues wipe mid-transfer (#141 review)', () => {
+    appState.currentKey = '10020000';
+    recordDump(programMenu);
+    recordDump(loadMenuDump('32 50 Reverbs - Unusual', ['10 Adaptive Reverb']));
+    recordDump(loadMenuDump('0 0 Favorites', ['0 Techno Rumble']));
+    // The dump in the tree is now bank 0; the user picks bank 50 through
+    // the REAL select path (sets the wipe-proof module state).
+    renderScreen(programMenu, '', mockLog);
+    const bankSel = document.querySelector('select[data-key="10020012"]');
+    jest.useFakeTimers();
+    bankSel.value = '50';
+    bankSel.dispatchEvent(new Event('change', { bubbles: true }));
+    jest.advanceTimersByTime(200);
+
+    // A program pick (or any refresh) wipes currentValues wholesale —
+    // the old-bank list must STILL not repaint (review: the cache-only
+    // check fell back to the dump here).
+    appState.currentValues = {};
+    renderScreen(programMenu, '', mockLog);
+    const progSel = document.querySelector('select[data-key="10020011"]');
+    expect([...progSel.options].map((o) => o.text)).toEqual(['10 Adaptive Reverb']);
+    jest.useRealTimers();
+  });
+
+  test('a bank-selection put does NOT clear the memo — it is the action the memo accelerates (#141)', () => {
+    appState.currentKey = '10020000';
+    recordDump(programMenu);
+    recordDump(loadMenuDump('0 0 Favorites', ['0 Techno Rumble']));
+    recordDump(loadMenuDump('32 50 Reverbs - Unusual', ['10 Adaptive Reverb']));
+    markDirtyIfStable('10020012'); // the bank put's own chokepoint call
+
+    appState.currentValues['10020012'] = '0 0 Favorites';
+    renderScreen(programMenu, '', mockLog);
+    const progSel = document.querySelector('select[data-key="10020011"]');
+    expect(progSel).toBeTruthy();
+    expect([...progSel.options].map((o) => o.text)).toEqual(['0 Techno Rumble']);
+  });
+
+  test('mutation chokepoints clear the bank memo (#141)', () => {
+    appState.currentKey = '10020000';
+    recordDump(programMenu);
+    recordDump(loadMenuDump('0 0 Favorites', ['0 Techno Rumble']));
+    recordDump(loadMenuDump('32 50 Reverbs - Unusual', ['10 Adaptive Reverb']));
+    markAllStableDirty(); // e.g. a keypress or reconnect — lists may have changed
+
+    appState.currentValues['10020012'] = '0 0 Favorites';
+    renderScreen(programMenu, '', mockLog);
+    // Memo gone: honest loading, not the (possibly stale) remembered list.
+    expect(document.getElementById('lcd').textContent).toContain('loading programs ...');
   });
 
   // #131: progressive paints during a wave must not destroy an open SET

@@ -26,6 +26,7 @@ import {
   setMidiPorts,
   addSysexListener,
   sendSysEx,
+  sendObjectInfoDump,
   sendValueDump,
   sendValuePut,
   isOutputConnected,
@@ -506,11 +507,13 @@ function setupLibraryUI() {
         const row = document.createElement('button');
         row.type = 'button';
         row.className = 'search-hit';
-        row.innerHTML = `<span class="hit-bank">${hit.bankName} &rsaquo;</span> ${hit.programName}`;
-        // mousedown, not click: it fires before the input's blur hides
-        // the dropdown.
-        row.addEventListener('mousedown', (ev) => {
-          ev.preventDefault();
+        // textContent, never innerHTML: program/bank names are
+        // device-supplied strings (review).
+        const bankSpan = document.createElement('span');
+        bankSpan.className = 'hit-bank';
+        bankSpan.textContent = `${hit.bankName} › `;
+        row.append(bankSpan, document.createTextNode(hit.programName));
+        row.addEventListener('mousedown', () => {
           hideResults();
           searchInput.value = '';
           loadSearchHit(hit, () => {
@@ -524,6 +527,10 @@ function setupLibraryUI() {
     }
     resultsEl.hidden = false;
   };
+  // preventDefault on the CONTAINER's mousedown (review): a mousedown on
+  // the scrollbar or between rows must not blur the input and close the
+  // dropdown mid-scroll — only the input keeps focus.
+  resultsEl.addEventListener('mousedown', (ev) => ev.preventDefault());
   searchInput.addEventListener('input', renderResults);
   searchInput.addEventListener('focus', renderResults);
   searchInput.addEventListener('blur', hideResults);

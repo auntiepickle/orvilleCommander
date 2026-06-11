@@ -12,7 +12,7 @@
 // wire shape), name is the option desc as listed.
 
 import { appState } from './state.js';
-import { sendValuePut, sendObjectInfoDump, sendValueDump } from './midi.js';
+import { sendValuePut, sendObjectInfoDump, sendValueDump, isOutputConnected } from './midi.js';
 import { KEY, KEY_PREFIX } from './sysex-commands.js';
 import { LIBRARY } from './constants.js';
 import { getNode, bankProgramsFor } from './tree.js';
@@ -30,8 +30,12 @@ export function getLibrary() {
   return library;
 }
 
-/** Hydrates the library from persisted config (boot). */
+/** Hydrates the library from persisted config (boot); null clears (tests). */
 export function setLibrary(persisted) {
+  if (persisted === null) {
+    library = null;
+    return;
+  }
   if (persisted?.banks?.length) library = persisted;
 }
 
@@ -88,6 +92,10 @@ export function isSyncing() {
  */
 export async function syncLibrary(onProgress) {
   if (syncing) return null;
+  if (!isOutputConnected()) {
+    log('Library sync: no MIDI output connected', 'error', 'error');
+    return null;
+  }
   const loadMenu = getNode(KEY.FAVORITES);
   const bankSub = loadMenu?.find((s) => s.key === KEY.BANK_SELECT);
   if (!bankSub?.options?.length) {
@@ -136,7 +144,15 @@ export async function syncLibrary(onProgress) {
     syncing = false;
   }
   if (banks.length === 0) return null;
-  library = { syncedAt: new Date().toISOString(), banks };
+  // MERGE over the existing library (review): a cancel at bank 5/70 or a
+  // dropped bank must never replace a previous full library with a
+  // partial one — fresh entries overlay, everything else is kept.
+  const merged = new Map((library?.banks || []).map((b) => [b.idx, b]));
+  for (const bank of banks) merged.set(bank.idx, bank);
+  library = {
+    syncedAt: new Date().toISOString(),
+    banks: [...merged.values()].sort((a, b) => parseInt(a.idx, 10) - parseInt(b.idx, 10)),
+  };
   return library;
 }
 
@@ -149,10 +165,22 @@ export async function syncLibrary(onProgress) {
  *   caller refreshes the screen / root names).
  */
 export async function loadSearchHit(hit, onDone) {
+  if (syncing) {
+    // The scan owns the bank selection: a load interleaved with it would
+    // land in whatever bank the scan happens to be visiting (review).
+    log('Search load ignored: library sync in progress', 'error', 'error');
+    return;
+  }
   log(`Search load: '${hit.programName}' (bank ${hit.bankIdx})`, 'info', 'general');
   sendValuePut(KEY.BANK_SELECT, hit.bankIdx);
   await sleep(LIBRARY.LOAD_SETTLE_MS);
   sendValuePut(KEY.PROGRAM_SELECT, hit.programIdx);
+  // Readback before the trigger: the device clamps out-of-range puts, so
+  // a stale library hit would otherwise load a DIFFERENT program silently
+  // — the echo lands in currentValues/the log for the eye to catch
+  // (review; full verify-or-abort is more wire round-trips than the
+  // explicit-resync freshness model warrants).
+  sendValueDump(KEY.PROGRAM_SELECT);
   await sleep(LIBRARY.LOAD_SETTLE_MS);
   const trigger = appState.presetKey.startsWith(KEY_PREFIX.DSP_A)
     ? KEY.LOAD_TRIGGER_A

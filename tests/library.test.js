@@ -7,6 +7,7 @@ jest.mock('../src/midi.js', () => ({
   sendValuePut: jest.fn(),
   sendObjectInfoDump: jest.fn(),
   sendValueDump: jest.fn(),
+  isOutputConnected: jest.fn(() => true),
 }));
 
 jest.mock('../src/logger.js', () => ({
@@ -80,6 +81,7 @@ describe('library search', () => {
 describe('syncLibrary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    setLibrary(null);
   });
 
   const loadMenuNode = [
@@ -125,6 +127,41 @@ describe('syncLibrary', () => {
   test('returns null without a load-menu dump', async () => {
     getNode.mockReturnValue(undefined);
     expect(await syncLibrary()).toBeNull();
+  });
+
+  test('a partial scan MERGES over the existing library, never replaces it (review)', async () => {
+    setLibrary(sampleLibrary); // a previous full sync, incl. bank 50
+    getNode.mockReturnValue(loadMenuNode);
+    const memos = {
+      0: { options: [{ index: '0', desc: '0 Fresh Favorites' }], value: '0' },
+      1: { options: [{ index: '0', desc: '0 Delaytaps' }], value: '0' },
+    };
+    bankProgramsFor.mockImplementation((idx) => memos[idx]);
+
+    const library = await syncLibrary();
+    // Banks 0 and 1 refreshed; bank 50 (not in this scan's bank list)
+    // survives from the previous sync.
+    expect(library.banks.map((b) => b.idx)).toEqual(['0', '1', '50']);
+    expect(library.banks[0].programs[0].name).toBe('0 Fresh Favorites');
+    expect(library.banks[2].programs[0].name).toBe('12 Black Hole');
+  });
+
+  test('the original bank restore uses the value token as HEX (review radix pin)', async () => {
+    // Originally on bank 50: the dump's value token is hex '32'; the
+    // restore PUT must be decimal '50' (the device parses puts decimal).
+    getNode.mockReturnValue([
+      { type: 'COL', key: '10020010' },
+      {
+        type: 'SET',
+        key: '10020012',
+        value: '32 50 Reverbs - Unusual',
+        options: [{ index: '0', desc: '0 Favorites' }],
+      },
+    ]);
+    bankProgramsFor.mockReturnValue({ options: [{ index: '0', desc: '0 X' }], value: '0' });
+    await syncLibrary();
+    const puts = sendValuePut.mock.calls.map((c) => c.join(':'));
+    expect(puts[puts.length - 1]).toBe('10020012:50');
   });
 });
 

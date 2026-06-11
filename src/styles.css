@@ -20,11 +20,10 @@
   --lcd-px: #3bf06e;
   --lcd-px-dim: #1e7a3c;
   --lcd-glow: rgba(59, 240, 110, 0.45);
-  /* The hardware cell is 6x8; Pixel Operator Mono's is 8x8. At x3 we pull
-     the 24px advance in to 18px with letter-spacing, which makes the LCD
-     pitch EXACTLY match the x3 canvas (720/40 = 18px per column). All
-     in-LCD widths are computed from this, never from ch (ch ignores
-     letter-spacing). */
+  /* The hardware cell is 6x8 and so is the font's, so at x3 the natural
+     advance is 18px — EXACTLY the x3 canvas pitch (720/40 = 18px per
+     column), no letter-spacing tricks. All in-LCD widths derive from this
+     variable so the grid geometry has one source of truth. */
   --lcd-advance: 18px;
   --lcd-cell-h: 24px;
   --bezel: #0b0c0d;
@@ -32,13 +31,15 @@
     'Bahnschrift', 'Bahnschrift SemiCondensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
 }
 
-/* The real Orville's 240x64 module uses a bold 6x8-cell bitmap face; Pixel
-   Operator Mono Bold (CC0, src/fonts/) is the closest open match at its 8px
-   design size. Rendered at x3 only — fractional scales smear pixel fonts. */
+/* The real Orville's 240x64 module uses a 6x8-cell bitmap face; PxPlus HP
+   100LX 6x8 (Ultimate Oldschool PC Font Pack, CC BY-SA 4.0, src/fonts/) is
+   a true 6x8 cell — each glyph keeps its native 1px gutter, which is what
+   lets the phosphor glow form a distinct halo per character instead of
+   smearing. Design size is 8px; rendered at x3 (24px) only — fractional
+   scales smear pixel fonts. */
 @font-face {
   font-family: 'OrvilleLCD';
-  src: url('fonts/PixelOperatorMono8-Bold.ttf') format('truetype');
-  font-weight: 700;
+  src: url('fonts/PxPlus_HP_100LX_6x8.ttf') format('truetype');
   font-display: block;
 }
 
@@ -220,14 +221,18 @@ body {
   font-family: 'OrvilleLCD', ui-monospace, Consolas, monospace;
   font-size: 24px;
   line-height: var(--lcd-cell-h);
-  letter-spacing: calc(var(--lcd-advance) - 24px); /* 8px-cell font -> 6px-cell pitch */
+  letter-spacing: 0; /* the font's 6x8 cell lands on --lcd-advance natively */
   -webkit-font-smoothing: none;
   text-rendering: optimizeSpeed;
   background:
     radial-gradient(ellipse 90% 70% at 50% 35%, rgba(59, 240, 110, 0.07), transparent 70%),
     var(--lcd-bg);
   color: var(--lcd-px);
-  text-shadow: 0 0 6px var(--lcd-glow);
+  /* Two-layer phosphor: a tight full-color bloom that fattens the lit
+     pixels (the real EL display blooms), plus the wider soft halo. */
+  text-shadow:
+    0 0 2px var(--lcd-px),
+    0 0 8px var(--lcd-glow);
   /* Exactly the 40-column grid plus glass padding. */
   width: calc(40 * var(--lcd-advance) + 24px);
   min-height: 192px;

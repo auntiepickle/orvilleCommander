@@ -74,12 +74,15 @@ Ship A unless the maintainer overrules (open question §5).
 ### Typography for `#lcd`
 
 Strategy: a self-hosted pixel webfont via `@font-face` — a static asset, **not** a runtime dep.
-The golden glyphs are a bold 6×8-cell bitmap face; the closest open match is **Pixel Operator
-Mono Bold** (CC0/OFL, 8px design size). Stack:
+The golden glyphs are a 6×8-cell bitmap face. First candidate (Pixel Operator Mono Bold, CC0)
+was an 8×8 cell: compressing it to the hardware pitch with negative letter-spacing made glyphs
+overlap and killed the per-character phosphor halo. Shipped match is **PxPlus HP 100LX 6x8**
+(Ultimate Oldschool PC Font Pack, CC BY-SA 4.0) — a true 6×8 cell, so the ×3 advance lands on
+the canvas pitch (18px) natively and every glyph keeps its 1px gutter. Stack:
 
 ```
 font-family: 'OrvilleLCD', ui-monospace, Consolas, monospace;
-font-size: 24px; line-height: 24px;   /* 8px cell × 3 */
+font-size: 24px; line-height: 24px;   /* 6×8 cell × 3 → 18px advance, 24px rows */
 letter-spacing: 0; -webkit-font-smoothing: none; text-rendering: optimizeSpeed;
 ```
 

@@ -14,6 +14,12 @@ export const TIMING = {
   DEVICE_LOAD_MS: 500, // wait for the device to process a preset load
   VALUE_DUMP_WAIT_MS: 500, // wait for a VALUE_DUMP to arrive after a change
   POLL_INTERVAL_MS: 500, // meter-polling re-request interval
+  PARAM_REFRESH_TICKS: 10, // every Nth meter-poll tick also refreshes the on-page NUM/SET/INF/STR
+  //                          values (at METER_POLL_MS=100 -> once per second): the device changes
+  //                          values on its own (midiclock-measured Tempo BPM, ganged siblings) and
+  //                          CON-only polling left them frozen at navigation time (live-observed
+  //                          under external clock). Nth-tick pacing keeps the added traffic far
+  //                          below the #107 saturation regime; the wave-open gate still applies.
   REDUMP_MS: 200, // parser re-dump after the Favorites re-order fix
   WATCHDOG_IDLE_MS: 1500, // dump-complete idle/silence watchdog, rearmed on each send and receive;
   //                         well over the sub-second gap between responses in a healthy wave, so it
@@ -37,6 +43,11 @@ export const LAYOUT = {
 export const RENDER = {
   VALUE_PLACEHOLDER: '...',
   LOADING_STATEMENT: 'loading ...',
+  INDICATOR_BAR_CELLS: 8, // max bar width for spec-less indicator CONs: the only live-observed
+  //                         case (the Tempo 'Beat' flasher) is binary 0/1, and a full-LCD-width
+  //                         flashing slab overwhelmed the page (maintainer report, external-clock
+  //                         test); 8 cells reads as a flash block while keeping 8-step resolution
+  //                         for a hypothetical fractional indicator
 };
 
 // Stable-subtree cache policy (#113). Subtrees whose STRUCTURE rarely
@@ -64,10 +75,27 @@ export const EAGER = {
   MAX_DEPTH: 3,
 };
 
+// The DATA KNOB (#131; manual p.9 item L). Wheel-scroll and vertical drag
+// spin it; each detent is one INC/DEC keypress. The refresh after a spin is
+// a single trailing updateScreen, debounced — per-detent refreshes would
+// flood the 31250-baud link exactly like the #107 meter-poll saturation.
+export const KNOB = {
+  DETENT_DEG: 18, // visual pointer step: 20 detents per revolution, encoder-like
+  DRAG_PX_PER_DETENT: 12, // vertical drag distance per detent — comfortable mouse travel
+  SETTLE_REFRESH_MS: 300, // trailing screen refresh after the last detent (≥ MIDI_SETTLE_MS)
+  WHEEL_DELTA_PER_DETENT: 100, // accumulated wheel deltaY per detent: one Chrome mouse-wheel
+  //                              notch is deltaY 100; pixel-mode trackpads stream 1-10 per
+  //                              event, so accumulation (not per-event detents) keeps a flick
+  //                              from bursting keypresses onto the 31250-baud link (review)
+};
+
 // Canvas presentation for the bitmap screen (CSS, cosmetic only).
+// x3 integer scale (240x64 -> 720x192) so the bitmap mirror and the virtual
+// #lcd are the SAME physical size — one display, two modes (#130; the
+// pixel font is likewise locked to x3, fractional scales smear it).
 export const CANVAS = {
-  CSS_WIDTH: '480px',
-  CSS_HEIGHT: '128px',
+  CSS_WIDTH: '720px',
+  CSS_HEIGHT: '192px',
   ASPECT_RATIO: '240 / 64',
   IMAGE_RENDERING: 'pixelated',
 };

@@ -22,7 +22,12 @@ jest.mock('../src/navigation.js', () => ({
   toggleDspKey: jest.fn(() => '801000b'),
 }));
 
-import { keypressMasks, setupKeypressControls, meterPollTick } from '../src/controls.js';
+import {
+  keypressMasks,
+  setupKeypressControls,
+  setupDataKnob,
+  meterPollTick,
+} from '../src/controls.js';
 import { sendKeypress, sendSysEx, sendValueDump, isWaveOpen } from '../src/midi.js';
 import { updateScreen } from '../src/renderer.js';
 import { toggleDspKey } from '../src/navigation.js';
@@ -142,6 +147,31 @@ describe('controls', () => {
     expect(sendValueDump.mock.calls.map((c) => c[0])).toEqual(['10020027', '10020028']); // CONs only
   });
 
+  test('every Nth poll tick also refreshes the on-page param values (live-clock fix)', () => {
+    // Live-observed under external MIDI clock: the device updates the
+    // midiclock-measured Tempo BPM by itself, but CON-only polling left the
+    // NUM frozen at its navigation-time value.
+    appState.currentSubs = [
+      { type: 'COL', position: '0', key: '40090000', parent: '40090000', statement: 'Tempo' },
+      { type: 'CON', position: '10', key: '40090004', parent: '40090000', statement: '' },
+      { type: 'NUM', position: '0', key: '40090002', parent: '40090000', statement: 'T %4.0f' },
+      { type: 'SET', position: '2', key: '40090001', parent: '40090000', statement: 'S %-9s' },
+      { type: 'TRG', position: '0', key: '40090009', parent: '40090000', statement: 'go' },
+    ];
+    isWaveOpen.mockReturnValue(false);
+    sendValueDump.mockClear();
+
+    // 20 ticks (the tick counter is module state, so assert on counts, not
+    // positions): the CON fans every tick; the NUM/SET ride only the two
+    // Nth-tick refreshes; TRG never.
+    for (let i = 0; i < 20; i++) meterPollTick();
+    const keys = sendValueDump.mock.calls.map((c) => c[0]);
+    expect(keys.filter((k) => k === '40090004')).toHaveLength(20); // CON: every tick
+    expect(keys.filter((k) => k === '40090002')).toHaveLength(2); // NUM: Nth ticks only
+    expect(keys.filter((k) => k === '40090001')).toHaveLength(2); // SET: Nth ticks only
+    expect(keys).not.toContain('40090009'); // TRG: never
+  });
+
   test('fetchBitmap disabled skips the screen fetch', () => {
     appState.fetchBitmap = false;
     const btn = addButton('enter-btn');
@@ -151,5 +181,57 @@ describe('controls', () => {
 
     expect(sendKeypress).toHaveBeenCalledWith(keypressMasks.enter);
     expect(sendSysEx).not.toHaveBeenCalled();
+  });
+
+  // The DATA knob (#130/#131 review findings): wheel travel ACCUMULATES into
+  // detents (per-event detents burst keypresses from pixel-mode trackpads),
+  // zero-delta events never spin (INC/DEC mutate the device), and the
+  // screen refresh is one trailing debounce, not per-detent.
+  describe('setupDataKnob', () => {
+    const setupKnob = () => {
+      document.body.innerHTML =
+        '<div id="data-knob"><i class="knob-pointer"></i></div>' +
+        '<button id="inc-btn"></button><button id="dec-btn"></button>';
+      const knob = document.getElementById('data-knob');
+      knob.setPointerCapture = jest.fn(); // jsdom lacks pointer capture
+      setupDataKnob();
+      return knob;
+    };
+    const wheel = (knob, deltaY) => {
+      const e = new Event('wheel', { bubbles: true, cancelable: true });
+      e.deltaY = deltaY;
+      knob.dispatchEvent(e);
+    };
+
+    test('one wheel notch = one detent; small trackpad deltas accumulate', () => {
+      const knob = setupKnob();
+      wheel(knob, -100); // one Chrome notch up -> one INC
+      expect(sendKeypress).toHaveBeenCalledTimes(1);
+      expect(sendKeypress).toHaveBeenCalledWith(keypressMasks.inc);
+
+      sendKeypress.mockClear();
+      for (let i = 0; i < 10; i++) wheel(knob, 10); // trackpad stream down
+      expect(sendKeypress).toHaveBeenCalledTimes(1); // 100 accumulated -> ONE DEC
+      expect(sendKeypress).toHaveBeenCalledWith(keypressMasks.dec);
+    });
+
+    test('zero-delta wheel events never send a keypress', () => {
+      const knob = setupKnob();
+      wheel(knob, 0);
+      wheel(knob, 0);
+      expect(sendKeypress).not.toHaveBeenCalled();
+    });
+
+    test('a spin issues ONE trailing screen refresh, debounced', () => {
+      const knob = setupKnob();
+      wheel(knob, -100);
+      wheel(knob, -100);
+      wheel(knob, -100);
+      expect(sendKeypress).toHaveBeenCalledTimes(3); // detents stream immediately
+      expect(updateScreen).not.toHaveBeenCalled(); // refresh waits for the spin to settle
+
+      jest.advanceTimersByTime(300);
+      expect(updateScreen).toHaveBeenCalledTimes(1); // one trailing refresh
+    });
   });
 });

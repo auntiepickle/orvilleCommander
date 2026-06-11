@@ -135,7 +135,7 @@ The object's **own** line ends with its **child count in hex**; child lines show
 | `TRG` | trigger / action     |
 | `INF` | info / read-only     |
 | `STR` | **string-edit field** `[V]` — observed live (2026-06-10) under 'save program'/'save bank': `STR 0 10020023 10020020 name:%-19s name <value>`. The name editor for saves. Parser: default branch (value = field 7). Renderer: clickable editor; a string `VALUE_PUT` is echoed as a `0x2e` (confirmed live; multi-word values work and come back QUOTED in dumps; an empty-string put is ignored — no clear-to-empty semantic). |
-| `8`   | **empty / nonexistent object** `[V]` — returned for an unknown key and for empty slots (e.g. root's `10040000`); empty statement/tag. Probed live: `OBJECTINFO ffffffff` → `8 0 ffffffff ffffffff '' ''`. The app filters it. |
+| `8`   | **empty / nonexistent object** `[V]` — returned for an unknown key and for empty slots (e.g. root's `10040000`); empty statement/tag. Probed live: `OBJECTINFO ffffffff` → `8 0 ffffffff ffffffff '' ''`. Type-8 children also occur inside ordinary menus, not just at root: the `Select Inputs` page `10010822` lists one (`1001082d`) alongside its DIN 1/2 SET — probed live 2026-06-11 (#132), its own dump is the same inert shape (own line only, empty value), so it is NOT a hidden widget. The app filters it. |
 
 ### POSITION `[V/I]`
 
@@ -143,7 +143,52 @@ A hex digit giving ordering, with special codes seen in captures: `'a'` marks
 graphic-EQ band NUMs that the UI groups onto one line `[V]`; `'e'` appears on the
 `info` child of presets `[V]`; `'c'` appears on empty-tag page/wrapper COLs
 (probed live 2026-06-10: the `Post D/A Gain` chain `10030601` -> `1003006b`/
-`1003006c`, whose statements carry the page names) `[V]`. Other hex values `[I]`.
+`1003006c`, whose statements carry the page names) `[V]`. A COL with a **blank
+tag and a non-`'0'` position** (`0x13` and `0xc` observed live 2026-06-11) is a
+**gang group** — see "Gang COL subtrees" below `[V]`. Other hex values `[I]`.
+
+### Gang COL subtrees (ganged-parameter pages) `[V]`
+
+The device expresses the User Manual's **ganged-parameter** screens (manual
+p.20 — e.g. the I/O routing matrix) as nested COL subtrees whose group nodes
+carry a **blank tag** and a **non-`'0'` position**. Probed live 2026-06-11
+(#132, `logs/probe-routing-132.log` / `probe-routing2-132.log` /
+`probe-routing3-132.log`):
+
+```
+'Dsp A i/p routing' 1001008f (pos 0, tagged 'dsp A' — ordinary menu)
+  ├─ 'Source 1-4' 1001008c  COL pos 13, tag ''   (gang group)
+  │    ├─ 'Source 1/2' 1001008d  COL pos 13, tag ''
+  │    │    └─ SET 10010081/10010082 ('%-12s -> IN1', 17 routing options)
+  │    └─ 'Source 3/4' 1001008e  → SETs likewise
+  └─ 'In 1-4' 1001008b  COL pos c, tag ''
+       ├─ 'In 1/2' 10010089  → NUM gains ('A IN1 Gain: %2.1f dB')
+       └─ 'In 3/4' 1001008a  → NUM gains
+```
+
+DSP B mirrors it (`100100df` → `100100dc`/`100100db`); the output side
+(`Output Routing` analog `10010090` / digital) nests two `OutSource 1-4`
+groups (pos `13`) the same way, with bare `' %12s  (+)'` SET leaves. Deepest
+observed chain: menu → group → pair → param, i.e. params **three levels**
+below the menu.
+
+Semantics: gang groups are **presentation grouping, not navigation targets** —
+on hardware the whole subtree is ONE page (cursor + knob walks the gang). The
+classification rule (live-grounded): `COL` + blank tag + position ≠ `'0'`.
+Ordinary navigable menus always carry a tag or position `'0'` (the blank setup
+container `100100d0` is pos `0` — not a gang). The `Post D/A Gain` pos-`'c'`
+wrappers (§POSITION) fit the same rule — page grouping, not menus. The app
+renders gang subtrees inline as one editable page (`tree.js isGangCol`,
+`renderer.js renderGangInline`) and fans out their COL children when a gang
+dump lands (`parser.js`).
+
+Related leaf quirk `[V]`: some pages (the trig/`load next/prev` `nextprog`
+pages, first reached at audit depth 4) carry **inert SET placeholder slots** —
+whitespace-only statement, a dash-filler `'-----'` tag, a vestigial `'0'`
+value index, and **zero options**. They are dynamically-populated placeholders
+(filled when e.g. a trig mode is armed); with no options there is nothing to
+render or edit, and a blank line is the hardware-faithful presentation
+(`build_tools/tree-audit.mjs` recognizes them).
 
 ### STATEMENT / TAG `[V]`
 
@@ -354,6 +399,13 @@ distinct ids; id 0 = broadcast (§1).
   (2026-06-10): its `OBJECTINFO` returns only its own line (`8 0 10040000
   10040000 '' ''` — no children, no trailing count field) and its `VALUE`
   returns an empty value. An empty/reserved leaf; render-skip is correct.
+  Not root-only: `Select Inputs` (`10010822`) carries the same inert shape at
+  `1001082d` (probed 2026-06-11, #132) — see the §3 type table.
+- **Gang COL subtrees** `[V]` — the ganged-parameter pages (e.g. the I/O
+  routing matrix) are nested blank-tag, non-`'0'`-position COL groups whose
+  params sit up to three levels below the menu; one page on hardware. See §3
+  "Gang COL subtrees". Companion quirk: inert optionless SET placeholder
+  slots on the trig/nextprog pages render as blank lines.
 - **Quoting is need-based, and that IS the invariant** `[V]` (D1/#118,
   resolves the old "inconsistent" reading) — the device quotes any value
   containing a space, and quotes empty values: `'Black Hole'` quoted,
@@ -443,6 +495,15 @@ empty/nonexistent object; **bad reads** return empty (no error); the full
 (toggle + re-read the display-scoped selectors) — see §8; **keypress (`0x01`)
 works live** — we toggled A/B over MIDI; **PUTs are echoed** and **out-of-range
 writes clamp** (no error) — see §6/§9.
+
+Resolved by the 2026-06-11 routing probes (#132,
+`logs/probe-routing*-132.log` — no longer open): the **routing matrix
+structure** — gang COL subtrees (blank tag, non-`'0'` position, SET/NUM
+leaves up to three levels below the menu; §3 "Gang COL subtrees"); the
+**`Select Inputs` type-8 child** `1001082d` is an inert empty node, not a
+hidden matrix widget (issue #132's speculation, answered); the **inert
+optionless SET placeholder slots** on the trig/nextprog pages (whitespace
+statement, `'-----'` tag, zero options — §3/§9).
 
 Still open — needs a hardware session or more captures (all minor):
 

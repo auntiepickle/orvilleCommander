@@ -5,7 +5,14 @@ import { TIMING, LAYOUT, RENDER } from './constants.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { showLoading } from './main.js';
-import { getNode, deriveKeyStack, findParamUnder, labelForSub } from './tree.js';
+import {
+  getNode,
+  deriveKeyStack,
+  findParamUnder,
+  labelForSub,
+  isGangCol,
+  GANG_MAX_DEPTH,
+} from './tree.js';
 import { log } from './logger.js';
 
 /**
@@ -153,6 +160,13 @@ const handleSelectChange = (e) => {
     'debug',
     'valueChange'
   );
+  // Release focus (review): a closed select that keeps focus would park
+  // every subsequent repaint (#131 defer guard) until the user happens to
+  // click elsewhere — the post-change refresh and gang-sibling updates
+  // must paint. Safe ordering: the blur-flush replays one tick later and
+  // re-checks the parked slot, and the change's discard listener (runs
+  // synchronously after this handler) clears it first — no stale replay.
+  e.target.blur();
   showLoading();
   sendValuePut(key, selectedIndex);
   setState(
@@ -380,6 +394,39 @@ function formatValue(statement, value, isHtml = false, key = '') {
 // real dump, never on a cache paint).
 let prePainting = false;
 
+// Open-dropdown repaint guard (#131): replacing #lcd's innerHTML while the
+// user has a SET dropdown open destroys the select mid-interaction — and
+// progressive paints land throughout a wave, so the dropdown "constantly
+// closes until loading finishes" (maintainer report). While a select inside
+// #lcd is focused, repaints are DEFERRED: the latest paint's arguments park
+// here and replay when the select blurs. A change DISCARDS the parked paint
+// instead — handleSelectChange's own updateScreen supersedes it.
+let deferredPaint = null;
+
+function lcdSelectFocused(lcdEl) {
+  const active = document.activeElement;
+  return !!active && active.tagName === 'SELECT' && lcdEl.contains(active);
+}
+
+const discardDeferredPaint = () => {
+  deferredPaint = null;
+};
+
+const flushDeferredPaint = () => {
+  if (!deferredPaint) return;
+  // One tick later, never synchronously (review): blur fires between the
+  // mousedown and click of whatever the user clicked next inside #lcd —
+  // replacing innerHTML here would destroy the click target and drop that
+  // navigation. The R3 guard re-validates the parked args against
+  // currentKey at replay time, so a navigation that wins the tick is safe.
+  setTimeout(() => {
+    if (!deferredPaint) return;
+    const args = deferredPaint;
+    deferredPaint = null;
+    renderScreen(...args);
+  }, 0);
+};
+
 // A param line with every value slot blanked to the placeholder: the
 // statement (else the tag) with format specifiers substituted; '%%'
 // collapses to a literal '%' via the shared regex's leading alternative.
@@ -388,10 +435,128 @@ const placeholderLine = (s) =>
     m === '%%' || m === '%' ? '%' : RENDER.VALUE_PLACEHOLDER
   );
 
+// #132: one rendered line for a gang-inlined leaf param — the same type
+// semantics as the embedded-child branch (value source, fetch rule, SET
+// index decoding), kept as its own function so the two existing render
+// paths and their snapshots stay byte-identical.
+function gangParamLine(s, logParam) {
+  if (s.type === 'NUM') {
+    const value = appState.currentValues[s.key] || s.value;
+    if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
+    const formatStr = s.statement || s.tag || '';
+    return {
+      text: formatValue(formatStr, value),
+      html: formatValue(formatStr, value, true, s.key),
+    };
+  } else if (s.type === 'INF') {
+    const value = appState.currentValues[s.key] || s.value || '';
+    if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
+    const text = formatValue(s.statement, value);
+    return { text, html: text };
+  } else if (s.type === 'SET') {
+    const value = appState.currentValues[s.key] || s.value || '';
+    if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
+    let displayValue = value;
+    let indexHex = '0';
+    if (value) {
+      indexHex = value.split(' ')[0];
+      displayValue = value.substring(indexHex.length + 1);
+    }
+    const indexDec = parseInt(indexHex, 16).toString(10);
+    let selectHtml = `<select data-key="${s.key}" class="param-select">`;
+    s.options.forEach((option) => {
+      const isSelected = option.index === indexDec;
+      selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
+    });
+    selectHtml += `</select>`;
+    return {
+      text: formatValue(s.statement || '', displayValue),
+      html: (s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml),
+    };
+  } else if (s.type === 'TRG') {
+    return {
+      text: s.statement,
+      html: `<span class="param-value" data-key="${s.key}">${s.statement}</span>`,
+    };
+  } else if (s.type === 'STR') {
+    const value = appState.currentValues[s.key] ?? s.value ?? '';
+    if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
+    const text = formatValue(s.statement || '%s', value);
+    return { text, html: `<span class="param-value" data-key="${s.key}">${text}</span>` };
+  } else if (s.type === 'CON') {
+    let meterValue = parseFloat(appState.currentValues[s.key] || s.value) || 0;
+    if (isNaN(meterValue)) meterValue = 0;
+    const conFormat = CON_FORMAT_RE.test(s.statement)
+      ? s.statement
+      : CON_FORMAT_RE.test(s.tag)
+        ? s.tag
+        : null;
+    if (conFormat) {
+      const text = formatValue(conFormat, meterValue);
+      return { text, html: text };
+    }
+  }
+  return null;
+}
+
+// #132: inline a gang COL subtree (the routing matrix shape — manual p.20's
+// ganged parameters) into the current page, the way the hardware shows it.
+// Group headers render at the top level always; a PAIR header renders only
+// when its params' statements are all identical (the OutSource rows are
+// bare '%12s  (+)' lines — without the pair label they are ambiguous; the
+// Source/In rows self-describe with '-> IN1' / 'A IN1 Gain'). Uncached
+// groups render a loading placeholder; the gang fan-out (parser) is
+// fetching them and the child-arrival repaint (bridge) repaints on landing.
+function renderGangInline(colSub, depth, paramLines, paramHtmlLines, logParam) {
+  if (depth > GANG_MAX_DEPTH) return;
+  const node = getNode(colSub.key);
+  const header = (colSub.statement || '').trim();
+  const children = node ? node.slice(1) : [];
+  const paramChildren = children.filter((c) => c.type !== 'COL' && c.type !== TYPE_EMPTY);
+  const identicalStatements =
+    paramChildren.length > 1 &&
+    paramChildren.every((c) => c.statement === paramChildren[0].statement);
+  if (header && (depth === 0 || identicalStatements)) {
+    paramLines.push(header);
+    paramHtmlLines.push(header);
+  }
+  if (!node) {
+    const text = `${header || labelForSub(colSub)} ${RENDER.VALUE_PLACEHOLDER}`;
+    paramLines.push(text);
+    paramHtmlLines.push(text);
+    return;
+  }
+  for (const cs of children) {
+    if (cs.type === 'COL') {
+      if (isGangCol(cs)) renderGangInline(cs, depth + 1, paramLines, paramHtmlLines, logParam);
+      continue;
+    }
+    if (cs.type === TYPE_EMPTY) continue;
+    if (prePainting) {
+      const text = placeholderLine(cs);
+      if (text) {
+        paramLines.push(text);
+        paramHtmlLines.push(text);
+      }
+      continue;
+    }
+    const line = gangParamLine(cs, logParam);
+    if (line && line.text) {
+      paramLines.push(line.text);
+      paramHtmlLines.push(line.html);
+    }
+  }
+}
+
 export function renderScreen(subs, ascii, logParam) {
   const lcdEl = document.getElementById('lcd');
   if (!subs || subs.length === 0) {
     log('Skipping render: no subs available', 'debug', 'renderScreen');
+    return;
+  }
+  if (lcdSelectFocused(lcdEl)) {
+    deferredPaint = [subs, ascii, logParam];
+    log('Deferring repaint: a SET dropdown is open (#131)', 'debug', 'renderScreen');
     return;
   }
   // R3 render guard (#106): these subs describe a DIFFERENT node than the
@@ -624,10 +789,12 @@ export function renderScreen(subs, ascii, logParam) {
           fullHtml = fullText;
         } else {
           // No format spec anywhere: an indicator CON (the Tempo 'Beat'
-          // flasher is the only live-observed case) — render the bar,
-          // treating the value as a 0-1 fraction, clamped.
+          // flasher is the only live-observed case) — render a compact
+          // flash block, treating the value as a 0-1 fraction, clamped.
+          // Width-capped (live external-clock test): the binary flasher as
+          // a full-LCD slab overwhelmed the page.
           const tagLength = s.tag.length;
-          const barSpace = LAYOUT.LCD_COLUMNS - tagLength - 1;
+          const barSpace = Math.min(RENDER.INDICATOR_BAR_CELLS, LAYOUT.LCD_COLUMNS - tagLength - 1);
           let barLength = Math.round(meterValue * barSpace);
           barLength = Math.max(0, Math.min(barSpace, barLength)); // Clamp to prevent invalid repeat counts
           const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
@@ -656,13 +823,22 @@ export function renderScreen(subs, ascii, logParam) {
         paramHtmlLines.push(fullHtml);
       }
     });
+    // Gang subtrees inline (#132): the routing-matrix groups render as part
+    // of THIS page (headers + leaf params), exactly like the hardware's
+    // ganged-parameter screens — never as softkeys. The pre-paint pass
+    // renders their cached structure with placeholder values (no fetches,
+    // no clickables) like every other param.
+    subs
+      .slice(1)
+      .filter((s) => isGangCol(s))
+      .forEach((s) => renderGangInline(s, 0, paramLines, paramHtmlLines, logParam));
     // Append only the first child sub-menu inline if available.
     // NOTE (R1, live-validated): an earlier filter here dropped ALL
     // position-0 COLs from the softkeys whenever the menu had any param,
     // which made mixed menus like 'program functions' (TRG + 8 position-0
     // COL children) unnavigable — the physical PROGRAM screen shows those
     // softkeys. Only the actually-embedded child is excluded, below.
-    localSoftSubs = subs.slice(1).filter((s) => s.type === 'COL');
+    localSoftSubs = subs.slice(1).filter((s) => s.type === 'COL' && !isGangCol(s));
     // Deterministic embed (R6, live-validated): only ever the FIRST
     // position-0 child in subs order may embed. The old loop embedded
     // whichever child's dump happened to have arrived — on 'program
@@ -749,8 +925,12 @@ export function renderScreen(subs, ascii, logParam) {
               childFullText = formatValue(conFormat, meterValue); // '%%' collapses in formatValue
               childFullHtml = childFullText;
             } else {
+              // Same compact indicator block as the top-level CON branch.
               const tagLength = cs.tag.length;
-              const barSpace = LAYOUT.LCD_COLUMNS - tagLength - 1;
+              const barSpace = Math.min(
+                RENDER.INDICATOR_BAR_CELLS,
+                LAYOUT.LCD_COLUMNS - tagLength - 1
+              );
               let barLength = Math.round(meterValue * barSpace);
               barLength = Math.max(0, Math.min(barSpace, barLength)); // Clamp to prevent invalid repeat counts
               const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
@@ -786,7 +966,9 @@ export function renderScreen(subs, ascii, logParam) {
     // Set softSubs: local if present, else immediate parent's COLs for leaf menus
     if (appState.keyStack.length > 0) {
       const parentEntry = appState.keyStack[appState.keyStack.length - 1];
-      const parentColSubs = (parentEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
+      const parentColSubs = (parentEntry.subs || [])
+        .slice(1)
+        .filter((s) => s.type === 'COL' && !isGangCol(s)); // gang groups are page content, never softkeys (#132)
       softSubs = localSoftSubs.length > 0 ? localSoftSubs : parentColSubs;
     } else {
       softSubs = localSoftSubs;
@@ -831,7 +1013,9 @@ export function renderScreen(subs, ascii, logParam) {
           displayLines.push('');
           ancestorSeparatorAdded = true;
         }
-        const parentSoftSubs = (parentEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
+        const parentSoftSubs = (parentEntry.subs || [])
+          .slice(1)
+          .filter((s) => s.type === 'COL' && !isGangCol(s)); // gang groups are page content, never softkeys (#132)
         const parentHighlightKey = appState.currentKey;
         let parentSoftTextLines = [];
         for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
@@ -863,7 +1047,9 @@ export function renderScreen(subs, ascii, logParam) {
         !upperEntry.key.startsWith(KEY_PREFIX.DSP_B)
       ) {
         // Skip if grandparent is preset
-        const upperSoftSubs = (upperEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
+        const upperSoftSubs = (upperEntry.subs || [])
+          .slice(1)
+          .filter((s) => s.type === 'COL' && !isGangCol(s)); // gang groups are page content, never softkeys (#132)
         const upperHighlightKey = appState.keyStack[appState.keyStack.length - 1].key;
         let upperSoftTextLines = [];
         for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {
@@ -931,7 +1117,9 @@ export function renderScreen(subs, ascii, logParam) {
           mainHtmlLines.push('');
           ancestorSeparatorAdded = true;
         }
-        const parentSoftSubs = (parentEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
+        const parentSoftSubs = (parentEntry.subs || [])
+          .slice(1)
+          .filter((s) => s.type === 'COL' && !isGangCol(s)); // gang groups are page content, never softkeys (#132)
         const parentHighlightKey = appState.currentKey;
         let parentSoftHtmlLines = [];
         for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
@@ -968,7 +1156,9 @@ export function renderScreen(subs, ascii, logParam) {
         !upperEntry.key.startsWith(KEY_PREFIX.DSP_B)
       ) {
         // Skip if grandparent is preset
-        const upperSoftSubs = (upperEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
+        const upperSoftSubs = (upperEntry.subs || [])
+          .slice(1)
+          .filter((s) => s.type === 'COL' && !isGangCol(s)); // gang groups are page content, never softkeys (#132)
         const upperHighlightKey = appState.keyStack[appState.keyStack.length - 1].key;
         let upperSoftHtmlLines = [];
         for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {
@@ -1000,10 +1190,17 @@ export function renderScreen(subs, ascii, logParam) {
     bottomHtml = softHtml;
   }
   lcdEl.innerHTML = `<div class="top-docked">${topHtml}</div><div class="main-content">${mainHtmlLines.join('\n')}</div><div class="bottom-docked">${bottomHtml}</div>`;
-  // Add change listeners to selects
+  // Add change listeners to selects. The change discard runs after
+  // handleSelectChange (registration order) so a stale parked paint never
+  // replays over the post-change refresh; blur replays the latest deferred
+  // paint when the user closes the dropdown without changing (#131).
   lcdEl.querySelectorAll('select[data-key]').forEach((select) => {
     select.removeEventListener('change', handleSelectChange);
     select.addEventListener('change', handleSelectChange);
+    select.removeEventListener('change', discardDeferredPaint);
+    select.addEventListener('change', discardDeferredPaint);
+    select.removeEventListener('blur', flushDeferredPaint);
+    select.addEventListener('blur', flushDeferredPaint);
   });
   // Add click listeners to param-value for NUM and TRG editing
   lcdEl.querySelectorAll('.param-value').forEach((span) => {

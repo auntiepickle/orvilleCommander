@@ -48,7 +48,7 @@ import { renderBitmap } from './bitmap.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendSysEx } from './midi.js';
-import { getNode, parentOf, deriveKeyStack } from './tree.js';
+import { getNode, parentOf, deriveKeyStack, withinGangOf, isGangCol } from './tree.js';
 import { startEagerLoad } from './eager-loader.js';
 import { CMD, KEY, KEY_PREFIX, PARAM_TYPES } from './sysex-commands.js';
 import { log } from './logger.js';
@@ -80,7 +80,13 @@ export function registerEventBridge({ hideLoading }) {
       // (e.g. the multi-second bank list the program menu embeds) land AFTER
       // the wave has already watchdogged and settled, and nothing ever
       // repaints — the embed only appeared after navigating away and back.
-      else if (parentOf(key) === appState.currentKey && getNode(key)) render();
+      // Gang grandchildren count too (#132): the inlined routing-matrix
+      // leaves arrive two gang levels below the menu.
+      else if (
+        (parentOf(key) === appState.currentKey || withinGangOf(key, appState.currentKey)) &&
+        getNode(key)
+      )
+        render();
 
       // C2 landing: the root dump arrived while a connect is pending.
       // selectPorts reset currentKey to root, so the progressive root paint
@@ -119,9 +125,14 @@ export function registerEventBridge({ hideLoading }) {
         setState({ pendingDescend: false, pendingLanding: null }, 'bridge:descend-consume');
         const children = subs.slice(1);
         const hasParams = children.some((s) => PARAM_TYPES.includes(s.type));
-        // T1b: every COL child counts (labels no longer gate navigability).
-        const colChildren = children.filter((s) => s.type === 'COL');
-        if (!hasParams && colChildren.length > 1) {
+        // T1b: every COL child counts (labels no longer gate navigability) —
+        // EXCEPT gang groups (#132 review blocker): they are page content
+        // (renderGangInline assembles them into this menu's one-page
+        // matrix), so a menu whose children are gang groups must render
+        // here, never auto-descend into its first group.
+        const colChildren = children.filter((s) => s.type === 'COL' && !isGangCol(s));
+        const hasGang = children.some((s) => isGangCol(s));
+        if (!hasParams && !hasGang && colChildren.length > 1) {
           log(
             `Auto-loading first menu: ${colChildren[0].key} - ${colChildren[0].tag || colChildren[0].statement}`,
             'info',
@@ -141,8 +152,24 @@ export function registerEventBridge({ hideLoading }) {
     })
   );
 
+  // Faceplate BUSY LED (#131): the hardware semantic is "lit while data
+  // moves on the MIDI link" (manual p.10), which maps exactly onto the
+  // dump-wave lifecycle — on at wave open, off when the wave settles. This
+  // is presentation only; absence of the element (tests, headless) is fine.
+  const setBusyLed = (lit) => {
+    const led = document.getElementById('busy-led');
+    if (led) led.classList.toggle('lit', lit);
+  };
+
+  unsubscribers.push(
+    on('wave:opened', () => {
+      setBusyLed(true);
+    })
+  );
+
   unsubscribers.push(
     on('dumpComplete', (payload) => {
+      setBusyLed(false);
       render();
       // A stalled wave invalidates any pending one-shot: do not land or
       // descend from stale state (C2 design step 4).

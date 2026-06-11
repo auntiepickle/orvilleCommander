@@ -1,7 +1,7 @@
 // controls.js
 import { sendKeypress, sendSysEx, sendValueDump, isWaveOpen } from './midi.js';
 import { CMD, KEY } from './sysex-commands.js';
-import { TIMING } from './constants.js';
+import { TIMING, KNOB } from './constants.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
@@ -68,10 +68,23 @@ export const keypressMasks = {
  *
  * @returns {boolean} Whether the tick ran (false = gated). For tests/logs.
  */
+// Param types the slow poll lane refreshes — the on-page values the device
+// can change on its own (midiclock Tempo, ganged siblings). COL/TRG/empty
+// carry no refreshable value.
+const POLLABLE_PARAM_TYPES = ['NUM', 'SET', 'INF', 'STR'];
+let pollTickCount = 0;
+
 export function meterPollTick() {
   if (isWaveOpen()) return false;
-  for (const sub of appState.currentSubs.filter((s) => s.type === 'CON')) {
-    sendValueDump(sub.key);
+  pollTickCount++;
+  // Slow lane (live-observed under external clock): the device updates
+  // values by itself — the midiclock-measured Tempo BPM was frozen at its
+  // navigation-time value because only CONs ever re-polled. Every Nth tick
+  // refreshes the page's other params too.
+  const refreshParams = pollTickCount % TIMING.PARAM_REFRESH_TICKS === 0;
+  for (const sub of appState.currentSubs) {
+    if (sub.type === 'CON') sendValueDump(sub.key);
+    else if (refreshParams && POLLABLE_PARAM_TYPES.includes(sub.type)) sendValueDump(sub.key);
   }
   return true;
 }
@@ -169,6 +182,72 @@ export function setupKeypressControls() {
       });
     }
   });
+}
+
+/**
+ * The DATA KNOB (manual p.9 item L): wheel-scroll or vertical drag spins
+ * it; every detent sends one INC/DEC keypress immediately (so a fast spin
+ * streams keypresses like the real encoder), and ONE trailing screen
+ * refresh fires after the spin settles — per-detent updateScreen calls
+ * would saturate the link the way unguarded meter polling did (#107).
+ *
+ * @example
+ * // Called in main.js after DOM load
+ * setupDataKnob();
+ */
+export function setupDataKnob() {
+  const knob = document.getElementById('data-knob');
+  if (!knob) return;
+  const pointer = knob.querySelector('.knob-pointer');
+  let angle = 0;
+  let settleHandle = null;
+
+  const spin = (direction) => {
+    angle += direction * KNOB.DETENT_DEG;
+    if (pointer) pointer.style.transform = `rotate(${angle}deg)`;
+    sendKeypress(keypressMasks[direction > 0 ? 'inc' : 'dec']);
+    if (settleHandle) clearTimeout(settleHandle);
+    settleHandle = setTimeout(() => {
+      settleHandle = null;
+      updateScreen();
+      if (appState.fetchBitmap) sendSysEx(CMD.GET_SCREEN, []);
+    }, KNOB.SETTLE_REFRESH_MS);
+  };
+
+  // Accumulate wheel travel into detents (review): pixel-mode trackpads
+  // stream dozens of small-delta events per flick, and a per-event detent
+  // would burst keypresses onto the link; zero-delta events (horizontal
+  // scroll over the knob) must not spin at all — INC/DEC mutate the
+  // selected parameter on the device.
+  let wheelTravel = 0;
+  knob.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    if (e.deltaY === 0) return;
+    wheelTravel += e.deltaY;
+    while (Math.abs(wheelTravel) >= KNOB.WHEEL_DELTA_PER_DETENT) {
+      spin(wheelTravel < 0 ? 1 : -1);
+      wheelTravel -= Math.sign(wheelTravel) * KNOB.WHEEL_DELTA_PER_DETENT;
+    }
+  });
+
+  let dragLastY = null;
+  knob.addEventListener('pointerdown', (e) => {
+    dragLastY = e.clientY;
+    knob.setPointerCapture(e.pointerId);
+  });
+  knob.addEventListener('pointermove', (e) => {
+    if (dragLastY === null) return;
+    const travel = dragLastY - e.clientY; // drag up = increment
+    if (Math.abs(travel) >= KNOB.DRAG_PX_PER_DETENT) {
+      spin(travel > 0 ? 1 : -1);
+      dragLastY = e.clientY;
+    }
+  });
+  const endDrag = () => {
+    dragLastY = null;
+  };
+  knob.addEventListener('pointerup', endDrag);
+  knob.addEventListener('pointercancel', endDrag);
 }
 
 /**

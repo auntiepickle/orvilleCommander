@@ -3,7 +3,7 @@ import { WebMidi } from 'webmidi';
 import { CMD, KEY } from './sysex-commands.js';
 import { TIMING, DEFAULT_LOG_CATEGORIES } from './constants.js';
 import { loadConfig, saveConfig, clearConfig, mergeLogCategories } from './config.js';
-import { setupKeypressControls, testKeypress, meterPollTick } from './controls.js';
+import { setupKeypressControls, setupDataKnob, testKeypress, meterPollTick } from './controls.js';
 import {
   setMidiPorts,
   addSysexListener,
@@ -360,6 +360,7 @@ if (testTRateBtn) {
 }
 
 setupKeypressControls();
+setupDataKnob();
 
 const cachedConfig = loadConfig(
   deviceIdInput,

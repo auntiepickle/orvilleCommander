@@ -64,7 +64,8 @@ await import('../src/main.js');
 const { appState } = await import('../src/state.js');
 const { setState } = await import('../src/store.js');
 const { updateScreen } = await import('../src/renderer.js');
-const { deriveKeyStack, getNode, recordDump } = await import('../src/tree.js');
+const { deriveKeyStack, getNode, recordDump, isGangCol, GANG_MAX_DEPTH } =
+  await import('../src/tree.js');
 const { KEY, CMD, SYSEX, TYPE_EMPTY } = await import('../src/sysex-commands.js');
 const { log } = await import('../src/logger.js');
 
@@ -256,10 +257,24 @@ for (const [key, node] of colNodes) {
   const embedCandidate = children.find(
     (s) => s.type === 'COL' && s.position === '0' && s.parent === key
   );
+  // #132: gang COL children render INLINE (group headers + leaf params),
+  // never as softkeys — mirror the renderer: reachable when any descendant
+  // param's data-key (or the group's header text) made it into the page.
+  const gangContentRendered = (c, depth = 0) => {
+    if (depth > GANG_MAX_DEPTH) return false;
+    if (c.statement && mainText.includes(c.statement.trim())) return true;
+    for (const s of (getNode(c.key) || []).slice(1)) {
+      if (s.type === 'COL') {
+        if (isGangCol(s) && gangContentRendered(s, depth + 1)) return true;
+      } else if (mainKeys.includes(s.key)) return true;
+    }
+    return false;
+  };
   for (const c of children.filter((s) => s.type === 'COL')) {
     const asSoftkey = mainKeys.includes(c.key);
     const asEmbed = c.key === embedCandidate?.key && (getNode(c.key)?.length || 0) > 0;
-    if (!asSoftkey && !asEmbed) {
+    const asGangInline = isGangCol(c) && gangContentRendered(c);
+    if (!asSoftkey && !asEmbed && !asGangInline) {
       flag(
         key,
         'unreachable-child',
@@ -275,6 +290,13 @@ for (const [key, node] of colNodes) {
     const tagFrag = (p.tag || '').trim();
     const valFrag = (p.value || '').trim().slice(0, 20);
     if (!stmtFrag && !tagFrag && !valFrag) continue; // blank spacers: render-skip by design
+    // Inert SET slots (first seen at depth 4, the trig/nextprog pages):
+    // whitespace-only statement, dash tag, ZERO options (a vestigial '0'
+    // value index) — the device's dynamically-populated placeholders
+    // (filled when e.g. a trig mode is armed). With no options there is
+    // nothing to render or edit; a blank line is the hardware-faithful
+    // presentation.
+    if (p.type === 'SET' && (p.options || []).length === 0 && !stmtFrag) continue;
     if (p.type === 'INF' && !stmtFrag && !valFrag) continue; // pure-format INF, value arrives later
     // Format-only CON (statement blank, tag IS the format spec — the pedal
     // monitors): renders as pure formatted value with no stable literal and

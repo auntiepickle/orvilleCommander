@@ -307,33 +307,36 @@ body {
     inset 0 2px 8px rgba(0, 0, 0, 0.8),
     0 1px 0 rgba(255, 255, 255, 0.05);
 }
-/* The glass pane over the display (maintainer ask: "a real screen").
-   Pure CSS, no library — three stacked cues of real glass at viewing
-   angle: a diagonal specular sweep (the room's key light), a top
-   curvature sheen (the pane's convex bow), and an inset vignette (the
-   glass thickness meeting the bezel). Alphas stay low so the phosphor
-   glyphs lose no contrast. inset matches the bezel's 24px padding, so
-   the pane sits exactly over the LCD glass. */
+/* The tempered-glass pane over the display (maintainer direction: ONE
+   uniform sheet covering the whole inlay — bezel edge to bezel edge,
+   dark margin and phosphor alike — as if the assembled display module
+   were capped with a single piece of glass). Pure CSS, no library.
+   Cues: a single diagonal specular sweep across the full pane (the
+   room's key light on flat glass), a faint top sheen, a bright 1px
+   polished-edge ring (tempered glass edges catch light), and a wide
+   soft vignette where the sheet meets the bezel frame. Alphas stay low
+   so the phosphor glyphs lose no contrast. inset 2px = just inside the
+   bezel's frame line, so the pane spans the entire recess. */
 .glass {
   position: absolute;
-  inset: 24px;
+  inset: 2px;
   pointer-events: none;
-  border-radius: 2px;
+  border-radius: 4px;
   background:
     linear-gradient(
       115deg,
-      rgba(255, 255, 255, 0.09) 0%,
-      rgba(255, 255, 255, 0.03) 12%,
-      transparent 24%,
-      transparent 72%,
-      rgba(255, 255, 255, 0.025) 88%,
-      rgba(255, 255, 255, 0.05) 100%
+      rgba(255, 255, 255, 0.1) 0%,
+      rgba(255, 255, 255, 0.035) 10%,
+      transparent 22%,
+      transparent 74%,
+      rgba(255, 255, 255, 0.03) 90%,
+      rgba(255, 255, 255, 0.06) 100%
     ),
-    radial-gradient(130% 65% at 50% -12%, rgba(255, 255, 255, 0.07), transparent 55%);
+    radial-gradient(140% 70% at 50% -15%, rgba(255, 255, 255, 0.05), transparent 60%);
   box-shadow:
-    inset 0 0 26px rgba(0, 0, 0, 0.32),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 34px rgba(0, 0, 0, 0.28);
 }
 #lcd {
   position: relative;

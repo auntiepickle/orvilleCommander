@@ -6,11 +6,21 @@ import {
   loadConfig,
   saveConfig,
   saveThemeConfig,
+  saveLibraryConfig,
   clearConfig,
   mergeLogCategories,
 } from './config.js';
 import { setupThemeEditor } from './theme.js';
 import { createDemoPorts, DEMO_NODE_COUNT } from './demo.js';
+import {
+  getLibrary,
+  setLibrary,
+  searchLibrary,
+  syncLibrary,
+  isSyncing,
+  cancelSync,
+  loadSearchHit,
+} from './library.js';
 import { setupKeypressControls, setupDataKnob, testKeypress, meterPollTick } from './controls.js';
 import {
   setMidiPorts,
@@ -451,6 +461,100 @@ setState(
   },
   'main:boot-init'
 );
+// Preset library + search (#142). The library hydrates from persisted
+// config; Sync Library runs the full bank scan (several minutes, progress
+// on the button, click again to cancel); search results load into the
+// active DSP.
+function setupLibraryUI() {
+  const searchInput = document.getElementById('preset-search');
+  const resultsEl = document.getElementById('search-results');
+  const syncBtn = document.getElementById('sync-library');
+  if (!searchInput || !resultsEl || !syncBtn) return;
+
+  setLibrary(cachedConfig?.presetLibrary);
+  const refreshPlaceholder = () => {
+    const lib = getLibrary();
+    searchInput.placeholder = lib
+      ? `Search ${lib.banks.reduce((n, b) => n + b.programs.length, 0)} presets`
+      : 'Search presets (sync first)';
+  };
+  refreshPlaceholder();
+
+  const hideResults = () => {
+    resultsEl.hidden = true;
+  };
+  const renderResults = () => {
+    const query = searchInput.value;
+    if (!query.trim()) {
+      hideResults();
+      return;
+    }
+    const hits = searchLibrary(query);
+    resultsEl.innerHTML = '';
+    if (!getLibrary()) {
+      const empty = document.createElement('div');
+      empty.className = 'search-empty';
+      empty.textContent = 'No library yet - run Sync Library first.';
+      resultsEl.appendChild(empty);
+    } else if (hits.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'search-empty';
+      empty.textContent = 'No matching presets.';
+      resultsEl.appendChild(empty);
+    } else {
+      for (const hit of hits) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'search-hit';
+        row.innerHTML = `<span class="hit-bank">${hit.bankName} &rsaquo;</span> ${hit.programName}`;
+        // mousedown, not click: it fires before the input's blur hides
+        // the dropdown.
+        row.addEventListener('mousedown', (ev) => {
+          ev.preventDefault();
+          hideResults();
+          searchInput.value = '';
+          loadSearchHit(hit, () => {
+            sendObjectInfoDump(KEY.ROOT); // refresh the DSP preset names
+            updateScreen(log);
+            if (appState.fetchBitmap) sendSysEx(CMD.GET_SCREEN, []);
+          });
+        });
+        resultsEl.appendChild(row);
+      }
+    }
+    resultsEl.hidden = false;
+  };
+  searchInput.addEventListener('input', renderResults);
+  searchInput.addEventListener('focus', renderResults);
+  searchInput.addEventListener('blur', hideResults);
+  searchInput.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') {
+      searchInput.value = '';
+      hideResults();
+    }
+  });
+
+  syncBtn.addEventListener('click', async () => {
+    if (isSyncing()) {
+      cancelSync();
+      syncBtn.textContent = 'Cancelling...';
+      return;
+    }
+    const library = await syncLibrary((done, total, bankName) => {
+      syncBtn.textContent = `Syncing ${done + 1}/${total}: ${bankName.slice(0, 18)}`;
+    });
+    if (library) {
+      saveLibraryConfig(library);
+      log(`Library synced: ${library.banks.length} banks`, 'info', 'general');
+    } else if (!getLibrary()) {
+      log('Library sync produced nothing - is the program page loaded?', 'error', 'error');
+    }
+    syncBtn.textContent = 'Sync Library';
+    refreshPlaceholder();
+  });
+}
+setupLibraryUI();
+
 // Theme editor (theme.js): applies the persisted theme at boot, then saves
 // on every preset/swatch change — independent of the Save Config button.
 setupThemeEditor(

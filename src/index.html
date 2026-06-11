@@ -32,6 +32,26 @@
           Demo Mode
         </button>
         <span class="conn-spacer"></span>
+        <!-- Preset library (#142): search across every synced bank; Sync
+             Library scans all banks (several minutes) and persists. -->
+        <span class="search-wrap">
+          <input
+            id="preset-search"
+            class="util-input util-search"
+            placeholder="Search presets (sync first)"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <div id="search-results" class="search-results" hidden></div>
+        </span>
+        <button
+          id="sync-library"
+          class="util-btn"
+          title="Scan every bank's program list so search covers the whole unit (several minutes)"
+        >
+          Sync Library
+        </button>
+        <span class="conn-spacer"></span>
         <button id="save-config" class="util-btn">Save Config</button>
         <button id="clear-config" class="util-btn">Clear Config</button>
       </header>

@@ -815,6 +815,53 @@ body {
   flex: 1;
   min-width: 240px;
 }
+/* Preset search (#142): results drop below the conn-strip input. */
+.search-wrap {
+  position: relative;
+}
+.util-search {
+  width: 240px;
+}
+.search-results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 340px;
+  max-height: 380px;
+  overflow-y: auto;
+  background: #121315;
+  border: 1px solid var(--panel-line);
+  border-radius: 4px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.6);
+  z-index: 10; /* above the faceplate */
+}
+.search-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  font-family: var(--legend-font);
+  font-size: 12px;
+  color: var(--legend);
+  background: none;
+  border: none;
+  border-bottom: 1px solid #1b1d20;
+  cursor: pointer;
+}
+.search-hit:hover {
+  background: var(--btn-cap);
+}
+.search-hit .hit-bank {
+  color: var(--legend-dim);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+.search-empty {
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--legend-dim);
+}
+
 .util-label {
   font-size: 10px;
   font-weight: 600;

@@ -44,6 +44,7 @@ import {
   sendValuePut,
   sendKeypress,
   addSysexListener,
+  inboundFrameError,
 } from '../src/midi.js';
 import { parseResponse } from '../src/parser.js';
 import { on } from '../src/events.js';
@@ -388,12 +389,15 @@ describe('addSysexListener multi-packet reassembly', () => {
   });
 
   test('reassembles a SysEx split across packets and parses once on F7', () => {
-    handler({ data: [0xf0, 0x1c, 0x70, 1, 0x17, 0x01, 0x02] }); // header packet, no F7
+    // 0x32 fixture: reassembly mechanics are command-agnostic, and a tiny
+    // 0x17 payload would now (correctly) be rejected by the #47 boundary
+    // validation as shorter than the screen header.
+    handler({ data: [0xf0, 0x1c, 0x70, 1, 0x32, 0x41, 0x42] }); // header packet, no F7
     expect(parseResponse).not.toHaveBeenCalled();
-    handler({ data: [0x03, 0x04, 0xf7] }); // continuation + terminator
+    handler({ data: [0x43, 0x44, 0xf7] }); // continuation + terminator
     expect(parseResponse).toHaveBeenCalledTimes(1);
     expect(parseResponse).toHaveBeenCalledWith([
-      0xf0, 0x1c, 0x70, 1, 0x17, 0x01, 0x02, 0x03, 0x04, 0xf7,
+      0xf0, 0x1c, 0x70, 1, 0x32, 0x41, 0x42, 0x43, 0x44, 0xf7,
     ]);
   });
 
@@ -410,12 +414,13 @@ describe('addSysexListener multi-packet reassembly', () => {
   });
 
   test('reassembles a SysEx split across three packets', () => {
-    handler({ data: [0xf0, 0x1c, 0x70, 1, 0x17] }); // header
-    handler({ data: [0x01, 0x02] }); // middle continuation
+    // 0x32 fixture for the same reason as above (#47 boundary validation).
+    handler({ data: [0xf0, 0x1c, 0x70, 1, 0x32] }); // header
+    handler({ data: [0x41, 0x42] }); // middle continuation
     expect(parseResponse).not.toHaveBeenCalled();
-    handler({ data: [0x03, 0xf7] }); // final continuation + terminator
+    handler({ data: [0x43, 0xf7] }); // final continuation + terminator
     expect(parseResponse).toHaveBeenCalledTimes(1);
-    expect(parseResponse).toHaveBeenCalledWith([0xf0, 0x1c, 0x70, 1, 0x17, 0x01, 0x02, 0x03, 0xf7]);
+    expect(parseResponse).toHaveBeenCalledWith([0xf0, 0x1c, 0x70, 1, 0x32, 0x41, 0x42, 0x43, 0xf7]);
   });
 
   test('ignores a stray continuation packet (no F0 header) ending in F7', () => {
@@ -448,6 +453,66 @@ describe('addSysexListener multi-packet reassembly', () => {
 
     const msg = [0xf0, 0x1c, 0x70, 1, 0x2e, 0x41, 0xf7];
     newInput.listeners.forEach((cb) => cb({ data: msg }));
+    expect(parseResponse).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('inbound frame validation (#47)', () => {
+  const F = (bytes) => [0xf0, ...bytes, 0xf7];
+
+  test('accepts every known-good frame shape', () => {
+    expect(inboundFrameError(F([0x1c, 0x70, 1, 0x32, 0x43, 0x4f, 0x4c]))).toBeNull(); // OBJECTINFO 'COL'
+    expect(inboundFrameError(F([0x1c, 0x70, 1, 0x2e, 0x41]))).toBeNull(); // VALUE_DUMP
+    // Screen dump: header-sized even nibble payload.
+    expect(inboundFrameError(F([0x1c, 0x70, 1, 0x17, ...new Array(24).fill(0)]))).toBeNull();
+    // Unknown command: passes through (the parser ignores it; rejecting
+    // would outlaw discovery captures).
+    expect(inboundFrameError(F([0x1c, 0x70, 1, 0x99, 0x01]))).toBeNull();
+  });
+
+  test('rejects malformed Eventide frames at error severity', () => {
+    expect(inboundFrameError([0xf0, 0x1c, 0x70, 0xf7])).toMatchObject({ severity: 'error' }); // too short
+    expect(inboundFrameError(F([0x1c, 0x70, 1, 0x32]))).toMatchObject({
+      reason: expect.stringContaining('empty OBJECTINFO'),
+      severity: 'error',
+    });
+    expect(inboundFrameError(F([0x1c, 0x70, 1, 0x2e]))).toMatchObject({
+      reason: expect.stringContaining('empty VALUE_DUMP'),
+      severity: 'error',
+    });
+    expect(inboundFrameError(F([0x1c, 0x70, 1, 0x17, ...new Array(25).fill(0)]))).toMatchObject({
+      reason: expect.stringContaining('odd screen-dump nibble count'),
+      severity: 'error',
+    });
+    expect(inboundFrameError(F([0x1c, 0x70, 1, 0x17, ...new Array(22).fill(0)]))).toMatchObject({
+      reason: expect.stringContaining('shorter than its header'),
+      severity: 'error',
+    });
+  });
+
+  test('foreign-manufacturer frames reject at debug severity (shared port is not a malfunction)', () => {
+    expect(inboundFrameError(F([0x43, 0x10, 1, 0x32, 0x41]))).toMatchObject({
+      reason: expect.stringContaining('not an Eventide frame'),
+      severity: 'debug',
+    });
+  });
+
+  test('the listener drops rejected frames before parseResponse and keeps accepting after', () => {
+    let handler;
+    const input = {
+      addListener: (type, fn) => {
+        handler = fn;
+      },
+      removeListener: jest.fn(),
+    };
+    setMidiPorts({ sendSysex: jest.fn() }, input, 0);
+    addSysexListener();
+    parseResponse.mockClear();
+
+    handler({ data: [0xf0, 0x43, 0x10, 1, 0x32, 0x41, 0xf7] }); // foreign: dropped
+    expect(parseResponse).not.toHaveBeenCalled();
+
+    handler({ data: [0xf0, 0x1c, 0x70, 1, 0x32, 0x41, 0xf7] }); // valid: parsed
     expect(parseResponse).toHaveBeenCalledTimes(1);
   });
 });

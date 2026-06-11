@@ -495,6 +495,12 @@ describe('inbound frame validation (#47)', () => {
       reason: expect.stringContaining('not an Eventide frame'),
       severity: 'debug',
     });
+    // Even a TOO-SHORT foreign frame is debug, not error (review fix:
+    // manufacturer is checked before length).
+    expect(inboundFrameError([0xf0, 0x7d, 0x01, 0xf7])).toMatchObject({
+      reason: expect.stringContaining('not an Eventide frame'),
+      severity: 'debug',
+    });
   });
 
   test('the listener drops rejected frames before parseResponse and keeps accepting after', () => {

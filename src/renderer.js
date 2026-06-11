@@ -15,6 +15,7 @@ import {
   GANG_MAX_DEPTH,
 } from './tree.js';
 import { log } from './logger.js';
+import { isSyncing } from './library.js';
 
 /**
  * Updates the current screen by requesting OBJECTINFO_DUMP and VALUE_DUMP for the current key.
@@ -153,6 +154,13 @@ const handleLcdClick = (e) => {
  * @param {Event} e - The change event.
  */
 const handleSelectChange = (e) => {
+  // The library scan owns the bank/program selection while it runs — a
+  // user put interleaved with it lands in whatever bank the scan happens
+  // to be visiting, and the program auto-load would fire there (review).
+  if (isSyncing()) {
+    log('Value change ignored: library sync in progress', 'error', 'error');
+    return;
+  }
   const key = e.target.dataset.key;
   const selectedIndex = e.target.value;
   const selectedDesc = e.target.options[e.target.selectedIndex].text;
@@ -342,6 +350,10 @@ function beginInlineEdit(span, sub, { validate, maxLength }) {
 }
 
 const handleParamClick = (e) => {
+  if (isSyncing()) {
+    log('Edit ignored: library sync in progress', 'error', 'error');
+    return;
+  }
   if (e.target.classList.contains('param-value')) {
     const key = e.target.dataset.key;
     // Find the sub for title and limits (tree lookup for embedded children)

@@ -110,6 +110,20 @@ export function saveThemeConfig(theme) {
   log(`Theme saved: ${theme.preset}`, 'debug', 'general');
 }
 
+/**
+ * Persists the synced preset library (#142) into midiConfig without
+ * touching the rest — banks/programs change rarely, so the library lives
+ * until the user re-syncs.
+ *
+ * @param {{banks: Object[], syncedAt: string}} library
+ */
+export function saveLibraryConfig(library) {
+  const existing = readStoredConfig();
+  existing.presetLibrary = library;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+  log(`Preset library saved (${library.banks.length} banks)`, 'info', 'general');
+}
+
 // Stored config, tolerating corruption (review): the read-modify-write
 // savers must remain the self-healing path — a corrupt midiConfig string
 // becomes an empty object and the next save overwrites it, instead of

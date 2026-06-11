@@ -91,6 +91,23 @@ export const KNOB = {
   //                              from bursting keypresses onto the 31250-baud link (review)
 };
 
+// Library sync + preset search (#142, src/library.js).
+export const LIBRARY = {
+  BANK_SETTLE_MS: 600, // wait after a bank PUT before requesting the load-menu
+  //                      dump: the device needs to re-list its program SET
+  //                      first (the #138 probes showed echoes inside ~100ms;
+  //                      600ms is a comfortable multiple, still negligible
+  //                      next to the ~4s dump transfer per bank)
+  BANK_DUMP_TIMEOUT_MS: 15000, // give up on one bank's dump and move on: well
+  //                              past the ~4-5s live-measured transfer, so it
+  //                              only fires on a genuinely dropped response
+  SEARCH_MAX_RESULTS: 24, // results dropdown cap — about a screenful; typing
+  //                         more letters narrows better than scrolling
+  LOAD_SETTLE_MS: 600, // wait between the search-load sequence's puts (bank ->
+  //                      program -> load trigger): same settle rationale as
+  //                      BANK_SETTLE_MS, applied to each step
+};
+
 // Demo mode (src/demo.js): the canned device built from a live capture.
 export const DEMO = {
   REPLY_LATENCY_MS: 25, // per-reply delay so the dump-wave lifecycle (BUSY

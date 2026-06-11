@@ -169,8 +169,14 @@ const handleSelectChange = (e) => {
   e.target.blur();
   showLoading();
   sendValuePut(key, selectedIndex);
+  // Optimistic cache in the DEVICE's value shape: puts are parsed decimal
+  // but values/echoes report the index in HEX (probed live,
+  // logs/probe-bank-radix.mjs) — and renderScreen decodes the first token
+  // with parseInt(_, 16). Caching the decimal index mis-selected options
+  // >= 10 on every repaint until the echo corrected it.
+  const optimisticValue = `${parseInt(selectedIndex, 10).toString(16)} ${selectedDesc}`;
   setState(
-    { currentValues: { ...appState.currentValues, [key]: `${selectedIndex} ${selectedDesc}` } },
+    { currentValues: { ...appState.currentValues, [key]: optimisticValue } },
     'renderer:select-change-value-cache'
   ); // Removed immediate renderScreen to avoid old subs with new value
   setTimeout(() => {
@@ -182,14 +188,18 @@ const handleSelectChange = (e) => {
       // (#138). One targeted dump is a single wave; the R7 child-arrival
       // repaint (or the progressive paint, if the load menu IS the current
       // key) updates the dropdowns the moment it lands.
-      // Prune the load menu's cached values first (review blocker): this
+      // Prune the load menu's STALE cached values (review blocker): this
       // branch skips updateScreen's full currentValues clear, and a stale
       // cache entry shadows the fresh dump's value in the render
       // precedence (currentValues[key] || s.value) — the program dropdown
       // would keep the OLD bank's selection and never self-correct.
+      // The BANK key itself is deliberately KEPT: it holds the user's
+      // just-made choice (optimistic hex cache above, confirmed by the
+      // echo) — pruning it made the dropdown visibly SNAP BACK to the old
+      // bank for the ~5s dump transfer, which the maintainer read as the
+      // selection not taking at all (live-reproduced).
       const pruned = { ...appState.currentValues };
       delete pruned[KEY.PROGRAM_SELECT];
-      delete pruned[KEY.BANK_SELECT];
       delete pruned[KEY.FAVORITES];
       setState({ currentValues: pruned }, 'renderer:bank-change-prune');
       sendObjectInfoDump(KEY.FAVORITES);
@@ -467,12 +477,41 @@ let prePainting = false;
 // instead — handleSelectChange's own updateScreen supersedes it.
 let deferredPaint = null;
 
+// Which #lcd select currently has its native popup OPEN — inferred, since
+// Chrome exposes no API. mousedown on a select toggles its popup; change
+// and blur always close it. Inference matters (live bug, reproduced in
+// logs/probe-bank-focus.mjs): a select RETAINS focus after its popup
+// closes (after picking, after Esc, after a look), and parking on mere
+// focus froze every repaint indefinitely — the user watched the program
+// list never refilter after a bank change. Known gap: a keyboard-opened
+// popup (Alt+Down) is not inferred and may be closed by a repaint.
+let openLcdSelect = null;
+const handleSelectMousedown = (e) => {
+  const wasOpen = openLcdSelect === e.target;
+  openLcdSelect = wasOpen ? null : e.target;
+  if (wasOpen) flushDeferredPaint(); // toggle-close releases parked paints
+};
+const noteSelectClosed = (el) => {
+  if (openLcdSelect === el) openLcdSelect = null;
+};
+// change/blur both mean the popup is closed; they pair the close marker
+// with the existing #131 discard/flush semantics.
+const handleSelectChangeClosed = (e) => {
+  noteSelectClosed(e.target);
+  discardDeferredPaint();
+};
+const handleSelectBlurClosed = (e) => {
+  noteSelectClosed(e.target);
+  flushDeferredPaint();
+};
+
 function lcdSelectFocused(lcdEl) {
   const active = document.activeElement;
   if (!active || !lcdEl.contains(active)) return false;
-  // An open dropdown OR an in-glass inline editor (both are mid-interaction
-  // DOM a repaint would destroy).
-  return active.tagName === 'SELECT' || active.classList.contains('lcd-edit');
+  // The in-glass inline editor parks while focused (focus = mid-edit);
+  // a dropdown parks only while its popup is actually open.
+  if (active.classList.contains('lcd-edit')) return true;
+  return active.tagName === 'SELECT' && active === openLcdSelect;
 }
 
 const discardDeferredPaint = () => {
@@ -1261,13 +1300,16 @@ export function renderScreen(subs, ascii, logParam) {
   // handleSelectChange (registration order) so a stale parked paint never
   // replays over the post-change refresh; blur replays the latest deferred
   // paint when the user closes the dropdown without changing (#131).
+  // mousedown drives the popup-open inference; change/blur mark it closed.
   lcdEl.querySelectorAll('select[data-key]').forEach((select) => {
+    select.removeEventListener('mousedown', handleSelectMousedown);
+    select.addEventListener('mousedown', handleSelectMousedown);
     select.removeEventListener('change', handleSelectChange);
     select.addEventListener('change', handleSelectChange);
-    select.removeEventListener('change', discardDeferredPaint);
-    select.addEventListener('change', discardDeferredPaint);
-    select.removeEventListener('blur', flushDeferredPaint);
-    select.addEventListener('blur', flushDeferredPaint);
+    select.removeEventListener('change', handleSelectChangeClosed);
+    select.addEventListener('change', handleSelectChangeClosed);
+    select.removeEventListener('blur', handleSelectBlurClosed);
+    select.addEventListener('blur', handleSelectBlurClosed);
   });
   // Add click listeners to param-value for NUM and TRG editing
   lcdEl.querySelectorAll('.param-value').forEach((span) => {

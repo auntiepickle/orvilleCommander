@@ -140,7 +140,11 @@ describe('renderer.js', () => {
           { index: '0', desc: '0 Favorites' },
           { index: '50', desc: '50 Reverbs - Unusual' },
         ],
-        value: '32 50 Reverbs - Unusual',
+        // Starts on a DIFFERENT bank than the one the test selects, so the
+        // mid-transfer repaint assertion below can actually discriminate
+        // kept-cache vs old-tree-value (review: with old === chosen the
+        // pin was vacuous).
+        value: '0 0 Favorites',
       },
     ];
     renderScreen(subs, '', mockLog);
@@ -153,9 +157,15 @@ describe('renderer.js', () => {
     appState.currentValues['10020011'] = 'c Old Bank Program';
 
     jest.useFakeTimers();
-    select.value = '0';
+    select.value = '50'; // a HIGH index: decimal/hex diverge (the user's failing case)
     select.dispatchEvent(new Event('change', { bubbles: true }));
-    expect(sendValuePut).toHaveBeenCalledWith('10020012', '0');
+    // The put sends the DECIMAL index (the device parses puts decimal —
+    // probed live, logs/probe-bank-radix.mjs)...
+    expect(sendValuePut).toHaveBeenCalledWith('10020012', '50');
+    // ...while the optimistic cache holds the device's value shape: HEX
+    // index + desc. Caching decimal mis-selected options >= 10 on every
+    // repaint until the echo corrected it.
+    expect(appState.currentValues['10020012']).toBe('32 50 Reverbs - Unusual');
 
     jest.advanceTimersByTime(200);
     // Targeted: the load menu's dump + values (it carries both re-listed
@@ -166,10 +176,18 @@ describe('renderer.js', () => {
     // staled program subtree (13.3s measured live before the fix) —
     // first-arg sweep, so a one-arg regression cannot slip past.
     expect(sendObjectInfoDump.mock.calls.map((c) => c[0])).not.toContain('10020000');
-    // The stale program/bank cache entries are pruned so the fresh dump's
-    // values render.
+    // The stale program cache entry is pruned so the fresh dump's value
+    // renders; the BANK key is KEPT — the user's choice must stay on
+    // screen through the ~5s dump transfer (pruning it made the dropdown
+    // visibly snap back to the old bank — live-reproduced regression).
     expect(appState.currentValues['10020011']).toBeUndefined();
-    expect(appState.currentValues['10020012']).toBeUndefined();
+    expect(appState.currentValues['10020012']).toBe('32 50 Reverbs - Unusual');
+
+    // A mid-transfer repaint from the OLD tree state still shows the
+    // user's chosen bank (the optimistic cache shadows the old s.value).
+    renderScreen(subs, '', mockLog);
+    const repainted = document.querySelector('select[data-key="10020012"]');
+    expect(repainted.options[repainted.selectedIndex].text).toBe('50 Reverbs - Unusual');
     jest.useRealTimers();
   });
 
@@ -196,11 +214,26 @@ describe('renderer.js', () => {
     },
   ];
 
-  test('repaint defers while a SET dropdown is focused and flushes on blur (#131)', () => {
+  test('a focused-but-CLOSED dropdown never parks repaints (live bug: frozen program list)', () => {
+    // Chrome keeps focus on a select after its popup closes (after picking,
+    // after Esc, after a look) — parking on mere focus froze every repaint
+    // until a blur that never came (reproduced: logs/probe-bank-focus.mjs).
+    appState.currentKey = '10020000';
+    renderScreen(dropdownGuardSubs('Program'), '', mockLog);
+    const select = document.querySelector('select[data-key="10020011"]');
+    select.focus(); // focused, but no mousedown = popup never opened
+    expect(document.activeElement).toBe(select);
+
+    renderScreen(dropdownGuardSubs('ProgramRepainted'), '', mockLog);
+    expect(document.getElementById('lcd').innerHTML).toContain('ProgramRepainted');
+  });
+
+  test('repaint defers while a SET dropdown is OPEN and flushes on blur (#131)', () => {
     jest.useFakeTimers();
     appState.currentKey = '10020000';
     renderScreen(dropdownGuardSubs('Program'), '', mockLog);
     const select = document.querySelector('select[data-key="10020011"]');
+    select.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); // popup opens
     select.focus();
     expect(document.activeElement).toBe(select);
 
@@ -223,6 +256,7 @@ describe('renderer.js', () => {
     appState.currentKey = '10020000';
     renderScreen(dropdownGuardSubs('Program'), '', mockLog);
     const select = document.querySelector('select[data-key="10020011"]');
+    select.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); // popup opens
     select.focus();
 
     renderScreen(dropdownGuardSubs('StaleParkedPaint'), '', mockLog);

@@ -180,7 +180,9 @@ export function parseResponse(data) {
               );
               const currentProgramValue =
                 appState.currentValues[programSub.key] || programSub.value;
-              const currentIndex = parseInt(currentProgramValue.split(' ')[0], 10);
+              // The value's index token is HEX (device wire shape; the
+              // optimistic select cache matches it since #138's follow-up).
+              const currentIndex = parseInt(currentProgramValue.split(' ')[0], 16);
               if (newIndex !== -1 && newIndex !== currentIndex) {
                 log(
                   `Correcting selection after Favorites re-order: setting to index ${newIndex} for "${targetName}"`,

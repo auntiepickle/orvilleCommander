@@ -7,97 +7,178 @@
     <script type="module" src="main.js"></script>
   </head>
   <body>
-    <div class="front-panel">
-      <div class="level-meters">
-        <div class="meter">IN1</div>
-        <div class="meter">IN2</div>
-        <div class="meter">IN3</div>
-        <div class="meter">IN4</div>
-      </div>
-      <div id="lcd" class="lcd"></div>
-      <canvas id="lcd-canvas"></canvas>
-      <div class="function-buttons">
-        <button id="program-btn">PROGRAM</button>
-        <button id="program-hold-btn">PROGRAM (HOLD)</button>
-        <button id="parameter-btn">PARAMETER</button>
-        <button id="parameter-hold-btn">PARAMETER (HOLD)</button>
-        <button id="select-btn">SELECT</button>
-        <button id="select-hold-btn">SELECT (HOLD)</button>
-        <button id="levels-btn">LEVELS</button>
-        <button id="setup-btn">SETUP</button>
-      </div>
-      <div class="soft-keys">
-        <button id="soft1-btn">SOFT 1</button>
-        <button id="soft2-btn">SOFT 2</button>
-        <button id="soft3-btn">SOFT 3</button>
-        <button id="soft4-btn">SOFT 4</button>
-      </div>
-      <div class="nav-buttons">
-        <button id="ab-btn">A/B</button>
-        <button id="bypass-btn">BYPASS</button>
-        <button id="inc-btn">UP</button>
-        <button id="dec-btn">DOWN</button>
-      </div>
-      <div class="cursor-keys">
-        <button id="up-btn">↑</button>
-        <button id="left-btn">←</button>
-        <button id="down-btn">↓</button>
-        <button id="right-btn">→</button>
-      </div>
-      <div class="keypad">
-        <button id="1-btn">1</button>
-        <button id="2-btn">2</button>
-        <button id="3-btn">3</button>
-        <button id="4-btn">4</button>
-        <button id="5-btn">5</button>
-        <button id="6-btn">6</button>
-        <button id="7-btn">7</button>
-        <button id="8-btn">8</button>
-        <button id="9-btn">9</button>
-        <button id="dot-btn">.</button>
-        <button id="0-btn">0</button>
-        <button id="minus-btn">-</button>
-        <button id="cxl-btn">CXL</button>
-        <button id="enter-btn">ENT</button>
-      </div>
-    </div>
+    <main class="rack">
+      <!-- Connection strip: where a power/status section lives on hardware -->
+      <header class="conn-strip">
+        <span class="conn-label">MIDI</span>
+        <button id="connect" class="util-btn">Connect</button>
+        <select id="output-select" class="util-input" title="MIDI output port"></select>
+        <select id="input-select" class="util-input" title="MIDI input port"></select>
+        <label class="util-label" for="device-id">DEV ID</label>
+        <input
+          id="device-id"
+          class="util-input util-num"
+          type="number"
+          min="0"
+          max="127"
+          value="0"
+        />
+        <button id="select-ports" class="util-btn util-btn-primary">Select Ports</button>
+        <span class="conn-spacer"></span>
+        <button id="save-config" class="util-btn">Save Config</button>
+        <button id="clear-config" class="util-btn">Clear Config</button>
+      </header>
 
-    <div>
-      <button id="connect">Connect MIDI</button>
-      <select id="output-select"></select>
-      <select id="input-select"></select>
-      <input id="device-id" type="number" min="0" max="127" value="0" />
-      <select id="log-level">
-        <option value="debug">Debug</option>
-        <option value="info" selected>Info</option>
-        <option value="error">Error</option>
-      </select>
-      <button id="select-ports">Select Ports</button>
-      <button id="save-config">Save Config</button>
-      <button id="clear-config">Clear Config</button>
-    </div>
+      <!-- The unit -->
+      <section class="faceplate">
+        <div class="rack-ear rack-ear-left"><i class="screw"></i><i class="screw"></i></div>
 
-    <div>
-      <h3>Debug Tools</h3>
-      <button id="toggle-meter-polling">Toggle Meter Polling</button>
-      <span id="polling-indicator" style="display: none; color: green">Polling Active</span>
-      <button id="poll-toggle">Toggle Polling</button>
-      <input id="custom-sysex" placeholder="Custom SysEx hex (e.g., 01 0f 0f...)" />
-      <button id="send-custom">Send Custom</button>
-      <button id="copy-log">Copy Log</button>
-      <button id="test-keypress">Test Keypress</button>
-      <button id="sync-btn">Sync to Hardware</button>
-      <button id="get-screen-btn">Get Screen Bitmap</button>
-      <input type="file" id="upload-debug-file" />
-      <button id="process-debug-file">Process Debug File</button>
-      <label for="fetch-bitmap">Fetch Bitmap</label>
-      <input type="checkbox" id="fetch-bitmap" checked />
-      <label for="update-bitmap-on-change">Update Bitmap on Virtual Change</label>
-      <input type="checkbox" id="update-bitmap-on-change" checked />
-      <label for="eager-load">Eager Load Preset Tree</label>
-      <input type="checkbox" id="eager-load" checked />
-    </div>
+        <div class="panel">
+          <div class="brand-block">
+            <div class="wordmark">
+              <span class="wordmark-main">Orville</span>
+              <span class="wordmark-sub">COMMANDER</span>
+            </div>
+            <div class="level-meters" aria-hidden="true">
+              <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>IN1</b></div>
+              <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>IN2</b></div>
+              <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>IN3</b></div>
+              <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>IN4</b></div>
+            </div>
+            <div class="unit-badge">DUAL DSP &nbsp;•&nbsp; 24 BIT</div>
+          </div>
 
-    <textarea id="log-area" readonly></textarea>
+          <div class="display-block">
+            <div class="bezel">
+              <div id="lcd" class="lcd"></div>
+            </div>
+            <div class="soft-keys">
+              <button id="soft1-btn" class="key key-soft" aria-label="Soft key 1"></button>
+              <button id="soft2-btn" class="key key-soft" aria-label="Soft key 2"></button>
+              <button id="soft3-btn" class="key key-soft" aria-label="Soft key 3"></button>
+              <button id="soft4-btn" class="key key-soft" aria-label="Soft key 4"></button>
+            </div>
+          </div>
+
+          <div class="controls-block">
+            <div class="key-group function-keys">
+              <div class="key-col">
+                <button id="program-btn" class="key">PROGRAM</button>
+                <button id="program-hold-btn" class="key key-hold">HOLD</button>
+              </div>
+              <div class="key-col">
+                <button id="parameter-btn" class="key">PARAMETER</button>
+                <button id="parameter-hold-btn" class="key key-hold">HOLD</button>
+              </div>
+              <div class="key-col">
+                <button id="select-btn" class="key">SELECT</button>
+                <button id="select-hold-btn" class="key key-hold">HOLD</button>
+              </div>
+              <div class="key-col">
+                <button id="levels-btn" class="key">LEVELS</button>
+                <button id="setup-btn" class="key">SETUP</button>
+              </div>
+              <div class="key-col">
+                <button id="ab-btn" class="key key-accent">A / B</button>
+                <button id="bypass-btn" class="key key-danger">BYPASS</button>
+              </div>
+            </div>
+
+            <div class="key-group cursor-keys">
+              <button id="up-btn" class="key key-cursor" aria-label="Cursor up">▲</button>
+              <button id="left-btn" class="key key-cursor" aria-label="Cursor left">◀</button>
+              <button id="right-btn" class="key key-cursor" aria-label="Cursor right">▶</button>
+              <button id="down-btn" class="key key-cursor" aria-label="Cursor down">▼</button>
+            </div>
+
+            <div class="key-group wheel-keys">
+              <span class="group-legend">DATA</span>
+              <button id="inc-btn" class="key key-wheel" aria-label="Increment">▲</button>
+              <button id="dec-btn" class="key key-wheel" aria-label="Decrement">▼</button>
+            </div>
+
+            <div class="key-group keypad">
+              <button id="7-btn" class="key key-num">7</button>
+              <button id="8-btn" class="key key-num">8</button>
+              <button id="9-btn" class="key key-num">9</button>
+              <button id="4-btn" class="key key-num">4</button>
+              <button id="5-btn" class="key key-num">5</button>
+              <button id="6-btn" class="key key-num">6</button>
+              <button id="1-btn" class="key key-num">1</button>
+              <button id="2-btn" class="key key-num">2</button>
+              <button id="3-btn" class="key key-num">3</button>
+              <button id="dot-btn" class="key key-num">·</button>
+              <button id="0-btn" class="key key-num">0</button>
+              <button id="minus-btn" class="key key-num">−</button>
+              <button id="cxl-btn" class="key key-num key-danger">CXL</button>
+              <button id="enter-btn" class="key key-num key-accent keypad-enter">ENT</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rack-ear rack-ear-right"><i class="screw"></i><i class="screw"></i></div>
+      </section>
+
+      <!-- Service hatch: every diagnostic control, one click away -->
+      <details class="service-panel">
+        <summary><span class="hazard"></span>SERVICE<span class="hazard"></span></summary>
+        <div class="service-body">
+          <div class="service-col">
+            <h3 class="service-heading">True screen (0x17 capture)</h3>
+            <canvas id="lcd-canvas"></canvas>
+            <div class="service-row">
+              <button id="get-screen-btn" class="util-btn">Get Screen Bitmap</button>
+              <button id="sync-btn" class="util-btn">Sync to Hardware</button>
+            </div>
+            <div class="service-row">
+              <button id="toggle-meter-polling" class="util-btn">Toggle Meter Polling</button>
+              <span id="polling-indicator" class="led-label">Polling Active</span>
+              <button id="poll-toggle" class="util-btn">Toggle Polling</button>
+              <button id="test-keypress" class="util-btn">Test Keypress</button>
+            </div>
+            <div class="service-row">
+              <label class="toggle"
+                ><input type="checkbox" id="fetch-bitmap" checked /><span>Fetch bitmap</span></label
+              >
+              <label class="toggle"
+                ><input type="checkbox" id="update-bitmap-on-change" checked /><span
+                  >Bitmap on change</span
+                ></label
+              >
+              <label class="toggle"
+                ><input type="checkbox" id="eager-load" checked /><span
+                  >Eager-load preset tree</span
+                ></label
+              >
+            </div>
+          </div>
+          <div class="service-col">
+            <h3 class="service-heading">Diagnostics</h3>
+            <div class="service-row">
+              <input
+                id="custom-sysex"
+                class="util-input util-wide"
+                placeholder="Custom SysEx hex (e.g. 01 0f 0f…)"
+              />
+              <button id="send-custom" class="util-btn">Send</button>
+            </div>
+            <div class="service-row">
+              <input type="file" id="upload-debug-file" class="util-input" />
+              <button id="process-debug-file" class="util-btn">Process Debug File</button>
+            </div>
+            <div class="service-row">
+              <label class="util-label" for="log-level">LOG</label>
+              <select id="log-level" class="util-input">
+                <option value="debug">Debug</option>
+                <option value="info" selected>Info</option>
+                <option value="error">Error</option>
+              </select>
+              <button id="copy-log" class="util-btn">Copy Log</button>
+            </div>
+            <textarea id="log-area" readonly spellcheck="false"></textarea>
+          </div>
+        </div>
+      </details>
+    </main>
   </body>
 </html>

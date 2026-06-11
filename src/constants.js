@@ -65,9 +65,12 @@ export const EAGER = {
 };
 
 // Canvas presentation for the bitmap screen (CSS, cosmetic only).
+// x3 integer scale (240x64 -> 720x192) so the bitmap mirror and the virtual
+// #lcd are the SAME physical size — one display, two modes (#130; the
+// pixel font is likewise locked to x3, fractional scales smear it).
 export const CANVAS = {
-  CSS_WIDTH: '480px',
-  CSS_HEIGHT: '128px',
+  CSS_WIDTH: '720px',
+  CSS_HEIGHT: '192px',
   ASPECT_RATIO: '240 / 64',
   IMAGE_RENDERING: 'pixelated',
 };

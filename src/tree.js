@@ -50,7 +50,14 @@ export function recordDump(subs) {
       // trusted across visits: the next visit refetches.
       staleKeys.add(main.key);
     }
-    requestGeneration.delete(main.key);
+    // The stamp is NOT consumed (review finding): a double-requested key
+    // (rapid double navigation fans out twice) gets two responses, and
+    // consuming on the first would flip the second — genuinely post-mark —
+    // back to stale, silently defeating the warm path. The stamp stays
+    // until the next stampStableRequest overwrites it or reset() clears;
+    // a later mutation bumps the generation, so the kept stamp can never
+    // launder a pre-mutation response. Memory is bounded by the stable
+    // key count.
   }
   for (const s of subs.slice(1)) {
     if (s.key) parents.set(s.key, { parentKey: main.key, sub: s });

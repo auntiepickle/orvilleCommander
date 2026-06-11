@@ -211,15 +211,21 @@ export function isOutputConnected() {
  *   device sharing the port is not a malfunction), or null when valid.
  */
 export function inboundFrameError(frame) {
-  // Smallest meaningful frame: prefix + F7 (an empty-payload command).
-  if (frame.length < SYSEX.FRAME_PREFIX_LEN + 1) {
-    return { reason: `frame too short (${frame.length} bytes)`, severity: 'error' };
-  }
-  if (frame[1] !== SYSEX.MANUFACTURER[0] || frame[2] !== SYSEX.MANUFACTURER[1]) {
+  // Manufacturer first (review finding): a too-short FOREIGN frame (e.g.
+  // 'F0 7D 01 F7' from a port-sharing device) must reject at debug, not be
+  // caught by the length check at error severity.
+  if (
+    frame.length >= 3 &&
+    (frame[1] !== SYSEX.MANUFACTURER[0] || frame[2] !== SYSEX.MANUFACTURER[1])
+  ) {
     return {
       reason: `not an Eventide frame (manufacturer ${frame[1]?.toString(16)} ${frame[2]?.toString(16)})`,
       severity: 'debug',
     };
+  }
+  // Smallest meaningful frame: prefix + F7 (an empty-payload command).
+  if (frame.length < SYSEX.FRAME_PREFIX_LEN + 1) {
+    return { reason: `frame too short (${frame.length} bytes)`, severity: 'error' };
   }
   const cmd = frame[4];
   const payloadLen = frame.length - SYSEX.FRAME_PREFIX_LEN - 1; // minus F7

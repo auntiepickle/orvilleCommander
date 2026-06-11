@@ -173,6 +173,32 @@ describe('tree store (T1b)', () => {
       expect(isFresh('10020020')).toBe(false);
     });
 
+    test('a duplicate response without a new stamp stays TRUSTED (#121 review fix)', () => {
+      // Rapid double navigation fans out twice: two responses for one
+      // stamped request. Consuming the stamp on the first would flip the
+      // second — genuinely post-mark — back to stale.
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
+      markDirtyIfStable('1002001c'); // gen > 0 (the norm in a live session)
+      stampStableRequest('10020010');
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]); // response 1
+      expect(isFresh('10020010')).toBe(true);
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]); // duplicate
+      expect(isFresh('10020010')).toBe(true); // stamp kept, still trusted
+
+      // A LATER mutation still wins: the kept stamp cannot launder.
+      markDirtyIfStable('1002001c');
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]); // old stamp
+      expect(isFresh('10020010')).toBe(false);
+    });
+
+    test('markAllStableDirty also bumps the generation (#121)', () => {
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
+      stampStableRequest('10020010'); // request in flight...
+      markAllStableDirty(); // ...keypress/Sync lands mid-flight
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]); // pre-mark response
+      expect(isFresh('10020010')).toBe(false);
+    });
+
     test('generation 0 trusts unstamped records — seeding before any mutation (#121)', () => {
       // The audit seeds the tree via direct recordDump with no requests;
       // with no mutation ever marked, nothing can be pre-mutation.

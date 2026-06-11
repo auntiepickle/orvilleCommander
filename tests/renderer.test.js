@@ -153,9 +153,15 @@ describe('renderer.js', () => {
     appState.currentValues['10020011'] = 'c Old Bank Program';
 
     jest.useFakeTimers();
-    select.value = '0';
+    select.value = '50'; // a HIGH index: decimal/hex diverge (the user's failing case)
     select.dispatchEvent(new Event('change', { bubbles: true }));
-    expect(sendValuePut).toHaveBeenCalledWith('10020012', '0');
+    // The put sends the DECIMAL index (the device parses puts decimal —
+    // probed live, logs/probe-bank-radix.mjs)...
+    expect(sendValuePut).toHaveBeenCalledWith('10020012', '50');
+    // ...while the optimistic cache holds the device's value shape: HEX
+    // index + desc. Caching decimal mis-selected options >= 10 on every
+    // repaint until the echo corrected it.
+    expect(appState.currentValues['10020012']).toBe('32 50 Reverbs - Unusual');
 
     jest.advanceTimersByTime(200);
     // Targeted: the load menu's dump + values (it carries both re-listed
@@ -166,10 +172,18 @@ describe('renderer.js', () => {
     // staled program subtree (13.3s measured live before the fix) —
     // first-arg sweep, so a one-arg regression cannot slip past.
     expect(sendObjectInfoDump.mock.calls.map((c) => c[0])).not.toContain('10020000');
-    // The stale program/bank cache entries are pruned so the fresh dump's
-    // values render.
+    // The stale program cache entry is pruned so the fresh dump's value
+    // renders; the BANK key is KEPT — the user's choice must stay on
+    // screen through the ~5s dump transfer (pruning it made the dropdown
+    // visibly snap back to the old bank — live-reproduced regression).
     expect(appState.currentValues['10020011']).toBeUndefined();
-    expect(appState.currentValues['10020012']).toBeUndefined();
+    expect(appState.currentValues['10020012']).toBe('32 50 Reverbs - Unusual');
+
+    // A mid-transfer repaint from the OLD tree state still shows the
+    // user's chosen bank (the optimistic cache shadows the old s.value).
+    renderScreen(subs, '', mockLog);
+    const repainted = document.querySelector('select[data-key="10020012"]');
+    expect(repainted.options[repainted.selectedIndex].text).toBe('50 Reverbs - Unusual');
     jest.useRealTimers();
   });
 

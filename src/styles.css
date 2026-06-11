@@ -20,6 +20,13 @@
   --lcd-px: #3bf06e;
   --lcd-px-dim: #1e7a3c;
   --lcd-glow: rgba(59, 240, 110, 0.45);
+  /* The hardware cell is 6x8; Pixel Operator Mono's is 8x8. At x3 we pull
+     the 24px advance in to 18px with letter-spacing, which makes the LCD
+     pitch EXACTLY match the x3 canvas (720/40 = 18px per column). All
+     in-LCD widths are computed from this, never from ch (ch ignores
+     letter-spacing). */
+  --lcd-advance: 18px;
+  --lcd-cell-h: 24px;
   --bezel: #0b0c0d;
   --legend-font:
     'Bahnschrift', 'Bahnschrift SemiCondensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
@@ -51,7 +58,7 @@ body {
   padding: 32px 16px 64px;
 }
 .rack {
-  width: min(1280px, 100%);
+  width: min(1540px, 100%);
 }
 
 /* ---------- connection strip ------------------------------------------- */
@@ -124,7 +131,7 @@ body {
 .panel {
   flex: 1;
   display: grid;
-  grid-template-columns: 180px minmax(0, auto) 1fr;
+  grid-template-columns: 160px auto 1fr;
   gap: 24px;
   padding: 24px 24px 28px;
 }
@@ -212,8 +219,8 @@ body {
   position: relative;
   font-family: 'OrvilleLCD', ui-monospace, Consolas, monospace;
   font-size: 24px;
-  line-height: 24px;
-  letter-spacing: 0;
+  line-height: var(--lcd-cell-h);
+  letter-spacing: calc(var(--lcd-advance) - 24px); /* 8px-cell font -> 6px-cell pitch */
   -webkit-font-smoothing: none;
   text-rendering: optimizeSpeed;
   background:
@@ -221,7 +228,8 @@ body {
     var(--lcd-bg);
   color: var(--lcd-px);
   text-shadow: 0 0 6px var(--lcd-glow);
-  width: 42ch;
+  /* Exactly the 40-column grid plus glass padding. */
+  width: calc(40 * var(--lcd-advance) + 24px);
   min-height: 192px;
   padding: 12px;
   display: flex;
@@ -234,7 +242,7 @@ body {
   pointer-events: none;
 }
 .line {
-  height: 24px;
+  height: var(--lcd-cell-h);
 }
 .main-content,
 .top-docked,
@@ -243,19 +251,21 @@ body {
 }
 .bottom-docked {
   margin-top: auto;
-  border-top: 1px solid var(--lcd-px-dim);
+  box-shadow: inset 0 1px 0 var(--lcd-px-dim);
   padding-top: 2px;
 }
 
-/* In-LCD hooks (the renderer's DOM contract — style only, never restructure) */
+/* In-LCD hooks (the renderer's DOM contract — style only, never
+   restructure). CRITICAL: nothing in here may add horizontal geometry
+   (borders/margins/padding) — the LCD is a character grid built from
+   padEnd'd monospace text, and any box growth breaks column alignment.
+   Tab chrome is drawn with INSET box-shadows, which cost zero layout. */
 .softkey {
   cursor: pointer;
   display: inline-block;
-  width: 10ch;
-  border: 1px solid var(--lcd-px-dim);
-  border-bottom-width: 2px;
+  width: calc(10 * var(--lcd-advance));
+  box-shadow: inset 0 -2px 0 var(--lcd-px-dim);
   border-radius: 3px 3px 0 0;
-  margin: 1px 1px 0 0;
 }
 .softkey:hover {
   background: var(--lcd-px);
@@ -264,7 +274,7 @@ body {
 }
 .param-value {
   cursor: pointer;
-  border-bottom: 1px dotted var(--lcd-px-dim);
+  box-shadow: inset 0 -1px 0 var(--lcd-px-dim);
 }
 .param-value:hover {
   background: var(--lcd-px);
@@ -298,7 +308,7 @@ body {
   background: var(--lcd-bg);
   color: var(--lcd-px);
   border: none;
-  border-bottom: 1px dotted var(--lcd-px-dim);
+  box-shadow: inset 0 -1px 0 var(--lcd-px-dim);
   font: inherit;
   appearance: none;
   -webkit-appearance: none;
@@ -331,13 +341,15 @@ body {
   cursor: pointer;
 }
 
-/* Soft keys: blank caps directly under the display, aligned to the LCD tabs */
+/* Soft keys: blank caps directly under the display, one per on-screen tab
+   column (the LCD's bottom row is 4 x 10-char tabs). */
 .soft-keys {
   display: flex;
-  gap: 24px;
+  justify-content: space-around;
+  width: calc(40 * var(--lcd-advance) + 72px); /* LCD + bezel padding */
 }
 .key-soft {
-  width: 96px;
+  width: calc(8 * var(--lcd-advance));
   height: 22px;
 }
 
@@ -405,7 +417,7 @@ body {
   gap: 4px;
 }
 .key-col .key {
-  min-width: 86px;
+  min-width: 78px;
 }
 
 .cursor-keys {

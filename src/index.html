@@ -67,6 +67,11 @@
           <div class="display-block">
             <div class="bezel">
               <div id="lcd" class="lcd"></div>
+              <!-- Glass pane over the display: pure presentation, a SIBLING
+                   of #lcd (the renderer owns the #lcd subtree — never put
+                   chrome inside it). pointer-events: none keeps every LCD
+                   click affordance live underneath. -->
+              <div class="glass" aria-hidden="true"></div>
             </div>
             <div class="soft-keys">
               <button id="soft1-btn" class="key key-soft" aria-label="Soft key 1"></button>

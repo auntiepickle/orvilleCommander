@@ -41,7 +41,7 @@ function mmss(ms) {
 function renderBankMap(bankStates) {
   const cellsPerRow = 24;
   const rows = [];
-  for (let i = 0; i < bankStates.length; i += cellsPerRow) {
+  for (let i = 0; i < (bankStates?.length ?? 0); i += cellsPerRow) {
     const slice = bankStates.slice(i, i + cellsPerRow);
     rows.push(
       slice
@@ -64,27 +64,35 @@ function renderBankMap(bankStates) {
  *   bankStates: string[], etaMs: number|null}} p
  * @param {() => void} onCancel
  */
+const TITLE = '<div class="sync-title"><span class="sync-title-sweep">LIBRARY SYNC</span></div>';
+
 export function showSyncProgress(p, onCancel) {
   const node = ensureEl();
   if (!node) return;
   node.hidden = false;
 
   if (p.phase === 'preparing') {
+    // Indeterminate: a Larson/Knight-Rider scanner sweeps while we fetch
+    // the bank list (we don't know the count yet).
     node.innerHTML =
-      '<div class="sync-title">LIBRARY SYNC</div>' +
-      '<div class="sync-line">reading bank list ...</div>';
+      TITLE +
+      '<div class="sync-line">reading bank list<span class="sync-ellipsis"></span></div>' +
+      `<div class="sync-scanner">${'▒'.repeat(BAR_CELLS)}</div>`;
     return;
   }
 
   const filled = p.total ? Math.round((p.done / p.total) * BAR_CELLS) : 0;
-  const bar = '█'.repeat(filled) + '░'.repeat(BAR_CELLS - filled);
   const restoring = p.phase === 'restoring';
+  const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
   node.innerHTML =
-    '<div class="sync-title">LIBRARY SYNC</div>' +
-    `<div class="sync-bar">${bar} <span class="sync-count">${p.done}/${p.total}</span></div>` +
-    `<div class="sync-line">${restoring ? 'restoring your bank ...' : `<span class="sync-cur">&gt;</span> ${escapeText(p.name)}`}</div>` +
+    TITLE +
+    `<div class="sync-bar"><span class="sync-spinner"></span> ` +
+    `<span class="sync-bar-fill">${'█'.repeat(filled)}</span>` +
+    `<span class="sync-bar-empty">${'░'.repeat(BAR_CELLS - filled)}</span>` +
+    ` <span class="sync-count">${pct}%</span></div>` +
+    `<div class="sync-line">${restoring ? 'restoring your bank<span class="sync-ellipsis"></span>' : `<span class="sync-cur">&gt;</span> ${escapeText(p.name)}<span class="sync-caret">█</span>`}</div>` +
     `<div class="sync-map">${renderBankMap(p.bankStates)}</div>` +
-    `<div class="sync-foot"><span class="sync-eta">${restoring ? '' : `est. ${mmss(p.etaMs)} remaining`}</span>` +
+    `<div class="sync-foot"><span class="sync-eta">${restoring ? `${p.done} captured` : `est. ${mmss(p.etaMs)} remaining · ${p.done}/${p.total}`}</span>` +
     '<button type="button" class="sync-cancel">CANCEL</button></div>';
   const cancelBtn = node.querySelector('.sync-cancel');
   if (cancelBtn) cancelBtn.addEventListener('click', onCancel, { once: true });
@@ -100,8 +108,9 @@ export function showSyncComplete(summary) {
   if (!node) return;
   node.hidden = false;
   node.innerHTML =
-    '<div class="sync-title">SYNC COMPLETE</div>' +
-    `<div class="sync-line sync-done">${summary.programs} programs &middot; ${summary.banks} banks</div>`;
+    '<div class="sync-title sync-title-flash">SYNC COMPLETE</div>' +
+    `<div class="sync-line sync-done"><span class="sync-check">&#10003;</span> ${summary.programs} programs &middot; ${summary.banks} banks</div>` +
+    `<div class="sync-map sync-map-done">${'█'.repeat(BAR_CELLS)}</div>`;
 }
 
 /** Removes the dialog. */

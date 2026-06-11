@@ -115,7 +115,10 @@ export async function syncLibrary(onProgress) {
   let loadMenu = getNode(KEY.FAVORITES);
   let bankSub = loadMenu?.find((s) => s.key === KEY.BANK_SELECT);
   if (!bankSub?.options?.length) {
-    onProgress?.(-1, 0, 'preparing');
+    // Structured payload, like every other emit (the dialog reads
+    // p.phase/p.bankStates — the old positional call threw on the
+    // sync-from-anywhere path and killed the whole scan silently).
+    onProgress?.({ phase: 'preparing', done: 0, total: 0, name: '', bankStates: [], etaMs: null });
     sendObjectInfoDump(KEY.FAVORITES);
     sendValueDump(KEY.FAVORITES);
     const deadline = Date.now() + LIBRARY.BANK_DUMP_TIMEOUT_MS;

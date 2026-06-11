@@ -89,6 +89,14 @@ export const KNOB = {
   //                              from bursting keypresses onto the 31250-baud link (review)
 };
 
+// Demo mode (src/demo.js): the canned device built from a live capture.
+export const DEMO = {
+  REPLY_LATENCY_MS: 25, // per-reply delay so the dump-wave lifecycle (BUSY
+  //                       LED, progressive paints) behaves like the wire —
+  //                       an instant reply would synchronously re-enter the
+  //                       parser inside the send call
+};
+
 // Canvas presentation for the bitmap screen (CSS, cosmetic only).
 // x3 integer scale (240x64 -> 720x192) so the bitmap mirror and the virtual
 // #lcd are the SAME physical size — one display, two modes (#130; the

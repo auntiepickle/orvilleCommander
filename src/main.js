@@ -10,6 +10,7 @@ import {
   mergeLogCategories,
 } from './config.js';
 import { setupThemeEditor } from './theme.js';
+import { createDemoPorts, DEMO_NODE_COUNT } from './demo.js';
 import { setupKeypressControls, setupDataKnob, testKeypress, meterPollTick } from './controls.js';
 import {
   setMidiPorts,
@@ -142,28 +143,22 @@ async function connectMidi(cachedConfig = null) {
  * Sets MIDI ports based on selected values, adds SysEx listener, and initializes the screen.
  * Fetches root and initial preset data with optional bitmap.
  */
-function selectPorts() {
-  const outputId = outputSelect.value;
-  const inputId = inputSelect.value;
-  const devId = parseInt(deviceIdInput.value, 10);
-  setMidiPorts(WebMidi.getOutputById(outputId), WebMidi.getInputById(inputId), devId);
-  addSysexListener();
-  log('Ports selected and listener added. Device ID set to ' + devId, 'info', 'general');
+// The connect/landing reset shared by real ports and demo mode.
+// NOTE: this reset block is hand-mirrored in build_tools/live-app.mjs and
+// build_tools/tree-audit.mjs (not exported) - update those when changing it.
+// C2 (#38): reset the view to root BEFORE requesting, then arm the one-shot
+// landing. Re-runnable (button + cached-config auto-run); the reset forces
+// the parser's full root branch on reconnect (background root dumps do not
+// update currentSubs, so landing from a navigated-deep state would pair the
+// root keyStack entry with stale subs). The landing itself — adopt DSP
+// keys/names, navigate to the active preset, prefetch the other DSP,
+// optional screen fetch — fires in event-bridge.js when the root dump
+// arrives. No timer, no autoLoad flag.
+// A (re)connect is an explicit re-read: distrust every stable-subtree
+// cache (#113 — front-panel changes may have happened while disconnected).
+function resetAndLand() {
   lcdEl.innerText = 'Connected. Fetching root screen...';
   showLoading();
-  // NOTE: this reset block is hand-mirrored in build_tools/live-app.mjs and
-  // build_tools/tree-audit.mjs (selectPorts is not exported) - update those
-  // when changing it.
-  // C2 (#38): reset the view to root BEFORE requesting, then arm the one-shot
-  // landing. selectPorts is re-runnable (button + cached-config auto-run);
-  // the reset forces the parser's full root branch on reconnect (background
-  // root dumps do not update currentSubs, so landing from a navigated-deep
-  // state would pair the root keyStack entry with stale subs). The landing
-  // itself — adopt DSP keys/names, navigate to the active preset, prefetch
-  // the other DSP, optional screen fetch — fires in event-bridge.js when the
-  // root dump arrives. No timer, no autoLoad flag.
-  // A (re)connect is an explicit re-read: distrust every stable-subtree
-  // cache (#113 — front-panel changes may have happened while disconnected).
   markAllStableDirty();
   setState(
     {
@@ -178,9 +173,37 @@ function selectPorts() {
   updateScreen(log);
 }
 
+function selectPorts() {
+  const outputId = outputSelect.value;
+  const inputId = inputSelect.value;
+  const devId = parseInt(deviceIdInput.value, 10);
+  setMidiPorts(WebMidi.getOutputById(outputId), WebMidi.getInputById(inputId), devId);
+  addSysexListener();
+  log('Ports selected and listener added. Device ID set to ' + devId, 'info', 'general');
+  resetAndLand();
+}
+
+/**
+ * Demo mode: swap the MIDI ports for the canned device (src/demo.js — a
+ * live-captured tree) and run the normal connect landing. No WebMIDI, no
+ * unit, no permissions needed; everything downstream of the port adapters
+ * is the real app.
+ */
+function enterDemoMode() {
+  const { outAdapter, inAdapter, deviceId } = createDemoPorts();
+  setMidiPorts(outAdapter, inAdapter, deviceId);
+  addSysexListener();
+  deviceIdInput.value = deviceId;
+  log(`Demo mode: serving a captured device tree (${DEMO_NODE_COUNT} nodes)`, 'info', 'general');
+  resetAndLand();
+}
+
 connectBtn.addEventListener('click', () => connectMidi());
 
 selectPortsBtn.addEventListener('click', selectPorts);
+
+const demoModeBtn = document.getElementById('demo-mode');
+if (demoModeBtn) demoModeBtn.addEventListener('click', enterDemoMode);
 
 saveConfigBtn.addEventListener('click', () => {
   saveConfig(

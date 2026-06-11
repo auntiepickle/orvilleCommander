@@ -44,6 +44,8 @@ export const RENDER = {
   LOADING_STATEMENT: 'loading ...',
   LOADING_PROGRAMS: 'loading programs ...', // the program field while an unseen
   //                   bank's list is on the wire (#141) — never the old bank's list
+  SYNC_TO_BROWSE: 'sync to browse all banks', // load-menu hint when unsynced (#138):
+  //                   the device lists only the current bank's programs at a time
   INDICATOR_BAR_CELLS: 8, // max bar width for spec-less indicator CONs: the only live-observed
   //                         case (the Tempo 'Beat' flasher) is binary 0/1, and a full-LCD-width
   //                         flashing slab overwhelmed the page (maintainer report, external-clock

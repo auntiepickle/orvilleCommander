@@ -6,7 +6,7 @@ import { log } from './logger.js';
 import { emit } from './events.js';
 import { CMD, SYSEX, SCREEN } from './sysex-commands.js';
 import { TIMING } from './constants.js';
-import { markDirtyIfStable, markAllStableDirty } from './tree.js';
+import { markDirtyIfStable, markAllStableDirty, stampStableRequest } from './tree.js';
 
 let selectedOutput = null;
 let selectedInput = null;
@@ -396,6 +396,10 @@ export function sendSysEx(cmd, dataBytes = []) {
  * sendObjectInfoDump('401000b');
  */
 export function sendObjectInfoDump(key) {
+  // #121: stamp stable-subtree requests with the current mutation
+  // generation, so a response whose request predates a later put cannot
+  // record pre-mutation structure as trustworthy.
+  stampStableRequest(key);
   recordRequest(key, 'objectinfo');
   const keyBytes = key.split('').map((c) => c.charCodeAt(0));
   sendSysEx(CMD.OBJECTINFO_DUMP, keyBytes);

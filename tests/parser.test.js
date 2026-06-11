@@ -21,7 +21,13 @@ import { appState } from '../src/state.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, notifyResponse } from '../src/midi.js';
 import { emit } from '../src/events.js';
 import { log as mockLog } from '../src/logger.js';
-import { recordDump, getNode, markDirtyIfStable, reset as treeReset } from '../src/tree.js';
+import {
+  recordDump,
+  getNode,
+  markDirtyIfStable,
+  stampStableRequest,
+  reset as treeReset,
+} from '../src/tree.js';
 
 const parseAscii = (ascii) => {
   const bytes = ascii.split('').map((c) => c.charCodeAt(0));
@@ -386,7 +392,10 @@ describe('parseResponse', () => {
     expect(sendObjectInfoDump).toHaveBeenCalledWith('10020010');
 
     // The child's own dump finally arrives (re-recorded by this parser):
-    // the key is fresh again and the next visit skips.
+    // the key is fresh again and the next visit skips. Production stamps
+    // the request in sendObjectInfoDump (mocked here), so the test stamps
+    // explicitly — the response must come from a POST-mark request (#121).
+    stampStableRequest('10020010');
     parseAscii('COL 0 10020010 10020010 "load new preset" "load"');
     sendObjectInfoDump.mockClear();
     parseAscii(programDump);

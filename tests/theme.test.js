@@ -31,10 +31,17 @@ describe('theme engine', () => {
     tokensContainer: document.getElementById('theme-tokens'),
   });
 
-  test('every synthwave token is a registered token', () => {
+  test('every preset token is a registered token with a valid hex value', () => {
     const registered = new Set(THEME_TOKENS.map((t) => t.cssVar));
-    for (const cssVar of Object.keys(THEMES.synthwave)) {
-      expect(registered.has(cssVar)).toBe(true);
+    for (const [name, palette] of Object.entries(THEMES)) {
+      for (const [cssVar, value] of Object.entries(palette)) {
+        expect({ name, cssVar, registered: registered.has(cssVar) }).toEqual({
+          name,
+          cssVar,
+          registered: true,
+        });
+        expect(value).toMatch(/^#[0-9a-f]{6}$/);
+      }
     }
   });
 

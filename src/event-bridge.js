@@ -48,7 +48,7 @@ import { renderBitmap } from './bitmap.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendSysEx } from './midi.js';
-import { getNode, parentOf, deriveKeyStack } from './tree.js';
+import { getNode, parentOf, deriveKeyStack, withinGangOf } from './tree.js';
 import { startEagerLoad } from './eager-loader.js';
 import { CMD, KEY, KEY_PREFIX, PARAM_TYPES } from './sysex-commands.js';
 import { log } from './logger.js';
@@ -80,7 +80,13 @@ export function registerEventBridge({ hideLoading }) {
       // (e.g. the multi-second bank list the program menu embeds) land AFTER
       // the wave has already watchdogged and settled, and nothing ever
       // repaints — the embed only appeared after navigating away and back.
-      else if (parentOf(key) === appState.currentKey && getNode(key)) render();
+      // Gang grandchildren count too (#132): the inlined routing-matrix
+      // leaves arrive two gang levels below the menu.
+      else if (
+        (parentOf(key) === appState.currentKey || withinGangOf(key, appState.currentKey)) &&
+        getNode(key)
+      )
+        render();
 
       // C2 landing: the root dump arrived while a connect is pending.
       // selectPorts reset currentKey to root, so the progressive root paint

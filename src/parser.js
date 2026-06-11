@@ -4,7 +4,15 @@ import { CMD, KEY, KEY_PREFIX, KEY_SUFFIX, SYSEX, TYPE_EMPTY } from './sysex-com
 import { TIMING } from './constants.js';
 import { setState } from './store.js';
 import { sendValuePut, sendValueDump, sendObjectInfoDump, notifyResponse } from './midi.js';
-import { recordDump, parentOf, findParamUnder, isFresh, getNode } from './tree.js';
+import {
+  recordDump,
+  parentOf,
+  findParamUnder,
+  isFresh,
+  getNode,
+  isGangCol,
+  withinGangOf,
+} from './tree.js';
 import { log } from './logger.js';
 import { denibble } from './bitmap.js';
 import { emit } from './events.js';
@@ -116,12 +124,31 @@ export function parseResponse(data) {
         // correlation guard (view-state membership checks) entirely: late
         // dumps from a menu navigated away from have a different tree parent
         // and stay silent (still cached for when the user returns).
-        if (parentOf(main.key) === appState.currentKey) {
+        if (
+          parentOf(main.key) === appState.currentKey ||
+          withinGangOf(main.key, appState.currentKey)
+        ) {
           log(
             `Tree-recorded child ${main.key} of on-screen menu ${appState.currentKey}`,
             'debug',
             'parsedDump'
           );
+          // Gang fan-out (#132): the routing matrix nests its params below
+          // gang group COLs ('Source 1-4' -> 'Source 1/2' -> SETs), one
+          // level deeper than the current menu's own fan-out reaches. When
+          // a gang group's dump lands and it belongs to the on-screen
+          // menu's gang subtree, fetch ITS COL children too — the renderer
+          // inlines the whole gang subtree as one page, so the leaves must
+          // load without navigation. Terminates naturally: leaf groups
+          // contain only params.
+          if (isGangCol(main)) {
+            for (const s of subs.slice(1)) {
+              if (s.type === 'COL') {
+                sendObjectInfoDump(s.key);
+                sendValueDump(s.key);
+              }
+            }
+          }
           emit('objectinfo:received', { key: main.key });
         }
       }

@@ -5,7 +5,7 @@ import { TIMING, LAYOUT, RENDER } from './constants.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { showLoading } from './main.js';
-import { getNode, deriveKeyStack, findParamUnder, labelForSub } from './tree.js';
+import { getNode, deriveKeyStack, findParamUnder, labelForSub, isGangCol } from './tree.js';
 import { log } from './logger.js';
 
 /**
@@ -413,6 +413,120 @@ const placeholderLine = (s) =>
     m === '%%' || m === '%' ? '%' : RENDER.VALUE_PLACEHOLDER
   );
 
+// #132: one rendered line for a gang-inlined leaf param — the same type
+// semantics as the embedded-child branch (value source, fetch rule, SET
+// index decoding), kept as its own function so the two existing render
+// paths and their snapshots stay byte-identical.
+function gangParamLine(s, logParam) {
+  if (s.type === 'NUM') {
+    const value = appState.currentValues[s.key] || s.value;
+    if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
+    const formatStr = s.statement || s.tag || '';
+    return {
+      text: formatValue(formatStr, value),
+      html: formatValue(formatStr, value, true, s.key),
+    };
+  } else if (s.type === 'INF') {
+    const value = appState.currentValues[s.key] || s.value || '';
+    if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
+    const text = formatValue(s.statement, value);
+    return { text, html: text };
+  } else if (s.type === 'SET') {
+    const value = appState.currentValues[s.key] || s.value || '';
+    if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
+    let displayValue = value;
+    let indexHex = '0';
+    if (value) {
+      indexHex = value.split(' ')[0];
+      displayValue = value.substring(indexHex.length + 1);
+    }
+    const indexDec = parseInt(indexHex, 16).toString(10);
+    let selectHtml = `<select data-key="${s.key}" class="param-select">`;
+    s.options.forEach((option) => {
+      const isSelected = option.index === indexDec;
+      selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
+    });
+    selectHtml += `</select>`;
+    return {
+      text: formatValue(s.statement || '', displayValue),
+      html: (s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml),
+    };
+  } else if (s.type === 'TRG') {
+    return {
+      text: s.statement,
+      html: `<span class="param-value" data-key="${s.key}">${s.statement}</span>`,
+    };
+  } else if (s.type === 'STR') {
+    const value = appState.currentValues[s.key] ?? s.value ?? '';
+    if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
+    const text = formatValue(s.statement || '%s', value);
+    return { text, html: `<span class="param-value" data-key="${s.key}">${text}</span>` };
+  } else if (s.type === 'CON') {
+    let meterValue = parseFloat(appState.currentValues[s.key] || s.value) || 0;
+    if (isNaN(meterValue)) meterValue = 0;
+    const conFormat = CON_FORMAT_RE.test(s.statement)
+      ? s.statement
+      : CON_FORMAT_RE.test(s.tag)
+        ? s.tag
+        : null;
+    if (conFormat) {
+      const text = formatValue(conFormat, meterValue);
+      return { text, html: text };
+    }
+  }
+  return null;
+}
+
+// #132: inline a gang COL subtree (the routing matrix shape — manual p.20's
+// ganged parameters) into the current page, the way the hardware shows it.
+// Group headers render at the top level always; a PAIR header renders only
+// when its params' statements are all identical (the OutSource rows are
+// bare '%12s  (+)' lines — without the pair label they are ambiguous; the
+// Source/In rows self-describe with '-> IN1' / 'A IN1 Gain'). Uncached
+// groups render a loading placeholder; the gang fan-out (parser) is
+// fetching them and the child-arrival repaint (bridge) repaints on landing.
+const GANG_RENDER_MAX_DEPTH = 3; // matches the deepest live-observed chain
+function renderGangInline(colSub, depth, paramLines, paramHtmlLines, logParam) {
+  if (depth > GANG_RENDER_MAX_DEPTH) return;
+  const node = getNode(colSub.key);
+  const header = (colSub.statement || '').trim();
+  const children = node ? node.slice(1) : [];
+  const paramChildren = children.filter((c) => c.type !== 'COL' && c.type !== TYPE_EMPTY);
+  const identicalStatements =
+    paramChildren.length > 1 &&
+    paramChildren.every((c) => c.statement === paramChildren[0].statement);
+  if (header && (depth === 0 || identicalStatements)) {
+    paramLines.push(header);
+    paramHtmlLines.push(header);
+  }
+  if (!node) {
+    const text = `${header || labelForSub(colSub)} ${RENDER.VALUE_PLACEHOLDER}`;
+    paramLines.push(text);
+    paramHtmlLines.push(text);
+    return;
+  }
+  for (const cs of children) {
+    if (cs.type === 'COL') {
+      if (isGangCol(cs)) renderGangInline(cs, depth + 1, paramLines, paramHtmlLines, logParam);
+      continue;
+    }
+    if (cs.type === TYPE_EMPTY) continue;
+    if (prePainting) {
+      const text = placeholderLine(cs);
+      if (text) {
+        paramLines.push(text);
+        paramHtmlLines.push(text);
+      }
+      continue;
+    }
+    const line = gangParamLine(cs, logParam);
+    if (line && line.text) {
+      paramLines.push(line.text);
+      paramHtmlLines.push(line.html);
+    }
+  }
+}
+
 export function renderScreen(subs, ascii, logParam) {
   const lcdEl = document.getElementById('lcd');
   if (!subs || subs.length === 0) {
@@ -686,13 +800,22 @@ export function renderScreen(subs, ascii, logParam) {
         paramHtmlLines.push(fullHtml);
       }
     });
+    // Gang subtrees inline (#132): the routing-matrix groups render as part
+    // of THIS page (headers + leaf params), exactly like the hardware's
+    // ganged-parameter screens — never as softkeys. The pre-paint pass
+    // renders their cached structure with placeholder values (no fetches,
+    // no clickables) like every other param.
+    subs
+      .slice(1)
+      .filter((s) => isGangCol(s))
+      .forEach((s) => renderGangInline(s, 0, paramLines, paramHtmlLines, logParam));
     // Append only the first child sub-menu inline if available.
     // NOTE (R1, live-validated): an earlier filter here dropped ALL
     // position-0 COLs from the softkeys whenever the menu had any param,
     // which made mixed menus like 'program functions' (TRG + 8 position-0
     // COL children) unnavigable — the physical PROGRAM screen shows those
     // softkeys. Only the actually-embedded child is excluded, below.
-    localSoftSubs = subs.slice(1).filter((s) => s.type === 'COL');
+    localSoftSubs = subs.slice(1).filter((s) => s.type === 'COL' && !isGangCol(s));
     // Deterministic embed (R6, live-validated): only ever the FIRST
     // position-0 child in subs order may embed. The old loop embedded
     // whichever child's dump happened to have arrived — on 'program

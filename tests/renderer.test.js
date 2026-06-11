@@ -173,6 +173,265 @@ describe('renderer.js', () => {
     jest.useRealTimers();
   });
 
+  // #132: the routing matrix — gang COL subtrees (blank tag, non-'0'
+  // position; live-probed structure, logs/probe-routing2-132.log) render
+  // INLINE as the hardware's one-page ganged-parameter screen, with the
+  // leaves fully editable. Fixture data is the real DSP A i/p routing
+  // subtree as probed.
+  const gangSet = (key, parent, stmt, value) => ({
+    type: 'SET',
+    position: '2',
+    key,
+    parent,
+    statement: stmt,
+    tag: 'Source',
+    value,
+    options: [
+      { index: '4', desc: 'AES/EBU in 1' },
+      { index: '5', desc: 'AES/EBU in 2' },
+      { index: '16', desc: '----------' },
+    ],
+  });
+  const gangNum = (key, parent, stmt, value) => ({
+    type: 'NUM',
+    position: '0',
+    key,
+    parent,
+    statement: stmt,
+    tag: 'inlevel',
+    value,
+    min: '',
+    max: '',
+  });
+  const recordRoutingSubtree = () => {
+    const menuSubs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '1001008f',
+        parent: '1001008f',
+        statement: 'Dsp A i/p routing',
+        tag: 'dsp A',
+      },
+      {
+        type: 'COL',
+        position: '13',
+        key: '1001008c',
+        parent: '1001008f',
+        statement: 'Source 1-4',
+        tag: '',
+      },
+      {
+        type: 'COL',
+        position: 'c',
+        key: '1001008b',
+        parent: '1001008f',
+        statement: 'In 1-4',
+        tag: '',
+      },
+    ];
+    recordDump(menuSubs);
+    recordDump([
+      {
+        type: 'COL',
+        position: '13',
+        key: '1001008c',
+        parent: '1001008c',
+        statement: 'Source 1-4',
+        tag: '',
+      },
+      {
+        type: 'COL',
+        position: '13',
+        key: '1001008d',
+        parent: '1001008c',
+        statement: 'Source 1/2',
+        tag: '',
+      },
+      {
+        type: 'COL',
+        position: '13',
+        key: '1001008e',
+        parent: '1001008c',
+        statement: 'Source 3/4',
+        tag: '',
+      },
+    ]);
+    recordDump([
+      {
+        type: 'COL',
+        position: '13',
+        key: '1001008d',
+        parent: '1001008d',
+        statement: 'Source 1/2',
+        tag: '',
+      },
+      gangSet('10010081', '1001008d', '%-12s -> IN1', '4 AES/EBU in 1'),
+      gangSet('10010082', '1001008d', '%-12s -> IN2', '5 AES/EBU in 2'),
+    ]);
+    recordDump([
+      {
+        type: 'COL',
+        position: '13',
+        key: '1001008e',
+        parent: '1001008e',
+        statement: 'Source 3/4',
+        tag: '',
+      },
+      gangSet('10010083', '1001008e', '%-12s -> IN3', '10 ----------'),
+      gangSet('10010084', '1001008e', '%-12s -> IN4', '10 ----------'),
+    ]);
+    recordDump([
+      {
+        type: 'COL',
+        position: 'c',
+        key: '1001008b',
+        parent: '1001008b',
+        statement: 'In 1-4',
+        tag: '',
+      },
+      {
+        type: 'COL',
+        position: 'c',
+        key: '10010089',
+        parent: '1001008b',
+        statement: 'In 1/2',
+        tag: '',
+      },
+      {
+        type: 'COL',
+        position: 'c',
+        key: '1001008a',
+        parent: '1001008b',
+        statement: 'In 3/4',
+        tag: '',
+      },
+    ]);
+    recordDump([
+      {
+        type: 'COL',
+        position: 'c',
+        key: '10010089',
+        parent: '10010089',
+        statement: 'In 1/2',
+        tag: '',
+      },
+      gangNum('10010085', '10010089', 'A IN1 Gain: %2.1f dB', '-6'),
+      gangNum('10010086', '10010089', 'A IN2 Gain: %2.1f dB', '-6'),
+    ]);
+    recordDump([
+      {
+        type: 'COL',
+        position: 'c',
+        key: '1001008a',
+        parent: '1001008a',
+        statement: 'In 3/4',
+        tag: '',
+      },
+      gangNum('10010087', '1001008a', 'A IN3 Gain: %2.1f dB', '-6'),
+      gangNum('10010088', '1001008a', 'A IN4 Gain: %2.1f dB', '-6'),
+    ]);
+    return menuSubs;
+  };
+
+  test('gang COL subtrees render inline as the one-page routing matrix (#132)', () => {
+    appState.currentKey = '1001008f';
+    const menuSubs = recordRoutingSubtree();
+    renderScreen(menuSubs, '', mockLog);
+    const lcd = document.getElementById('lcd');
+
+    // Group headers render; pair headers are skipped because the leaf
+    // statements self-describe ('-> IN1' / 'A IN1 Gain' differ per row).
+    expect(lcd.textContent).toContain('Source 1-4');
+    expect(lcd.textContent).toContain('In 1-4');
+    expect(lcd.textContent).not.toContain('Source 1/2');
+
+    // The whole matrix is on this page and editable: 4 source dropdowns,
+    // 4 clickable gain values.
+    expect(lcd.querySelectorAll('select[data-key]').length).toBe(4);
+    expect(lcd.querySelectorAll('.param-value').length).toBe(4);
+    expect(lcd.textContent).toContain('AES/EBU in 1');
+    expect(lcd.textContent).toContain('A IN4 Gain');
+
+    // Gang groups are presentation, not navigation: no softkeys for them.
+    expect(lcd.querySelector('.softkey[data-key="1001008c"]')).toBeNull();
+    expect(lcd.querySelector('.softkey[data-key="1001008b"]')).toBeNull();
+  });
+
+  test('gang leaf NUM is editable through the recursive param lookup (#132)', () => {
+    jest.useFakeTimers();
+    window.prompt = jest.fn(() => '-3');
+    appState.currentKey = '1001008f';
+    const menuSubs = recordRoutingSubtree();
+    renderScreen(menuSubs, '', mockLog);
+
+    const gain = document.querySelector('.param-value[data-key="10010085"]');
+    expect(gain).toBeTruthy();
+    gain.dispatchEvent(new Event('click', { bubbles: true }));
+    expect(sendValuePut).toHaveBeenCalledWith('10010085', '-3');
+    jest.useRealTimers();
+  });
+
+  test('gang pair headers render when leaf statements are ambiguous (#132)', () => {
+    // The OutSource rows are bare '%12s  (+)' lines — identical statements
+    // mean the pair label is the only thing identifying the rows.
+    appState.currentKey = '10010090';
+    const menuSubs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010090',
+        parent: '10010090',
+        statement: 'Output Routing',
+        tag: 'analog',
+      },
+      {
+        type: 'COL',
+        position: '13',
+        key: '100100b0',
+        parent: '10010090',
+        statement: 'OutSource 1-4',
+        tag: '',
+      },
+    ];
+    recordDump(menuSubs);
+    recordDump([
+      {
+        type: 'COL',
+        position: '13',
+        key: '100100b0',
+        parent: '100100b0',
+        statement: 'OutSource 1-4',
+        tag: '',
+      },
+      {
+        type: 'COL',
+        position: '13',
+        key: '100100b1',
+        parent: '100100b0',
+        statement: 'OutSource 1/2',
+        tag: '',
+      },
+    ]);
+    recordDump([
+      {
+        type: 'COL',
+        position: '13',
+        key: '100100b1',
+        parent: '100100b1',
+        statement: 'OutSource 1/2',
+        tag: '',
+      },
+      gangSet('10010091', '100100b1', '%12s  (+)', '10 ----------'),
+      gangSet('10010093', '100100b1', '%12s  (+)', '10 ----------'),
+    ]);
+    renderScreen(menuSubs, '', mockLog);
+    const lcd = document.getElementById('lcd');
+    expect(lcd.textContent).toContain('OutSource 1-4');
+    expect(lcd.textContent).toContain('OutSource 1/2');
+    expect(lcd.querySelectorAll('select[data-key]').length).toBe(2);
+  });
+
   test('param click edits NUM value with validation', () => {
     window.prompt = jest.fn(() => '75');
     window.alert = jest.fn(() => {});

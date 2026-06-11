@@ -107,16 +107,68 @@ export function ancestorsOf(key) {
   return chain;
 }
 
+// How deep a gang chain can nest below a menu before the search/fan-out
+// gives up. Live ground truth (#132 probe): the routing matrix is the
+// deepest observed — menu -> 'Source 1-4' -> 'Source 1/2' -> SET, i.e. 3
+// levels; 4 leaves one level of margin without letting a malformed parent
+// loop walk far.
+const GANG_MAX_DEPTH = 4;
+
 /**
- * Finds a param line by key among the direct children of menuKey's child
- * menus — the tree-derived successor to the childSubs flat scan (embedded
- * child params, C7 CON classification, param-click lookup).
+ * Is this sub line a "gang group" COL (#132)? Live ground truth from the
+ * routing matrix probe: the device expresses the manual's ganged-parameter
+ * pages (manual p.20) as COL subtrees whose group nodes carry a BLANK tag
+ * and a non-'0' position ('Source 1-4' pos 0x13, 'In 1-4' pos 0xc, the
+ * pair nodes likewise). Ordinary navigable menus always carry a tag or
+ * position '0' (the blank setup container 100100d0 is pos 0 — not a gang).
+ * Gang groups are presentation grouping, not navigation targets: the
+ * renderer inlines their subtree instead of emitting softkeys.
+ *
+ * @param {Object} line - A sub line (from a dump or a tree node).
+ * @returns {boolean}
+ */
+export function isGangCol(line) {
+  return !!line && line.type === 'COL' && line.position !== '0' && (line.tag || '') === '';
+}
+
+/**
+ * Does key sit inside a gang subtree of menuKey (#132)? True when the
+ * parent chain from key reaches menuKey within GANG_MAX_DEPTH hops with
+ * every INTERMEDIATE node being a gang COL (a direct child qualifies
+ * trivially). Drives the parser's gang fan-out and the bridge's
+ * child-arrival repaint for gang grandchildren.
+ *
+ * @param {string} key
+ * @param {string} menuKey
+ * @returns {boolean}
+ */
+export function withinGangOf(key, menuKey) {
+  let cur = parentOf(key);
+  const seen = new Set([key]);
+  for (let hops = 0; hops < GANG_MAX_DEPTH && cur !== undefined && !seen.has(cur); hops++) {
+    if (cur === menuKey) return true;
+    const node = nodes.get(cur);
+    if (!node || !isGangCol(node[0])) return false;
+    seen.add(cur);
+    cur = parentOf(cur);
+  }
+  return false;
+}
+
+/**
+ * Finds a param line by key among the children of menuKey's child menus —
+ * the tree-derived successor to the childSubs flat scan (embedded child
+ * params, C7 CON classification, param-click lookup). Recurses through
+ * gang COL subtrees (#132: the routing matrix leaves sit two gang levels
+ * below the menu), bounded by GANG_MAX_DEPTH.
  *
  * @param {string} menuKey - The on-screen menu.
  * @param {string} paramKey - The param being looked up.
  * @returns {Object|undefined} The param's sub line, if known.
  */
-export function findParamUnder(menuKey, paramKey) {
+export function findParamUnder(menuKey, paramKey, depth = 0, seen = new Set()) {
+  if (depth > GANG_MAX_DEPTH || seen.has(menuKey)) return undefined;
+  seen.add(menuKey);
   const menu = nodes.get(menuKey);
   if (!menu) return undefined;
   for (const child of menu.slice(1)) {
@@ -124,6 +176,10 @@ export function findParamUnder(menuKey, paramKey) {
     const childNode = nodes.get(child.key);
     const hit = childNode?.slice(1).find((s) => s.key === paramKey);
     if (hit) return hit;
+    if (isGangCol(child)) {
+      const deep = findParamUnder(child.key, paramKey, depth + 1, seen);
+      if (deep) return deep;
+    }
   }
   return undefined;
 }

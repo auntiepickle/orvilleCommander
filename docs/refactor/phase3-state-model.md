@@ -103,9 +103,11 @@ validation showed slow child dumps landing after the wave had settled):
    waves (meter polling, value refetches) render here — one render per wave,
    not per message. `hideLoading()` fires only when the wave carried
    OBJECTINFO requests (`payload.objectinfoSends > 0` — i.e. it could be the
-   wave a navigation/refresh opened) or on a watchdog stall (never strand the
-   spinner): with polling enabled, value-only waves drain every
-   `METER_POLL_MS` and must not clear an unrelated loading state.
+   wave a navigation/refresh opened) or GET_SCREEN requests
+   (`payload.screenSends > 0`, #3 — a bitmap fetch shows its own progress)
+   or on a watchdog stall (never strand the spinner): with polling enabled,
+   value-only waves drain every `METER_POLL_MS` and must not clear an
+   unrelated loading state.
 
 Renders that themselves issue requests (missing values, embed prefetch) start
 a new wave, whose drain triggers the next settled paint; the loop converges

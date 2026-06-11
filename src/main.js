@@ -4,7 +4,14 @@ import { CMD, KEY } from './sysex-commands.js';
 import { TIMING, DEFAULT_LOG_CATEGORIES } from './constants.js';
 import { loadConfig, saveConfig, clearConfig, mergeLogCategories } from './config.js';
 import { setupKeypressControls, testKeypress, meterPollTick } from './controls.js';
-import { setMidiPorts, addSysexListener, sendSysEx, sendValueDump, sendValuePut } from './midi.js';
+import {
+  setMidiPorts,
+  addSysexListener,
+  sendSysEx,
+  sendValueDump,
+  sendValuePut,
+  isOutputConnected,
+} from './midi.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
@@ -226,6 +233,17 @@ syncBtn.addEventListener('click', () => {
 
 getScreenBtn.addEventListener('click', () => {
   if (appState.fetchBitmap) {
+    // #3: show progress for the multi-second bitmap transfer. The screen
+    // request is wave-counted (#107) and screen waves hide loading on
+    // their drain, so this clears itself — but only if the request can
+    // actually go out: with no output selected, sendSysEx early-returns
+    // BEFORE the wave accounting (review finding), so showing the spinner
+    // first would strand it with no wave to drain it.
+    if (!isOutputConnected()) {
+      log('No MIDI output selected; skipped Get Screen request.', 'info', 'bitmap');
+      return;
+    }
+    showLoading();
     sendSysEx(CMD.GET_SCREEN, []);
     log('Sent Get Screen request (0x18)', 'info', 'general');
   } else {
@@ -366,5 +384,19 @@ setState(
     presetKey: cachedConfig?.presetKey || KEY.DSP_A_PRESET,
   },
   'main:boot-init'
+);
+// #48: the settings checkboxes sync to appState LIVE — previously the sync
+// happened only at boot-init, so toggling mid-session was a silent no-op
+// until Save Config + reload. Every runtime read already goes through
+// appState, so the change listeners are the whole fix. (Persistence still
+// requires Save Config, as before.)
+fetchBitmapCheckbox.addEventListener('change', () =>
+  setState({ fetchBitmap: fetchBitmapCheckbox.checked }, 'main:checkbox-sync')
+);
+updateBitmapOnChangeCheckbox.addEventListener('change', () =>
+  setState({ updateBitmapOnChange: updateBitmapOnChangeCheckbox.checked }, 'main:checkbox-sync')
+);
+eagerLoadCheckbox.addEventListener('change', () =>
+  setState({ eagerLoad: eagerLoadCheckbox.checked }, 'main:checkbox-sync')
 );
 connectMidi(cachedConfig);

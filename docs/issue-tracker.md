@@ -711,6 +711,18 @@ HUMAN-GATE: none
       (capture). What remains is the drive-grab-diff loop itself.
 HUMAN-GATE: needs-decision — live drive-the-physical-machine loop (G2b) held until maintainer go signal
 
+### Batch 5.3 — Small UX fixes (legacy GH issues)   [branch: fix/small-ux-3-48]
+- [x] GH #3  Loading indicator for bitmap fetches: the Get Screen button now shows the loading
+      overlay, and the bridge's hideLoading gate accepts SCREEN waves (per-kind wave accounting:
+      recordRequest kinds objectinfo/value/screen; payload gains screenSends) — the multi-second
+      0x17 transfer clears its own spinner on drain. Value-only meter-poll waves still cannot
+      clear an unrelated loading state (C1 semantics preserved, test-pinned).
+- [x] GH #48 Settings checkboxes (fetch-bitmap, update-bitmap-on-change, eager-load) sync to
+      appState LIVE via change listeners — previously boot-init-only, so a mid-session toggle was
+      a silent no-op until Save Config + reload (the defect characterized in the #48 status
+      comment). Persistence still requires Save Config, as before.
+HUMAN-GATE: none
+
 ---
 
 ## Phase 6 — Performance & fidelity validation

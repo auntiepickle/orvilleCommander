@@ -32,6 +32,7 @@ let sysexListenerHandler = null;
 let outstanding = 0;
 let waveSends = 0;
 let waveObjectinfoSends = 0;
+let waveScreenSends = 0;
 let waveReceives = 0;
 let waveStart = 0;
 let waveLastKey = null;
@@ -54,20 +55,24 @@ function rearmWatchdog() {
   watchdogHandle = setTimeout(forceComplete, delay);
 }
 
-function recordRequest(key, isObjectinfo = false) {
+// kind: 'objectinfo' | 'value' | 'screen'. Per-kind accounting drives the
+// bridge's hideLoading gate: structure and screen waves may clear the
+// loading indicator; the continuous value-only meter-poll waves must not
+// hide a navigation's loading state (C1 review; screen added for #3 so a
+// bitmap fetch can show its own progress).
+function recordRequest(key, kind = 'value') {
   if (outstanding === 0 && watchdogHandle === null) {
     waveStart = Date.now();
     waveSends = 0;
     waveObjectinfoSends = 0;
+    waveScreenSends = 0;
     waveReceives = 0;
     waveLastKey = null;
   }
   outstanding++;
   waveSends++;
-  // Per-type accounting: the bridge clears the loading indicator only on
-  // waves that carried OBJECTINFO (structure) requests, so the continuous
-  // value-only meter-poll waves cannot hide a navigation's loading state.
-  if (isObjectinfo) waveObjectinfoSends++;
+  if (kind === 'objectinfo') waveObjectinfoSends++;
+  if (kind === 'screen') waveScreenSends++;
   waveLastKey = key;
   rearmWatchdog();
 }
@@ -120,6 +125,7 @@ function finishWave(reason) {
     reason,
     sendCount: waveSends,
     objectinfoSends: waveObjectinfoSends,
+    screenSends: waveScreenSends,
     receiveCount: waveReceives,
     durationMs: Date.now() - waveStart,
     lastKey: waveLastKey,
@@ -128,6 +134,7 @@ function finishWave(reason) {
   outstanding = 0;
   waveSends = 0;
   waveObjectinfoSends = 0;
+  waveScreenSends = 0;
   waveReceives = 0;
   waveStart = 0;
   waveLastKey = null;
@@ -168,6 +175,18 @@ function finishWave(reason) {
  */
 export function getDumpStats() {
   return { ...dumpStats };
+}
+
+/**
+ * Whether a MIDI output port has been selected. Callers that show UI state
+ * BEFORE sending (e.g. the Get Screen loading overlay, #3) must check this:
+ * sendSysEx early-returns without any wave accounting when no output is
+ * set, so optimistic UI would have no wave drain to clear it.
+ *
+ * @returns {boolean}
+ */
+export function isOutputConnected() {
+  return selectedOutput !== null;
 }
 
 /**
@@ -288,7 +307,7 @@ export function sendSysEx(cmd, dataBytes = []) {
       log('GET_SCREEN deferred until the open wave drains (#107)', 'debug', 'bitmap');
       return;
     }
-    recordRequest('screen');
+    recordRequest('screen', 'screen');
   }
   try {
     const sysex = [appState.deviceId, cmd, ...dataBytes];
@@ -312,7 +331,7 @@ export function sendSysEx(cmd, dataBytes = []) {
  * sendObjectInfoDump('401000b');
  */
 export function sendObjectInfoDump(key) {
-  recordRequest(key, true);
+  recordRequest(key, 'objectinfo');
   const keyBytes = key.split('').map((c) => c.charCodeAt(0));
   sendSysEx(CMD.OBJECTINFO_DUMP, keyBytes);
 }

@@ -780,16 +780,33 @@ auto-closed by GitHub when the base branch merged). #45 (G2b live loop) remains 
 needs-decision gate. OPEN BOARD: #9, #10, #12, #14 — all four are feature enhancements; every
 bug-class issue ever logged is closed.
 
-2026-06-11 later — UI milestone in flight (#130, branch feat/ui-rack-faceplate): virtual rack
-faceplate (Option A green phosphor; true 6x8 LCD font PxPlus HP 100LX; panel fidelity pass from
-the unit manual p.8-11 incl. wired BUSY LED + DATA knob). FILED from maintainer reports during
-the milestone: #131 (loading visibility / open dropdown destroyed by repaints — FIXED on the
-branch: deferred repaints while a select is focused + BUSY LED on the dump-wave lifecycle) and
-#132 (input/output routing matrix not editable — FIXED on the branch after live probes: the
-device's ganged-parameter screens are gang COL subtrees [blank tag, non-'0' position]; they now
-render INLINE as the hardware's one-page matrix — tree.js isGangCol/withinGangOf + recursive
-findParamUnder, parser gang fan-out, R7 gang-grandchild repaint, renderGangInline, audit
-reachability updated. Deepest-ever audit [depth 4, 98 COL nodes]: zero violations).
+2026-06-11 later — UI MILESTONE MERGED (PR #133, squash d6635e3; auto-closed #130/#131/#132):
+virtual rack faceplate (Option A green phosphor; true 6x8 LCD font PxPlus HP 100LX, CC BY-SA;
+panel fidelity from the unit manual p.8-11 incl. wired BUSY LED + DATA knob), #131 loading
+visibility (deferred repaints while a SET dropdown is focused + BUSY LED on the dump-wave
+lifecycle), #132 routing matrix editable (gang COL subtrees [blank tag, non-'0' position] render
+INLINE as the hardware's one-page matrix — tree.js isGangCol/withinGangOf + recursive
+findParamUnder, parser gang fan-out with per-visit dedupe, R7 gang-grandchild repaint,
+renderGangInline, audit reachability updated), and live-external-clock fixes (slow poll lane
+keeps on-page values like the midiclock-measured Tempo BPM current; compact 8-cell indicator
+flasher). Reviewed pre-merge (correctness + docs agents; 2 blockers fixed). Deepest-ever audit
+(depth 4, 98 COL nodes): zero violations. Tests 190/190. OPEN BOARD unchanged: #9, #10, #12,
+#14, #45 (gated).
+
+2026-06-11 evening — DISPLAY POLISH + THEME + DEMO MERGED (PR #136, squash 81ca3dd), all
+maintainer-driven same-day iteration: tempered-glass pane with backdrop-filter refraction +
+pointer key light; row leading (+6px, 25%) and bezel diffusion analysis/fix; in-glass inline
+editing replaces every browser prompt()/alert(); tokenized theme engine (src/theme.js — 16-token
+registry, 6 presets incl. synthwave/amber/vfd/redline/stealth, IDE-style editor pane, persisted
+via config.saveThemeConfig; styles.css alpha literals converted to color-mix so one token retints
+its family); theme-colored bitmap canvas (framebuffer computePixels injectable colors +
+rerenderBitmap); demo mode (src/demo.js over src/demo-data.json — 98 live-captured dumps + a real
+screen frame served through the midi.js port contract; refresh recipe in CLAUDE.md). Reviewed
+pre-merge (no blockers; 5 should-fixes + nits fixed, incl. inline-editor lifecycle gaps, demo
+device-ID poisoning, corrupt-localStorage hardening, demo SET hex echo). Tests 205/205. FILED:
+#135 (program preview via idle DSP, enhancement). KNOWN-OPEN from maintainer report, probe
+blocked on the WinMM port: bank select does not refilter the program list (probe ready at
+logs/probe-bank.mjs). OPEN BOARD: #9, #10, #12, #14, #45 (gated), #135.
 
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24

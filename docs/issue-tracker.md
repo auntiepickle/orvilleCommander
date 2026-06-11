@@ -780,6 +780,14 @@ auto-closed by GitHub when the base branch merged). #45 (G2b live loop) remains 
 needs-decision gate. OPEN BOARD: #9, #10, #12, #14 — all four are feature enhancements; every
 bug-class issue ever logged is closed.
 
+2026-06-11 later — UI milestone in flight (#130, branch feat/ui-rack-faceplate): virtual rack
+faceplate (Option A green phosphor; true 6x8 LCD font PxPlus HP 100LX; panel fidelity pass from
+the unit manual p.8-11 incl. wired BUSY LED + DATA knob). FILED from maintainer reports during
+the milestone: #131 (loading visibility / open dropdown destroyed by repaints — FIXED on the
+branch: deferred repaints while a select is focused + BUSY LED on the dump-wave lifecycle) and
+#132 (input/output routing matrix not editable — evidence logged on the issue; blocked on a live
+probe of the matrix COL keys, needs-hardware: the browser tab holds the single-client WinMM port).
+
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24
 - 8-step decoupling refactor — PR #23

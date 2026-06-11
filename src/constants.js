@@ -10,7 +10,6 @@
 export const TIMING = {
   METER_POLL_MS: 100, // meter polling interval
   MIDI_SETTLE_MS: 200, // wait after a send before refreshing the screen
-  PROGRAM_SET_MS: 300, // extra wait to ensure a program value is set
   DEVICE_LOAD_MS: 500, // wait for the device to process a preset load
   VALUE_DUMP_WAIT_MS: 500, // wait for a VALUE_DUMP to arrive after a change
   POLL_INTERVAL_MS: 500, // meter-polling re-request interval

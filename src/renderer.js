@@ -241,25 +241,11 @@ const handleSelectChange = (e) => {
         );
       }
     }, TIMING.VALUE_DUMP_WAIT_MS); // Wait for VALUE_DUMP to arrive
-    // Auto-load preset if changing the program select in load menu
-    if (key === KEY.PROGRAM_SELECT) {
-      setTimeout(() => {
-        const loadKey = appState.presetKey.startsWith(KEY_PREFIX.DSP_A)
-          ? KEY.LOAD_TRIGGER_A
-          : KEY.LOAD_TRIGGER_B;
-        sendValuePut(loadKey, '1');
-        log(`Auto-triggered load for ${loadKey} after program change`, 'info', 'general');
-        setTimeout(() => {
-          updateScreen();
-          sendObjectInfoDump(KEY.ROOT);
-          log('Fetched root after preset load.', 'debug', 'general');
-          if (appState.updateBitmapOnChange) {
-            sendSysEx(CMD.GET_SCREEN, []);
-            log('Triggered bitmap update after TRG.', 'debug', 'bitmap');
-          }
-        }, TIMING.DEVICE_LOAD_MS); // Delay for device to process load and fetch root
-      }, TIMING.PROGRAM_SET_MS); // Additional delay to ensure program value is set
-    }
+    // NOTE: choosing a program from the dropdown only HIGHLIGHTS it (sets
+    // the device's selected slot) — it does NOT load it. Loading is the
+    // explicit '<- load program in A/B' TRG (handleParamClick), matching
+    // the hardware: scroll picks, SELECT/<load>/ENT applies (manual p.21,
+    // maintainer request). The old auto-load fired the trigger here.
   }, TIMING.MIDI_SETTLE_MS); // Delay to allow MIDI update
 };
 

@@ -66,9 +66,9 @@ describe('renderer.js', () => {
 
   // ... **UNCHANGED: all prior passing tests** ...
 
-  test('select change updates SET value and triggers auto-load for program select', () => {
+  test('choosing a program HIGHLIGHTS it but never auto-loads (load is the explicit TRG)', () => {
     appState.currentKey = '10020000';
-    appState.presetKey = '401000b'; // → loadKey='1002001c'
+    appState.presetKey = '401000b';
     const subs = [
       {
         type: 'COL',
@@ -81,7 +81,7 @@ describe('renderer.js', () => {
       {
         type: 'SET',
         position: '1',
-        key: '10020011',
+        key: '10020011', // KEY.PROGRAM_SELECT
         parent: '10020000',
         statement: '%-20s',
         tag: 'Program',
@@ -91,36 +91,20 @@ describe('renderer.js', () => {
     ];
     renderScreen(subs, '', mockLog);
     const select = document.querySelector('select[data-key="10020011"]');
-    expect(select).toBeTruthy();
-
     select.value = '5';
     jest.useFakeTimers();
     select.dispatchEvent(new Event('change', { bubbles: true }));
 
-    // Immediate
-    expect(showLoading).toHaveBeenCalled();
+    // The selection is put (highlights the slot) and cached in HEX shape.
     expect(sendValuePut).toHaveBeenCalledWith('10020011', '5');
     expect(appState.currentValues['10020011']).toBe('5 Preset5');
 
-    // Timeout 200
-    jest.advanceTimersByTime(200);
-    expect(sendSysEx).toHaveBeenCalledWith(0x18, []);
-
-    // Nested timeout 300 (auto-load)
-    jest.advanceTimersByTime(300);
-    expect(sendValuePut).toHaveBeenCalledWith('1002001c', '1');
-    expect(mockLog).toHaveBeenCalledWith(
-      expect.stringContaining('Auto-triggered load'),
-      'info',
-      'general'
-    );
-
-    // Nested timeout 500 (post-load)
-    jest.advanceTimersByTime(500);
-    expect(sendObjectInfoDump).toHaveBeenCalledWith('0');
-    expect(mockLog).toHaveBeenCalledWith('Fetched root after preset load.', 'debug', 'general');
-    expect(sendSysEx).toHaveBeenCalledWith(0x18, []); // 2nd bitmap
-
+    // Run every timer to completion — the load trigger must NEVER fire,
+    // and root must not be refetched as a post-load step (maintainer:
+    // selecting a program should not apply it).
+    jest.runOnlyPendingTimers();
+    expect(sendValuePut).not.toHaveBeenCalledWith('1002001c', '1'); // LOAD_TRIGGER_A
+    expect(sendValuePut).not.toHaveBeenCalledWith('1002001d', '1'); // LOAD_TRIGGER_B
     jest.useRealTimers();
   });
 

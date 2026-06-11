@@ -178,6 +178,18 @@ export function getDumpStats() {
 }
 
 /**
+ * Whether a MIDI output port has been selected. Callers that show UI state
+ * BEFORE sending (e.g. the Get Screen loading overlay, #3) must check this:
+ * sendSysEx early-returns without any wave accounting when no output is
+ * set, so optimistic UI would have no wave drain to clear it.
+ *
+ * @returns {boolean}
+ */
+export function isOutputConnected() {
+  return selectedOutput !== null;
+}
+
+/**
  * Whether a request wave is currently open (responses outstanding). The
  * meter-poll gate (#107): the live saturation smoke measured poll ticks
  * joining waves faster than the 31250-baud link drains them — outstanding

@@ -793,6 +793,21 @@ flasher). Reviewed pre-merge (correctness + docs agents; 2 blockers fixed). Deep
 (depth 4, 98 COL nodes): zero violations. Tests 190/190. OPEN BOARD unchanged: #9, #10, #12,
 #14, #45 (gated).
 
+2026-06-11 evening — DISPLAY POLISH + THEME + DEMO MERGED (PR #136, squash 81ca3dd), all
+maintainer-driven same-day iteration: tempered-glass pane with backdrop-filter refraction +
+pointer key light; row leading (+6px, 25%) and bezel diffusion analysis/fix; in-glass inline
+editing replaces every browser prompt()/alert(); tokenized theme engine (src/theme.js — 16-token
+registry, 6 presets incl. synthwave/amber/vfd/redline/stealth, IDE-style editor pane, persisted
+via config.saveThemeConfig; styles.css alpha literals converted to color-mix so one token retints
+its family); theme-colored bitmap canvas (framebuffer computePixels injectable colors +
+rerenderBitmap); demo mode (src/demo.js over src/demo-data.json — 98 live-captured dumps + a real
+screen frame served through the midi.js port contract; refresh recipe in CLAUDE.md). Reviewed
+pre-merge (no blockers; 5 should-fixes + nits fixed, incl. inline-editor lifecycle gaps, demo
+device-ID poisoning, corrupt-localStorage hardening, demo SET hex echo). Tests 205/205. FILED:
+#135 (program preview via idle DSP, enhancement). KNOWN-OPEN from maintainer report, probe
+blocked on the WinMM port: bank select does not refilter the program list (probe ready at
+logs/probe-bank.mjs). OPEN BOARD: #9, #10, #12, #14, #45 (gated), #135.
+
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24
 - 8-step decoupling refactor — PR #23

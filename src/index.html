@@ -39,11 +39,27 @@
               <span class="wordmark-main">Orville</span>
               <span class="wordmark-sub">COMMANDER</span>
             </div>
-            <div class="level-meters" aria-hidden="true">
-              <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>IN1</b></div>
-              <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>IN2</b></div>
-              <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>IN3</b></div>
-              <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>IN4</b></div>
+            <!-- Manual p.8 items A/B: the four level meters and the system
+                 sampling-rate / external-sync indicator column. Decorative
+                 until #10 lands real metering. -->
+            <div class="indicator-cluster" aria-hidden="true">
+              <div class="level-meters">
+                <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>1</b></div>
+                <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>2</b></div>
+                <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>3</b></div>
+                <div class="meter"><i></i><i></i><i></i><i></i><i></i><i></i><b>4</b></div>
+              </div>
+              <div class="clock-leds">
+                <div class="clock-led"><i></i><b>96K</b></div>
+                <div class="clock-led"><i></i><b>88.2K</b></div>
+                <div class="clock-led lit"><i></i><b>48K</b></div>
+                <div class="clock-led"><i></i><b>44.1K</b></div>
+                <div class="clock-led clock-led-ext"><i></i><b>EXT</b></div>
+              </div>
+            </div>
+            <div class="power-switch" aria-hidden="true">
+              <span class="rocker"><i></i></span>
+              <b>POWER</b>
             </div>
             <div class="unit-badge">DUAL DSP &nbsp;•&nbsp; 24 BIT</div>
           </div>
@@ -61,26 +77,33 @@
           </div>
 
           <div class="controls-block">
+            <!-- Hold sub-labels are the manual's real hold functions (p.8-9):
+                 PROGRAM-hold = routing storage, PARAMETER-hold = patch
+                 editor, SELECT-hold = remote-control setup. -->
             <div class="key-group function-keys">
               <div class="key-col">
+                <button id="ab-btn" class="key key-accent">DSP A/B</button>
+                <div class="bypass-leds" aria-hidden="true">
+                  <span class="status-led"><i></i><b>A</b></span>
+                  <span class="status-led"><i></i><b>B</b></span>
+                </div>
+                <button id="bypass-btn" class="key key-danger">BYPASS</button>
+              </div>
+              <div class="key-col">
                 <button id="program-btn" class="key">PROGRAM</button>
-                <button id="program-hold-btn" class="key key-hold">HOLD</button>
+                <button id="program-hold-btn" class="key key-hold">HOLD · ROUTING</button>
               </div>
               <div class="key-col">
                 <button id="parameter-btn" class="key">PARAMETER</button>
-                <button id="parameter-hold-btn" class="key key-hold">HOLD</button>
+                <button id="parameter-hold-btn" class="key key-hold">HOLD · PATCH</button>
               </div>
               <div class="key-col">
                 <button id="select-btn" class="key">SELECT</button>
-                <button id="select-hold-btn" class="key key-hold">HOLD</button>
+                <button id="select-hold-btn" class="key key-hold">HOLD · REMOTE</button>
               </div>
               <div class="key-col">
                 <button id="levels-btn" class="key">LEVELS</button>
                 <button id="setup-btn" class="key">SETUP</button>
-              </div>
-              <div class="key-col">
-                <button id="ab-btn" class="key key-accent">A / B</button>
-                <button id="bypass-btn" class="key key-danger">BYPASS</button>
               </div>
             </div>
 
@@ -91,10 +114,17 @@
               <button id="down-btn" class="key key-cursor" aria-label="Cursor down">▼</button>
             </div>
 
+            <!-- Manual p.9 items L/O: the KNOB plus INC/DEC keys. The knob
+                 answers wheel-scroll and vertical drag (controls.js). -->
             <div class="key-group wheel-keys">
               <span class="group-legend">DATA</span>
-              <button id="inc-btn" class="key key-wheel" aria-label="Increment">▲</button>
-              <button id="dec-btn" class="key key-wheel" aria-label="Decrement">▼</button>
+              <div id="data-knob" class="knob" role="slider" aria-label="Data knob" tabindex="0">
+                <i class="knob-pointer"></i>
+              </div>
+              <div class="incdec">
+                <button id="inc-btn" class="key key-wheel" aria-label="Increment">▲</button>
+                <button id="dec-btn" class="key key-wheel" aria-label="Decrement">▼</button>
+              </div>
             </div>
 
             <div class="key-group keypad">
@@ -113,6 +143,16 @@
               <button id="cxl-btn" class="key key-num key-danger">CXL</button>
               <button id="enter-btn" class="key key-num key-accent keypad-enter">ENT</button>
             </div>
+          </div>
+
+          <!-- Manual p.10 items Q/R/S: BUSY LED (wired to dump waves —
+               lit while data moves on the MIDI link) over the memory card
+               slot and its release key (decorative). -->
+          <div class="card-block">
+            <span id="busy-led" class="status-led busy"><i></i><b>BUSY</b></span>
+            <div class="card-slot" aria-hidden="true"></div>
+            <span class="card-release" aria-hidden="true"></span>
+            <b class="card-legend" aria-hidden="true">MEMORY CARD</b>
           </div>
         </div>
 

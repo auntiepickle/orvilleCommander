@@ -59,7 +59,7 @@ body {
   padding: 32px 16px 64px;
 }
 .rack {
-  width: min(1540px, 100%);
+  width: min(1630px, 100%);
 }
 
 /* ---------- connection strip ------------------------------------------- */
@@ -132,7 +132,7 @@ body {
 .panel {
   flex: 1;
   display: grid;
-  grid-template-columns: 160px auto 1fr;
+  grid-template-columns: 170px auto 1fr 56px;
   gap: 24px;
   padding: 24px 24px 28px;
 }
@@ -170,7 +170,13 @@ body {
   border-top: 1px solid var(--panel-line);
   padding-top: 8px;
 }
-/* Decorative LED ladders until #10 lands real metering. */
+/* Manual p.8 items A/B: level meters + sampling-rate/EXT-sync LED column.
+   Decorative LED ladders until #10 lands real metering. */
+.indicator-cluster {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
 .level-meters {
   display: flex;
   flex-direction: column;
@@ -198,6 +204,90 @@ body {
   font-weight: 600;
   letter-spacing: 0.12em;
   color: var(--legend-dim);
+}
+.clock-leds {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.clock-led {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.clock-led i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #20231f;
+  box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.9);
+}
+.clock-led.lit i {
+  background: var(--led-green);
+  box-shadow: 0 0 4px rgba(68, 224, 90, 0.5);
+}
+.clock-led-ext i {
+  border-radius: 1px; /* square EXT lamp, distinct from the rate dots */
+}
+.clock-led b {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--legend-dim);
+}
+/* Manual p.11 item V (decorative — the page being open IS power). */
+.power-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.power-switch .rocker {
+  width: 30px;
+  height: 16px;
+  border-radius: 3px;
+  background: linear-gradient(var(--btn-cap-hi), var(--btn-cap));
+  border: 1px solid var(--btn-edge);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+}
+.power-switch .rocker i {
+  width: 12px;
+  height: 10px;
+  border-radius: 2px;
+  background: #101113;
+  margin-left: auto; /* switched to ON */
+  box-shadow: 0 0 4px rgba(68, 224, 90, 0.4);
+}
+.power-switch b {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--legend-dim);
+}
+/* Small labeled status lamps (bypass A/B, BUSY). */
+.status-led {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.status-led i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2a1f1f;
+  box-shadow: inset 0 0 1px rgba(0, 0, 0, 0.9);
+  transition: background 120ms ease;
+}
+.status-led b {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--legend-dim);
+}
+.status-led.busy.lit i {
+  background: var(--led-amber);
+  box-shadow: 0 0 5px rgba(255, 176, 0, 0.6);
 }
 
 /* ---------- the display -------------------------------------------------- */
@@ -456,7 +546,7 @@ body {
   grid-area: wheel;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   align-self: start;
   justify-self: center;
 }
@@ -466,10 +556,54 @@ body {
   letter-spacing: 0.2em;
   color: var(--legend-dim);
 }
+/* The KNOB (manual p.9 item L): wheel-scroll / drag → INC/DEC detents. */
+.knob {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 28%, #3c4046, #1d1f22 60%, #0b0c0d), var(--btn-cap);
+  border: 1px solid var(--btn-edge);
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  cursor: grab;
+  position: relative;
+  touch-action: none;
+}
+.knob:active {
+  cursor: grabbing;
+}
+.knob .knob-pointer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.knob .knob-pointer::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 6px;
+  width: 4px;
+  height: 12px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--legend);
+}
+.incdec {
+  display: flex;
+  gap: 6px;
+}
 .key-wheel {
-  width: 56px;
-  padding: 12px 0;
-  font-size: 12px;
+  width: 30px;
+  padding: 6px 0;
+  font-size: 10px;
+}
+/* Bypass status LEDs between DSP A/B and BYPASS (manual p.8 item D). */
+.bypass-leds {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  padding: 1px 0;
 }
 
 .keypad {
@@ -484,6 +618,40 @@ body {
 }
 .keypad-enter {
   grid-column: 2 / 4;
+}
+
+/* Memory card slot + BUSY LED (manual p.10 items Q/R/S). BUSY is wired:
+   event-bridge lights it while a dump wave is open. */
+.card-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+.card-slot {
+  width: 10px;
+  height: 110px;
+  border-radius: 2px;
+  background: #060708;
+  box-shadow:
+    inset 0 0 4px rgba(0, 0, 0, 1),
+    0 1px 0 rgba(255, 255, 255, 0.04);
+  border: 1px solid #000;
+}
+.card-release {
+  width: 14px;
+  height: 8px;
+  border-radius: 2px;
+  background: linear-gradient(var(--btn-cap-hi), var(--btn-cap));
+  border: 1px solid var(--btn-edge);
+}
+.card-legend {
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--legend-dim);
+  writing-mode: vertical-rl;
 }
 
 /* ---------- shared utility widgets -------------------------------------- */

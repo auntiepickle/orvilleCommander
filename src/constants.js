@@ -64,6 +64,16 @@ export const EAGER = {
   MAX_DEPTH: 3,
 };
 
+// The DATA KNOB (#131; manual p.9 item L). Wheel-scroll and vertical drag
+// spin it; each detent is one INC/DEC keypress. The refresh after a spin is
+// a single trailing updateScreen, debounced — per-detent refreshes would
+// flood the 31250-baud link exactly like the #107 meter-poll saturation.
+export const KNOB = {
+  DETENT_DEG: 18, // visual pointer step: 20 detents per revolution, encoder-like
+  DRAG_PX_PER_DETENT: 12, // vertical drag distance per detent — comfortable mouse travel
+  SETTLE_REFRESH_MS: 300, // trailing screen refresh after the last detent (≥ MIDI_SETTLE_MS)
+};
+
 // Canvas presentation for the bitmap screen (CSS, cosmetic only).
 // x3 integer scale (240x64 -> 720x192) so the bitmap mirror and the virtual
 // #lcd are the SAME physical size — one display, two modes (#130; the

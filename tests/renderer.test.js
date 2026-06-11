@@ -118,6 +118,61 @@ describe('renderer.js', () => {
     jest.useRealTimers();
   });
 
+  // #131: progressive paints during a wave must not destroy an open SET
+  // dropdown — repaints park while a select inside #lcd is focused.
+  const dropdownGuardSubs = (title) => [
+    {
+      type: 'COL',
+      position: '0',
+      key: '10020000',
+      parent: '',
+      statement: title,
+      tag: 'program',
+    },
+    {
+      type: 'SET',
+      position: '1',
+      key: '10020011',
+      parent: '10020000',
+      statement: '%-20s',
+      tag: 'Program',
+      options: [{ index: '0', desc: 'Preset0' }],
+      value: '0 Preset0',
+    },
+  ];
+
+  test('repaint defers while a SET dropdown is focused and flushes on blur (#131)', () => {
+    appState.currentKey = '10020000';
+    renderScreen(dropdownGuardSubs('Program'), '', mockLog);
+    const select = document.querySelector('select[data-key="10020011"]');
+    select.focus();
+    expect(document.activeElement).toBe(select);
+
+    renderScreen(dropdownGuardSubs('ProgramRepainted'), '', mockLog);
+    // Deferred: same DOM, the select the user is holding open survives.
+    expect(document.querySelector('select[data-key="10020011"]')).toBe(select);
+    expect(document.getElementById('lcd').innerHTML).not.toContain('ProgramRepainted');
+
+    select.blur();
+    expect(document.getElementById('lcd').innerHTML).toContain('ProgramRepainted');
+  });
+
+  test('a change discards the parked repaint instead of replaying it (#131)', () => {
+    jest.useFakeTimers();
+    appState.currentKey = '10020000';
+    renderScreen(dropdownGuardSubs('Program'), '', mockLog);
+    const select = document.querySelector('select[data-key="10020011"]');
+    select.focus();
+
+    renderScreen(dropdownGuardSubs('StaleParkedPaint'), '', mockLog);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    select.blur();
+    // The parked paint is stale relative to the change's own refresh flow;
+    // blur must not replay it.
+    expect(document.getElementById('lcd').innerHTML).not.toContain('StaleParkedPaint');
+    jest.useRealTimers();
+  });
+
   test('param click edits NUM value with validation', () => {
     window.prompt = jest.fn(() => '75');
     window.alert = jest.fn(() => {});

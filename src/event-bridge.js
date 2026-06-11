@@ -141,8 +141,24 @@ export function registerEventBridge({ hideLoading }) {
     })
   );
 
+  // Faceplate BUSY LED (#131): the hardware semantic is "lit while data
+  // moves on the MIDI link" (manual p.10), which maps exactly onto the
+  // dump-wave lifecycle — on at wave open, off when the wave settles. This
+  // is presentation only; absence of the element (tests, headless) is fine.
+  const setBusyLed = (lit) => {
+    const led = document.getElementById('busy-led');
+    if (led) led.classList.toggle('lit', lit);
+  };
+
+  unsubscribers.push(
+    on('wave:opened', () => {
+      setBusyLed(true);
+    })
+  );
+
   unsubscribers.push(
     on('dumpComplete', (payload) => {
+      setBusyLed(false);
       render();
       // A stalled wave invalidates any pending one-shot: do not land or
       // descend from stale state (C2 design step 4).

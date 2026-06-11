@@ -1,7 +1,7 @@
 // controls.js
 import { sendKeypress, sendSysEx, sendValueDump, isWaveOpen } from './midi.js';
 import { CMD, KEY } from './sysex-commands.js';
-import { TIMING } from './constants.js';
+import { TIMING, KNOB } from './constants.js';
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
@@ -169,6 +169,61 @@ export function setupKeypressControls() {
       });
     }
   });
+}
+
+/**
+ * The DATA KNOB (manual p.9 item L): wheel-scroll or vertical drag spins
+ * it; every detent sends one INC/DEC keypress immediately (so a fast spin
+ * streams keypresses like the real encoder), and ONE trailing screen
+ * refresh fires after the spin settles — per-detent updateScreen calls
+ * would saturate the link the way unguarded meter polling did (#107).
+ *
+ * @example
+ * // Called in main.js after DOM load
+ * setupDataKnob();
+ */
+export function setupDataKnob() {
+  const knob = document.getElementById('data-knob');
+  if (!knob) return;
+  const pointer = knob.querySelector('.knob-pointer');
+  let angle = 0;
+  let settleHandle = null;
+
+  const spin = (direction) => {
+    angle += direction * KNOB.DETENT_DEG;
+    if (pointer) pointer.style.transform = `rotate(${angle}deg)`;
+    sendKeypress(keypressMasks[direction > 0 ? 'inc' : 'dec']);
+    if (settleHandle) clearTimeout(settleHandle);
+    settleHandle = setTimeout(() => {
+      settleHandle = null;
+      updateScreen();
+      if (appState.fetchBitmap) sendSysEx(CMD.GET_SCREEN, []);
+    }, KNOB.SETTLE_REFRESH_MS);
+  };
+
+  knob.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    spin(e.deltaY < 0 ? 1 : -1);
+  });
+
+  let dragLastY = null;
+  knob.addEventListener('pointerdown', (e) => {
+    dragLastY = e.clientY;
+    knob.setPointerCapture(e.pointerId);
+  });
+  knob.addEventListener('pointermove', (e) => {
+    if (dragLastY === null) return;
+    const travel = dragLastY - e.clientY; // drag up = increment
+    if (Math.abs(travel) >= KNOB.DRAG_PX_PER_DETENT) {
+      spin(travel > 0 ? 1 : -1);
+      dragLastY = e.clientY;
+    }
+  });
+  const endDrag = () => {
+    dragLastY = null;
+  };
+  knob.addEventListener('pointerup', endDrag);
+  knob.addEventListener('pointercancel', endDrag);
 }
 
 /**

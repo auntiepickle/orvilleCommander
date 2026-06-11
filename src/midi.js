@@ -68,6 +68,10 @@ function recordRequest(key, kind = 'value') {
     waveScreenSends = 0;
     waveReceives = 0;
     waveLastKey = null;
+    // The faceplate BUSY LED mirrors the hardware semantic (manual p.10:
+    // lit while data moves on the MIDI link): on at wave open, off at
+    // dumpComplete. event-bridge.js owns the DOM toggle (#131).
+    emit('wave:opened', { kind });
   }
   outstanding++;
   waveSends++;

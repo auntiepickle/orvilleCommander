@@ -380,6 +380,31 @@ function formatValue(statement, value, isHtml = false, key = '') {
 // real dump, never on a cache paint).
 let prePainting = false;
 
+// Open-dropdown repaint guard (#131): replacing #lcd's innerHTML while the
+// user has a SET dropdown open destroys the select mid-interaction — and
+// progressive paints land throughout a wave, so the dropdown "constantly
+// closes until loading finishes" (maintainer report). While a select inside
+// #lcd is focused, repaints are DEFERRED: the latest paint's arguments park
+// here and replay when the select blurs. A change DISCARDS the parked paint
+// instead — handleSelectChange's own updateScreen supersedes it.
+let deferredPaint = null;
+
+function lcdSelectFocused(lcdEl) {
+  const active = document.activeElement;
+  return !!active && active.tagName === 'SELECT' && lcdEl.contains(active);
+}
+
+const discardDeferredPaint = () => {
+  deferredPaint = null;
+};
+
+const flushDeferredPaint = () => {
+  if (!deferredPaint) return;
+  const args = deferredPaint;
+  deferredPaint = null;
+  renderScreen(...args);
+};
+
 // A param line with every value slot blanked to the placeholder: the
 // statement (else the tag) with format specifiers substituted; '%%'
 // collapses to a literal '%' via the shared regex's leading alternative.
@@ -392,6 +417,11 @@ export function renderScreen(subs, ascii, logParam) {
   const lcdEl = document.getElementById('lcd');
   if (!subs || subs.length === 0) {
     log('Skipping render: no subs available', 'debug', 'renderScreen');
+    return;
+  }
+  if (lcdSelectFocused(lcdEl)) {
+    deferredPaint = [subs, ascii, logParam];
+    log('Deferring repaint: a SET dropdown is open (#131)', 'debug', 'renderScreen');
     return;
   }
   // R3 render guard (#106): these subs describe a DIFFERENT node than the
@@ -1000,10 +1030,17 @@ export function renderScreen(subs, ascii, logParam) {
     bottomHtml = softHtml;
   }
   lcdEl.innerHTML = `<div class="top-docked">${topHtml}</div><div class="main-content">${mainHtmlLines.join('\n')}</div><div class="bottom-docked">${bottomHtml}</div>`;
-  // Add change listeners to selects
+  // Add change listeners to selects. The change discard runs after
+  // handleSelectChange (registration order) so a stale parked paint never
+  // replays over the post-change refresh; blur replays the latest deferred
+  // paint when the user closes the dropdown without changing (#131).
   lcdEl.querySelectorAll('select[data-key]').forEach((select) => {
     select.removeEventListener('change', handleSelectChange);
     select.addEventListener('change', handleSelectChange);
+    select.removeEventListener('change', discardDeferredPaint);
+    select.addEventListener('change', discardDeferredPaint);
+    select.removeEventListener('blur', flushDeferredPaint);
+    select.addEventListener('blur', flushDeferredPaint);
   });
   // Add click listeners to param-value for NUM and TRG editing
   lcdEl.querySelectorAll('.param-value').forEach((span) => {

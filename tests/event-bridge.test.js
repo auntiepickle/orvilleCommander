@@ -138,6 +138,11 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     expect(hideLoading).toHaveBeenCalledTimes(1);
   });
 
+  test('a screen-only wave hides loading — the bitmap fetch shows its own progress (#3)', () => {
+    emit('dumpComplete', { reason: 'all-received', objectinfoSends: 0, screenSends: 1 });
+    expect(hideLoading).toHaveBeenCalledTimes(1);
+  });
+
   test('a value-only wave renders but does NOT hide loading (meter polling must not clear it)', () => {
     emit('dumpComplete', { reason: 'all-received', objectinfoSends: 0 });
     expect(renderScreen).toHaveBeenCalledTimes(1);

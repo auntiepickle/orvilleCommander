@@ -265,6 +265,19 @@ describe('midi.js SysEx byte contract', () => {
     expect(isWaveOpen()).toBe(false);
   });
 
+  test('screen sends are counted per-kind in the dumpComplete payload (#3)', () => {
+    const received = [];
+    const off = on('dumpComplete', (p) => received.push(p));
+    sendSysEx(0x18, []);
+    notifyResponse('screen', null);
+    expect(received[0]).toMatchObject({
+      reason: 'all-received',
+      screenSends: 1,
+      objectinfoSends: 0,
+    });
+    off();
+  });
+
   test('GET_SCREEN mid-wave is deferred, coalesced, and fired after the drain (#107)', async () => {
     // The device drops requests that collide with its own bitmap
     // transmission (measured live: send=7 recv=4 waves riding to the 10s

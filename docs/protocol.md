@@ -260,7 +260,10 @@ The planned Phase 3.3 eager loader builds on the same substrate (see
   - `watchdog` — the timeout fires (a stall or a runaway wave).
 
 The `dumpComplete` payload is
-`{ reason, sendCount, receiveCount, durationMs, lastKey }`; it is also written to
+`{ reason, sendCount, objectinfoSends, screenSends, receiveCount, durationMs, lastKey }`
+(per-kind send accounting drives the bridge's hideLoading gate: structure and
+screen waves may clear the loading indicator, value-only meter-poll waves may
+not — C1 review + #3); it is also written to
 `appState.lastDumpComplete` and logged. `getDumpStats()` exposes a session tally
 of `all` vs `watchdog` reasons.
 

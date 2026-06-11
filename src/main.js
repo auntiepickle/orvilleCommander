@@ -226,6 +226,10 @@ syncBtn.addEventListener('click', () => {
 
 getScreenBtn.addEventListener('click', () => {
   if (appState.fetchBitmap) {
+    // #3: show progress for the multi-second bitmap transfer. The screen
+    // request is wave-counted (#107) and screen waves hide loading on
+    // their drain, so this clears itself.
+    showLoading();
     sendSysEx(CMD.GET_SCREEN, []);
     log('Sent Get Screen request (0x18)', 'info', 'general');
   } else {
@@ -366,5 +370,19 @@ setState(
     presetKey: cachedConfig?.presetKey || KEY.DSP_A_PRESET,
   },
   'main:boot-init'
+);
+// #48: the settings checkboxes sync to appState LIVE — previously the sync
+// happened only at boot-init, so toggling mid-session was a silent no-op
+// until Save Config + reload. Every runtime read already goes through
+// appState, so the change listeners are the whole fix. (Persistence still
+// requires Save Config, as before.)
+fetchBitmapCheckbox.addEventListener('change', () =>
+  setState({ fetchBitmap: fetchBitmapCheckbox.checked }, 'main:checkbox-sync')
+);
+updateBitmapOnChangeCheckbox.addEventListener('change', () =>
+  setState({ updateBitmapOnChange: updateBitmapOnChangeCheckbox.checked }, 'main:checkbox-sync')
+);
+eagerLoadCheckbox.addEventListener('change', () =>
+  setState({ eagerLoad: eagerLoadCheckbox.checked }, 'main:checkbox-sync')
 );
 connectMidi(cachedConfig);

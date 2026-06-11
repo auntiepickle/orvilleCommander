@@ -151,12 +151,17 @@ export function registerEventBridge({ hideLoading }) {
         log('Wave stalled with a pending landing/descend; cleared.', 'error', 'error');
       }
       // Clear the loading indicator only when the wave carried OBJECTINFO
-      // (structure) requests — i.e. it could be the wave a navigation or
-      // refresh opened — or when the watchdog gave up (never strand the
-      // spinner on a stall). With meter polling enabled, value-only waves
-      // drain every METER_POLL_MS and must not hide an unrelated loading
-      // state that was shown for an in-flight navigation (C1 review).
-      if (payload?.objectinfoSends > 0 || payload?.reason === 'watchdog') {
+      // (structure) or GET_SCREEN requests — i.e. it could be the wave a
+      // navigation, refresh, or bitmap fetch opened (#3) — or when the
+      // watchdog gave up (never strand the spinner on a stall). With meter
+      // polling enabled, value-only waves drain every METER_POLL_MS and
+      // must not hide an unrelated loading state that was shown for an
+      // in-flight navigation (C1 review).
+      if (
+        payload?.objectinfoSends > 0 ||
+        payload?.screenSends > 0 ||
+        payload?.reason === 'watchdog'
+      ) {
         hideLoading();
       }
       // #106: the first CLEAN drain after the landing starts the background

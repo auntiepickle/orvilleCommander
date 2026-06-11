@@ -191,9 +191,12 @@ function selectPorts() {
  */
 function enterDemoMode() {
   const { outAdapter, inAdapter, deviceId } = createDemoPorts();
+  // The DEV ID input is deliberately NOT touched (review): writing the
+  // demo capture's ID there would poison the next real Select Ports (the
+  // parser drops frames whose device byte mismatches) and could be saved
+  // over the user's real ID by Save Config.
   setMidiPorts(outAdapter, inAdapter, deviceId);
   addSysexListener();
-  deviceIdInput.value = deviceId;
   log(`Demo mode: serving a captured device tree (${DEMO_NODE_COUNT} nodes)`, 'info', 'general');
   resetAndLand();
 }
@@ -400,7 +403,13 @@ setupDataKnob();
 const glassEl = document.querySelector('.glass');
 if (glassEl && typeof requestAnimationFrame === 'function') {
   let specFrame = null;
+  let pointerX = 0;
+  let pointerY = 0;
   document.addEventListener('pointermove', (e) => {
+    // Track every move; render the LATEST position once per frame (the
+    // first-event-wins shape lagged the highlight a frame behind).
+    pointerX = e.clientX;
+    pointerY = e.clientY;
     if (specFrame !== null) return;
     specFrame = requestAnimationFrame(() => {
       specFrame = null;
@@ -408,11 +417,11 @@ if (glassEl && typeof requestAnimationFrame === 'function') {
       if (!r.width || !r.height) return;
       glassEl.style.setProperty(
         '--spec-x',
-        `${(((e.clientX - r.left) / r.width) * 100).toFixed(1)}%`
+        `${(((pointerX - r.left) / r.width) * 100).toFixed(1)}%`
       );
       glassEl.style.setProperty(
         '--spec-y',
-        `${(((e.clientY - r.top) / r.height) * 100).toFixed(1)}%`
+        `${(((pointerY - r.top) / r.height) * 100).toFixed(1)}%`
       );
     });
   });

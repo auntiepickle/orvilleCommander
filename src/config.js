@@ -28,7 +28,13 @@ export function loadConfig(
 ) {
   const config = localStorage.getItem(STORAGE_KEY);
   if (config) {
-    const parsed = JSON.parse(config);
+    let parsed;
+    try {
+      parsed = JSON.parse(config);
+    } catch {
+      log('Corrupt midiConfig in localStorage; ignoring cached config', 'error', 'error');
+      return null;
+    }
     deviceIdInput.value = parsed.deviceId || 0;
     logLevelSelect.value = parsed.logLevel || DEFAULT_LOG_LEVEL;
     fetchBitmapCheckbox.checked = parsed.fetchBitmap !== false;
@@ -73,7 +79,7 @@ export function saveConfig(
 ) {
   // Preserve keys other writers own (the theme editor persists via
   // saveThemeConfig) — a positional full save must not drop them.
-  const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const existing = readStoredConfig();
   const config = {
     ...existing,
     outputId,
@@ -98,10 +104,23 @@ export function saveConfig(
  * @param {{preset: string, overrides: Object}} theme
  */
 export function saveThemeConfig(theme) {
-  const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+  const existing = readStoredConfig();
   existing.theme = theme;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
   log(`Theme saved: ${theme.preset}`, 'debug', 'general');
+}
+
+// Stored config, tolerating corruption (review): the read-modify-write
+// savers must remain the self-healing path — a corrupt midiConfig string
+// becomes an empty object and the next save overwrites it, instead of
+// every save (including each theme swatch drag) throwing.
+function readStoredConfig() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') || {};
+  } catch {
+    log('Corrupt midiConfig in localStorage; starting fresh on next save', 'error', 'error');
+    return {};
+  }
 }
 
 /**

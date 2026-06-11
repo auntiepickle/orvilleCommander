@@ -10,11 +10,12 @@ export { denibble };
 // '#rrggbb' (or rgb()) -> [r,g,b]; null for anything else so the decode
 // falls back to its built-in colors.
 function cssColorToRgb(value) {
-  const hex = (value || '').trim().match(/^#([0-9a-fA-F]{6})$/);
+  const trimmed = (value || '').trim();
+  const hex = trimmed.match(/^#([0-9a-fA-F]{6})$/);
   if (hex) {
     return [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16));
   }
-  const rgb = (value || '').match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+  const rgb = trimmed.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);
   return rgb ? rgb.slice(1, 4).map(Number) : null;
 }
 

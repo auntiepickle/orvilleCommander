@@ -264,13 +264,20 @@ function beginInlineEdit(span, sub, { validate, maxLength }) {
     // emitting), so any paint parked during the edit is never newer than
     // a fresh render — discard it rather than double-painting.
     discardDeferredPaint();
+    // Remove the editor synchronously (review: a click that opens ANOTHER
+    // editor would otherwise park the cleanup repaint behind the new
+    // editor's #131 guard, stranding this one live in the glass).
+    input.remove();
     // Next tick (the SF4 pattern): a synchronous repaint inside the blur
     // of a click elsewhere would destroy that click's target.
     setTimeout(() => {
-      if (input.isConnected) renderScreen(appState.currentSubs, appState.lastAscii);
+      if (!lcdSelectFocused(document.getElementById('lcd'))) {
+        renderScreen(appState.currentSubs, appState.lastAscii);
+      }
     }, 0);
   };
   input.addEventListener('keydown', (ev) => {
+    if (done) return; // a finished editor must never commit (review)
     if (ev.key === 'Enter') {
       const value = validate(input.value);
       if (value === null) {
@@ -279,6 +286,9 @@ function beginInlineEdit(span, sub, { validate, maxLength }) {
       }
       done = true;
       input.blur(); // release the #131 guard BEFORE the commit's immediate repaint
+      // The commit's own repaint supersedes anything parked mid-edit —
+      // discard it here too, or the next dropdown blur replays it (review).
+      discardDeferredPaint();
       commitParamEdit(sub.key, value, 'renderer:inline-edit-commit');
     } else if (ev.key === 'Escape') {
       finish();

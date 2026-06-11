@@ -85,14 +85,18 @@ export function createDemoPorts() {
         } else {
           const key = String.fromCharCode(...payload.slice(0, sep)).trim();
           const value = String.fromCharCode(...payload.slice(sep + 1)).trim();
-          // SET puts arrive as a bare index; the stored display value keeps
-          // the '<index> <desc>' shape the dumps use when one matches.
+          // SET puts arrive as a bare DECIMAL option index; the device's
+          // value shape is '<HEX index> <desc>' (renderScreen decodes the
+          // first token with parseInt(_, 16) — review: a decimal echo
+          // mis-selects options >= 10, exactly the long bank lists).
           const options = optionDescs(key);
           const desc = options?.[value];
-          values.set(key, desc ? `${value} ${desc}` : value);
+          values.set(key, desc ? `${parseInt(value, 10).toString(16)} ${desc}` : value);
           deliverAscii(CMD.VALUE_DUMP, `${key} ${values.get(key)}`);
         }
       } else if (cmd === CMD.GET_SCREEN) {
+        // The shipped capture always carries a frame; if a future dataset
+        // omits it, the silent stall is bounded by the wave idle watchdog.
         if (demoData.screenFrame?.length) {
           setTimeout(() => {
             for (const cb of listeners) cb({ data: demoData.screenFrame });

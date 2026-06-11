@@ -498,6 +498,60 @@ describe('renderer.js', () => {
     jest.useRealTimers();
   });
 
+  test('clicking a second value closes the first editor immediately (review)', () => {
+    appState.currentKey = '10010001';
+    const subs = [
+      { type: 'COL', position: '0', key: '10010001', parent: '', statement: 'Setup', tag: 'setup' },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10010011',
+        parent: '10010001',
+        statement: 'A %3.1f',
+        tag: 'A',
+        value: '50',
+        min: '0',
+        max: '100',
+      },
+      {
+        type: 'NUM',
+        position: '2',
+        key: '10010012',
+        parent: '10010001',
+        statement: 'B %3.1f',
+        tag: 'B',
+        value: '10',
+        min: '0',
+        max: '100',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+    appState.currentSubs = subs;
+    jest.useFakeTimers();
+
+    document
+      .querySelector('.param-value[data-key="10010011"]')
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const editorA = document.querySelector('#lcd input.lcd-edit');
+    expect(editorA.dataset.key).toBe('10010011');
+
+    // Abandoning A for B: A must leave the DOM at once, not strand behind
+    // B's #131 guard, and A's detached editor must never commit.
+    editorA.blur();
+    document
+      .querySelector('.param-value[data-key="10010012"]')
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    jest.runOnlyPendingTimers();
+    const editors = document.querySelectorAll('#lcd input.lcd-edit');
+    expect(editors).toHaveLength(1);
+    expect(editors[0].dataset.key).toBe('10010012');
+
+    editorA.value = '99';
+    editorA.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(sendValuePut).not.toHaveBeenCalled();
+    jest.useRealTimers();
+  });
+
   test('Escape cancels the inline editor without sending', () => {
     appState.currentKey = '10010001';
     const subs = [

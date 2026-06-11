@@ -446,6 +446,11 @@ body {
    sibling of #lcd inside the bezel and UNDER .glass, so it refracts like
    the real display. Phosphor styling mirrors #lcd; covers the recess
    exactly (inset = bezel padding). */
+/* [hidden] must win over the display below, or the dialog can never be
+   dismissed (an explicit display beats the UA [hidden] { display:none }). */
+.sync-dialog[hidden] {
+  display: none;
+}
 .sync-dialog {
   position: absolute;
   inset: var(--bezel-pad);

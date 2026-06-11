@@ -1,7 +1,7 @@
 // main.js
 import { WebMidi } from 'webmidi';
 import { CMD, KEY } from './sysex-commands.js';
-import { TIMING, LIBRARY, DEFAULT_LOG_CATEGORIES } from './constants.js';
+import { TIMING, DEFAULT_LOG_CATEGORIES } from './constants.js';
 import {
   loadConfig,
   saveConfig,
@@ -586,12 +586,12 @@ function setupLibraryUI() {
     if (library) {
       saveLibraryConfig(library);
       log(`Library synced: ${library.banks.length} banks`, 'info', 'general');
-      // Completion beat on the LCD, then dismiss.
+      // Completion summary on the LCD — stays until the user hits DONE
+      // (the dialog's own button), so the result is never missed.
       showSyncComplete({
         banks: library.banks.length,
         programs: library.banks.reduce((n, b) => n + b.programs.length, 0),
       });
-      setTimeout(hideSyncDialog, LIBRARY.COMPLETE_HOLD_MS);
     } else {
       hideSyncDialog();
       if (!getLibrary()) {

@@ -110,7 +110,11 @@ export function showSyncComplete(summary) {
   node.innerHTML =
     '<div class="sync-title sync-title-flash">SYNC COMPLETE</div>' +
     `<div class="sync-line sync-done"><span class="sync-check">&#10003;</span> ${summary.programs} programs &middot; ${summary.banks} banks</div>` +
-    `<div class="sync-map sync-map-done">${'█'.repeat(BAR_CELLS)}</div>`;
+    `<div class="sync-map sync-map-done">${'█'.repeat(BAR_CELLS)}</div>` +
+    '<div class="sync-foot"><span class="sync-eta">library saved</span>' +
+    '<button type="button" class="sync-cancel sync-done-btn">DONE</button></div>';
+  const doneBtn = node.querySelector('.sync-done-btn');
+  if (doneBtn) doneBtn.addEventListener('click', hideSyncDialog, { once: true });
 }
 
 /** Removes the dialog. */

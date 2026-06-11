@@ -110,8 +110,6 @@ export const LIBRARY = {
   LOAD_SETTLE_MS: 600, // wait between the search-load sequence's puts (bank ->
   //                      program -> load trigger): same settle rationale as
   //                      BANK_SETTLE_MS, applied to each step
-  COMPLETE_HOLD_MS: 1800, // how long the sync dialog holds on its completion
-  //                         summary before dismissing — long enough to read
 };
 
 // Demo mode (src/demo.js): the canned device built from a live capture.

@@ -73,9 +73,16 @@ export function parseScreenHeader(rawBytes) {
   return { width, height, size, bytesPerRow, expectedLength, dimsValid, complete, checksumOk };
 }
 
+// Historical default pixel colors (pure green on black) — kept as the
+// no-opts behavior; the canvas layer injects theme colors (bitmap.js).
+const DEFAULT_ON_RGB = [0, 255, 0];
+const DEFAULT_OFF_RGB = [0, 0, 0];
+
 /**
- * Decode raw screen-dump bytes into an RGBA pixel buffer (green-on-black,
- * matching the device's LCD). Straight row-major 1bpp decode, no heuristics.
+ * Decode raw screen-dump bytes into an RGBA pixel buffer. Straight
+ * row-major 1bpp decode, no heuristics. Pixel colors are injectable so
+ * the canvas can render in the active theme's phosphor/background
+ * (bitmap.js); defaults are the historical green-on-black.
  *
  * @param {number[]} rawBytes - Denibbled screen-dump bytes (12-byte header + data).
  * @param {Object} [opts]
@@ -85,10 +92,14 @@ export function parseScreenHeader(rawBytes) {
  *   height when sane, else SCREEN.HEIGHT.
  * @param {number} [opts.header=12] - Bytes to skip before the pixel data.
  *   Exposed for diagnosing future captures; 12 is correct for the 0x17 dump.
+ * @param {number[]} [opts.onColor] - [r,g,b] for lit pixels.
+ * @param {number[]} [opts.offColor] - [r,g,b] for unlit pixels.
  * @returns {Uint8ClampedArray} width*height*4 RGBA bytes.
  */
 export function computePixels(rawBytes, opts = {}) {
   const header = opts.header ?? SCREEN.HEADER_BYTES;
+  const onColor = opts.onColor ?? DEFAULT_ON_RGB;
+  const offColor = opts.offColor ?? DEFAULT_OFF_RGB;
   let { width, height } = opts;
   if (width == null || height == null) {
     const hdr = parseScreenHeader(rawBytes);
@@ -105,9 +116,10 @@ export function computePixels(rawBytes, opts = {}) {
       const byte = processed[byteIdx] || 0;
       const bit = (byte >> (7 - (x & 7))) & 1; // MSB-left
       const idx = (y * width + x) * 4;
-      data[idx] = 0;
-      data[idx + 1] = bit * 255; // Green on
-      data[idx + 2] = 0;
+      const rgb = bit ? onColor : offColor;
+      data[idx] = rgb[0];
+      data[idx + 1] = rgb[1];
+      data[idx + 2] = rgb[2];
       data[idx + 3] = 255; // Alpha
     }
   }

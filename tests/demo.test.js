@@ -17,7 +17,7 @@ jest.mock('../src/logger.js', () => ({
 
 import { createDemoPorts, DEMO_NODE_COUNT } from '../src/demo.js';
 import { SYSEX, CMD, KEY } from '../src/sysex-commands.js';
-import demoData from '../src/demo-data.json';
+import demoData from '../src/demo-data.js';
 
 const asciiOf = (frame) => String.fromCharCode(...frame.slice(SYSEX.FRAME_PREFIX_LEN, -1)).trim();
 

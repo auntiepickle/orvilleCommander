@@ -118,6 +118,61 @@ describe('renderer.js', () => {
     jest.useRealTimers();
   });
 
+  test('a bank change fetches ONLY the load menu, not the whole program subtree (#138)', () => {
+    appState.currentKey = '10020000';
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10020000',
+        parent: '10020000',
+        statement: 'Program',
+        tag: 'program',
+      },
+      {
+        type: 'SET',
+        position: '1',
+        key: '10020012', // KEY.BANK_SELECT
+        parent: '10020010',
+        statement: 'Bank: %-20s',
+        tag: 'Bank',
+        options: [
+          { index: '0', desc: '0 Favorites' },
+          { index: '50', desc: '50 Reverbs - Unusual' },
+        ],
+        value: '32 50 Reverbs - Unusual',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+    const select = document.querySelector('select[data-key="10020012"]');
+    expect(select).toBeTruthy();
+
+    // Warm-path cache state: a prior visit cached the OLD bank's program
+    // value — it must be pruned, or it shadows the fresh dump's value in
+    // the render precedence (review blocker).
+    appState.currentValues['10020011'] = 'c Old Bank Program';
+
+    jest.useFakeTimers();
+    select.value = '0';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(sendValuePut).toHaveBeenCalledWith('10020012', '0');
+
+    jest.advanceTimersByTime(200);
+    // Targeted: the load menu's dump + values (it carries both re-listed
+    // SETs)...
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('10020010');
+    expect(sendValueDump).toHaveBeenCalledWith('10020010');
+    // ...and NOT the generic full-menu refresh that refetched the whole
+    // staled program subtree (13.3s measured live before the fix) —
+    // first-arg sweep, so a one-arg regression cannot slip past.
+    expect(sendObjectInfoDump.mock.calls.map((c) => c[0])).not.toContain('10020000');
+    // The stale program/bank cache entries are pruned so the fresh dump's
+    // values render.
+    expect(appState.currentValues['10020011']).toBeUndefined();
+    expect(appState.currentValues['10020012']).toBeUndefined();
+    jest.useRealTimers();
+  });
+
   // #131: progressive paints during a wave must not destroy an open SET
   // dropdown — repaints park while a select inside #lcd is focused.
   const dropdownGuardSubs = (title) => [

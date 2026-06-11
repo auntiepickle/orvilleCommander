@@ -174,7 +174,29 @@ const handleSelectChange = (e) => {
     'renderer:select-change-value-cache'
   ); // Removed immediate renderScreen to avoid old subs with new value
   setTimeout(() => {
-    updateScreen();
+    if (key === KEY.BANK_SELECT) {
+      // Bank scroll: the ONLY node whose options change is the load menu
+      // (both of its SETs re-list for the new bank). The generic
+      // updateScreen path refetches EVERY child of the staled program
+      // subtree — measured live at 13.3s before the program list updated
+      // (#138). One targeted dump is a single wave; the R7 child-arrival
+      // repaint (or the progressive paint, if the load menu IS the current
+      // key) updates the dropdowns the moment it lands.
+      // Prune the load menu's cached values first (review blocker): this
+      // branch skips updateScreen's full currentValues clear, and a stale
+      // cache entry shadows the fresh dump's value in the render
+      // precedence (currentValues[key] || s.value) — the program dropdown
+      // would keep the OLD bank's selection and never self-correct.
+      const pruned = { ...appState.currentValues };
+      delete pruned[KEY.PROGRAM_SELECT];
+      delete pruned[KEY.BANK_SELECT];
+      delete pruned[KEY.FAVORITES];
+      setState({ currentValues: pruned }, 'renderer:bank-change-prune');
+      sendObjectInfoDump(KEY.FAVORITES);
+      sendValueDump(KEY.FAVORITES);
+    } else {
+      updateScreen();
+    }
     if (appState.updateBitmapOnChange) {
       sendSysEx(CMD.GET_SCREEN, []);
       log('Triggered bitmap update after value change.', 'debug', 'bitmap');

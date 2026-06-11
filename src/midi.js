@@ -6,7 +6,7 @@ import { log } from './logger.js';
 import { emit } from './events.js';
 import { CMD, SYSEX, SCREEN } from './sysex-commands.js';
 import { TIMING } from './constants.js';
-import { markDirtyIfStable, markAllStableDirty } from './tree.js';
+import { markDirtyIfStable, markAllStableDirty, stampStableRequest } from './tree.js';
 
 let selectedOutput = null;
 let selectedInput = null;
@@ -211,15 +211,21 @@ export function isOutputConnected() {
  *   device sharing the port is not a malfunction), or null when valid.
  */
 export function inboundFrameError(frame) {
-  // Smallest meaningful frame: prefix + F7 (an empty-payload command).
-  if (frame.length < SYSEX.FRAME_PREFIX_LEN + 1) {
-    return { reason: `frame too short (${frame.length} bytes)`, severity: 'error' };
-  }
-  if (frame[1] !== SYSEX.MANUFACTURER[0] || frame[2] !== SYSEX.MANUFACTURER[1]) {
+  // Manufacturer first (review finding): a too-short FOREIGN frame (e.g.
+  // 'F0 7D 01 F7' from a port-sharing device) must reject at debug, not be
+  // caught by the length check at error severity.
+  if (
+    frame.length >= 3 &&
+    (frame[1] !== SYSEX.MANUFACTURER[0] || frame[2] !== SYSEX.MANUFACTURER[1])
+  ) {
     return {
       reason: `not an Eventide frame (manufacturer ${frame[1]?.toString(16)} ${frame[2]?.toString(16)})`,
       severity: 'debug',
     };
+  }
+  // Smallest meaningful frame: prefix + F7 (an empty-payload command).
+  if (frame.length < SYSEX.FRAME_PREFIX_LEN + 1) {
+    return { reason: `frame too short (${frame.length} bytes)`, severity: 'error' };
   }
   const cmd = frame[4];
   const payloadLen = frame.length - SYSEX.FRAME_PREFIX_LEN - 1; // minus F7
@@ -396,6 +402,10 @@ export function sendSysEx(cmd, dataBytes = []) {
  * sendObjectInfoDump('401000b');
  */
 export function sendObjectInfoDump(key) {
+  // #121: stamp stable-subtree requests with the current mutation
+  // generation, so a response whose request predates a later put cannot
+  // record pre-mutation structure as trustworthy.
+  stampStableRequest(key);
   recordRequest(key, 'objectinfo');
   const keyBytes = key.split('').map((c) => c.charCodeAt(0));
   sendSysEx(CMD.OBJECTINFO_DUMP, keyBytes);

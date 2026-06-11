@@ -33,7 +33,32 @@ export function recordDump(subs) {
   const main = subs?.[0];
   if (!main?.key) return;
   nodes.set(main.key, subs);
-  staleKeys.delete(main.key); // a re-recorded node is fresh by definition (#113)
+  // #121 generation check: a stable-subtree dump may be trusted across
+  // visits only if its REQUEST was stamped after the latest mutation mark
+  // — an in-flight dump racing a put would otherwise record pre-mutation
+  // structure as fresh (both race variants: a stale refetch overtaken by a
+  // put, and a never-cached child whose pre-put request lands post-mark).
+  // Generation 0 (no mutation ever marked since reset) trusts everything:
+  // nothing can predate a mutation that never happened — this keeps
+  // seeding (audit phase 1) and cold caches trusted without stamps.
+  const p = stablePrefixOf(main.key);
+  if (p) {
+    if (markGeneration === 0 || requestGeneration.get(main.key) === markGeneration) {
+      staleKeys.delete(main.key);
+    } else {
+      // Recorded (newest data we have, labels/embeds may use it) but NOT
+      // trusted across visits: the next visit refetches.
+      staleKeys.add(main.key);
+    }
+    // The stamp is NOT consumed (review finding): a double-requested key
+    // (rapid double navigation fans out twice) gets two responses, and
+    // consuming on the first would flip the second — genuinely post-mark —
+    // back to stale, silently defeating the warm path. The stamp stays
+    // until the next stampStableRequest overwrites it or reset() clears;
+    // a later mutation bumps the generation, so the kept stamp can never
+    // launder a pre-mutation response. Memory is bounded by the stable
+    // key count.
+  }
   for (const s of subs.slice(1)) {
     if (s.key) parents.set(s.key, { parentKey: main.key, sub: s });
   }
@@ -178,7 +203,27 @@ export function deriveKeyStack(key) {
 // never launder staleness into siblings it did not re-record.
 const staleKeys = new Set();
 
+// #121 mutation generations. Every mutation mark bumps the generation;
+// sendObjectInfoDump stamps a stable key's request with the generation
+// current AT REQUEST TIME. recordDump trusts the response only when the
+// stamp matches — a response whose request predates the latest mutation
+// may carry pre-mutation structure, so it records but stays stale.
+let markGeneration = 0;
+const requestGeneration = new Map(); // stable key -> generation when requested
+
 const stablePrefixOf = (key) => CACHE.STABLE_SUBTREE_PREFIXES.find((p) => key.startsWith(p));
+
+/**
+ * Stamps a stable-subtree OBJECTINFO request with the current mutation
+ * generation (#121). Called by sendObjectInfoDump for every request; a
+ * no-op for keys outside stable subtrees. Tests simulating the
+ * request->response cycle must stamp before recordDump, as production does.
+ *
+ * @param {string} key
+ */
+export function stampStableRequest(key) {
+  if (stablePrefixOf(key)) requestGeneration.set(key, markGeneration);
+}
 
 /**
  * Whether a key's cached dump may be trusted across visits: tree-cached,
@@ -204,6 +249,7 @@ export function isFresh(key) {
 export function markDirtyIfStable(key) {
   const p = stablePrefixOf(key);
   if (!p) return;
+  markGeneration++; // #121: in-flight requests are now pre-mutation
   for (const k of nodes.keys()) {
     if (k.startsWith(p)) staleKeys.add(k);
   }
@@ -216,6 +262,7 @@ export function markDirtyIfStable(key) {
  * sequence the app cannot interpret).
  */
 export function markAllStableDirty() {
+  markGeneration++; // #121: in-flight requests are now pre-mutation
   for (const p of CACHE.STABLE_SUBTREE_PREFIXES) {
     for (const k of nodes.keys()) {
       if (k.startsWith(p)) staleKeys.add(k);
@@ -228,4 +275,6 @@ export function reset() {
   nodes.clear();
   parents.clear();
   staleKeys.clear();
+  requestGeneration.clear();
+  markGeneration = 0;
 }

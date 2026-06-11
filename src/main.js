@@ -22,7 +22,7 @@ import {
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
-import { denibble, renderBitmap } from './bitmap.js';
+import { denibble, renderBitmap, rerenderBitmap } from './bitmap.js';
 import { log, setLogLevel, setLogCategories, getLogCategories } from './logger.js';
 import { registerEventBridge } from './event-bridge.js';
 import { extractNibblesFromHex } from './hex-extract.js';
@@ -428,7 +428,12 @@ setupThemeEditor(
     tokensContainer: document.getElementById('theme-tokens'),
   },
   cachedConfig?.theme,
-  saveThemeConfig
+  (theme) => {
+    saveThemeConfig(theme);
+    // The true-screen canvas renders in theme pixel colors — recolor the
+    // last captured frame immediately instead of waiting for a new fetch.
+    rerenderBitmap();
+  }
 );
 // #48: the settings checkboxes sync to appState LIVE — previously the sync
 // happened only at boot-init, so toggling mid-session was a silent no-op

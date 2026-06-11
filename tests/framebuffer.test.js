@@ -38,6 +38,24 @@ describe('computePixels', () => {
     expect([px[idx], px[idx + 1], px[idx + 2], px[idx + 3]]).toEqual([0, 255, 0, 255]);
   });
 
+  test('injectable on/off colors render the theme palette (theme canvas)', () => {
+    // Lit pixel takes onColor...
+    const px = computePixels(allOn, { onColor: [255, 113, 206], offColor: [20, 6, 30] });
+    const idx = (10 * 240 + 100) * 4;
+    expect([px[idx], px[idx + 1], px[idx + 2], px[idx + 3]]).toEqual([255, 113, 206, 255]);
+
+    // ...and an unlit pixel takes offColor (header(12) zeros then 0x80:
+    // only the top-left pixel lit, so (1,0) is off).
+    const oneOn = [...new Array(12).fill(0), 0x80, ...new Array(1920).fill(0)];
+    const px2 = computePixels(oneOn, {
+      width: 240,
+      height: 64,
+      onColor: [255, 113, 206],
+      offColor: [20, 6, 30],
+    });
+    expect([px2[4], px2[5], px2[6], px2[7]]).toEqual([20, 6, 30, 255]);
+  });
+
   test('row-major MSB-left decode with the default 12-byte header', () => {
     // header(12) zeros, then row 0's first byte = 0x80 (only the top-left pixel lit).
     const bytes = new Array(12).fill(0);

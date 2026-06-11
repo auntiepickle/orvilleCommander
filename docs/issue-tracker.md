@@ -780,16 +780,18 @@ auto-closed by GitHub when the base branch merged). #45 (G2b live loop) remains 
 needs-decision gate. OPEN BOARD: #9, #10, #12, #14 — all four are feature enhancements; every
 bug-class issue ever logged is closed.
 
-2026-06-11 later — UI milestone in flight (#130, branch feat/ui-rack-faceplate): virtual rack
-faceplate (Option A green phosphor; true 6x8 LCD font PxPlus HP 100LX; panel fidelity pass from
-the unit manual p.8-11 incl. wired BUSY LED + DATA knob). FILED from maintainer reports during
-the milestone: #131 (loading visibility / open dropdown destroyed by repaints — FIXED on the
-branch: deferred repaints while a select is focused + BUSY LED on the dump-wave lifecycle) and
-#132 (input/output routing matrix not editable — FIXED on the branch after live probes: the
-device's ganged-parameter screens are gang COL subtrees [blank tag, non-'0' position]; they now
-render INLINE as the hardware's one-page matrix — tree.js isGangCol/withinGangOf + recursive
-findParamUnder, parser gang fan-out, R7 gang-grandchild repaint, renderGangInline, audit
-reachability updated. Deepest-ever audit [depth 4, 98 COL nodes]: zero violations).
+2026-06-11 later — UI MILESTONE MERGED (PR #133, squash d6635e3; auto-closed #130/#131/#132):
+virtual rack faceplate (Option A green phosphor; true 6x8 LCD font PxPlus HP 100LX, CC BY-SA;
+panel fidelity from the unit manual p.8-11 incl. wired BUSY LED + DATA knob), #131 loading
+visibility (deferred repaints while a SET dropdown is focused + BUSY LED on the dump-wave
+lifecycle), #132 routing matrix editable (gang COL subtrees [blank tag, non-'0' position] render
+INLINE as the hardware's one-page matrix — tree.js isGangCol/withinGangOf + recursive
+findParamUnder, parser gang fan-out with per-visit dedupe, R7 gang-grandchild repaint,
+renderGangInline, audit reachability updated), and live-external-clock fixes (slow poll lane
+keeps on-page values like the midiclock-measured Tempo BPM current; compact 8-cell indicator
+flasher). Reviewed pre-merge (correctness + docs agents; 2 blockers fixed). Deepest-ever audit
+(depth 4, 98 COL nodes): zero violations. Tests 190/190. OPEN BOARD unchanged: #9, #10, #12,
+#14, #45 (gated).
 
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24

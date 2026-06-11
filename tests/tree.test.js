@@ -145,6 +145,14 @@ describe('tree store (T1b)', () => {
       // Puts outside any stable subtree mark nothing.
       markDirtyIfStable('4070001');
       expect(isFresh('10020010')).toBe(true);
+
+      // A bank/program SELECT put is a pure view change and stales NOTHING
+      // (#138 perf): the 70-name bank list stays cached, so revisiting
+      // PROGRAM after a bank-hop or a library sync is instant.
+      markDirtyIfStable('10020012'); // BANK_SELECT
+      expect(isFresh('10020010')).toBe(true);
+      markDirtyIfStable('10020011'); // PROGRAM_SELECT
+      expect(isFresh('10020010')).toBe(true);
     });
 
     test('a response whose request predates the mutation stays stale (#121 race, both variants)', () => {

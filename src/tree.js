@@ -334,28 +334,29 @@ export function isFresh(key) {
 
 /**
  * Stales every cached key under the given key's stable prefix, if any.
- * Called by sendValuePut (every in-app put — TRG/STR/SET/NUM, including
- * bank selects, which change the device's program list) — one of the two
- * in-app mutation chokepoints (the other is sendKeypress).
+ * Called by sendValuePut (every in-app put — TRG/STR/SET/NUM) — one of the
+ * two in-app mutation chokepoints (the other is sendKeypress).
  *
  * @param {string} key
  */
 export function markDirtyIfStable(key) {
+  // #138/#141: the bank and program CHOOSERS are pure VIEW changes — they
+  // pick which program list shows, they do not alter the bank list or the
+  // menu structure. Staling on them made every bank-hop (and the library
+  // sync's ~70 bank puts) mark the whole program subtree dirty, so the
+  // next PROGRAM visit refetched the multi-second 70-name bank list from
+  // scratch even though it was cached. They are now a full no-op: the
+  // per-bank program list is handled by the memo + the bank-change
+  // targeted fetch, and the bank list itself only changes on
+  // create/delete-bank (TRG puts, which still stale below).
+  if (key === KEY.BANK_SELECT || key === KEY.PROGRAM_SELECT) return;
   const p = stablePrefixOf(key);
   if (!p) return;
   markGeneration++; // #121: in-flight requests are now pre-mutation
   for (const k of nodes.keys()) {
     if (k.startsWith(p)) staleKeys.add(k);
   }
-  // #141: selection puts (the bank/program choosers) are pure VIEW
-  // changes — they cannot alter any bank's program list, and the bank put
-  // is the very action the memo exists to accelerate (live finding: the
-  // unconditional clear wiped the memo on every bank change, defeating
-  // it). Everything else under the prefix (saves, deletes, renames, load
-  // triggers) may rewrite lists: clear.
-  if (key !== KEY.BANK_SELECT && key !== KEY.PROGRAM_SELECT) {
-    bankProgramLists.clear();
-  }
+  bankProgramLists.clear(); // a save/delete/rename/load may rewrite lists
 }
 
 /**

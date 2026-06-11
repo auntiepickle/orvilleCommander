@@ -340,23 +340,33 @@ export function isFresh(key) {
  * @param {string} key
  */
 export function markDirtyIfStable(key) {
-  // #138/#141: the bank and program CHOOSERS are pure VIEW changes — they
-  // pick which program list shows, they do not alter the bank list or the
-  // menu structure. Staling on them made every bank-hop (and the library
-  // sync's ~70 bank puts) mark the whole program subtree dirty, so the
-  // next PROGRAM visit refetched the multi-second 70-name bank list from
-  // scratch even though it was cached. They are now a full no-op: the
-  // per-bank program list is handled by the memo + the bank-change
-  // targeted fetch, and the bank list itself only changes on
-  // create/delete-bank (TRG puts, which still stale below).
-  if (key === KEY.BANK_SELECT || key === KEY.PROGRAM_SELECT) return;
+  // #138: puts that do NOT change the program/bank LISTS or the menu
+  // structure are pure view/runtime changes and must not stale the
+  // subtree (else the next PROGRAM visit refetches the multi-second
+  // 70-name bank list from cache for nothing):
+  //   - BANK_SELECT / PROGRAM_SELECT: pick which list shows.
+  //   - LOAD_TRIGGER_A/B: load a program into a DSP — changes the running
+  //     preset (root names + the preset param subtree, fetched separately)
+  //     but leaves every bank/program list intact. Live finding: staling
+  //     here made the post-load refetch reload the bank list WHILE the
+  //     device was busy loading, cascading watchdog stalls (~2s of dead
+  //     wait). Saves/deletes/renames (other TRG/STR puts) DO rewrite lists
+  //     and still stale below.
+  if (
+    key === KEY.BANK_SELECT ||
+    key === KEY.PROGRAM_SELECT ||
+    key === KEY.LOAD_TRIGGER_A ||
+    key === KEY.LOAD_TRIGGER_B
+  ) {
+    return;
+  }
   const p = stablePrefixOf(key);
   if (!p) return;
   markGeneration++; // #121: in-flight requests are now pre-mutation
   for (const k of nodes.keys()) {
     if (k.startsWith(p)) staleKeys.add(k);
   }
-  bankProgramLists.clear(); // a save/delete/rename/load may rewrite lists
+  bankProgramLists.clear(); // a save/delete/rename may rewrite lists
 }
 
 /**

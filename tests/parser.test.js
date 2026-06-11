@@ -375,7 +375,7 @@ describe('parseResponse', () => {
         tag: 'load',
       },
     ]);
-    markDirtyIfStable('1002001c'); // a save/load/delete put happened
+    markDirtyIfStable('10020025'); // a save/delete put happened (list-mutating)
 
     const programDump =
       'COL 0 10020000 10020000 "program functions" "program"\n' +

@@ -42,6 +42,7 @@ import { log, setLogLevel, setLogCategories, getLogCategories } from './logger.j
 import { registerEventBridge } from './event-bridge.js';
 import { extractNibblesFromHex } from './hex-extract.js';
 import { deriveKeyStack, markAllStableDirty } from './tree.js';
+import { resetPresetLoader } from './preset-loader.js';
 
 const lcdEl = document.getElementById('lcd');
 const logArea = document.getElementById('log-area');
@@ -174,6 +175,10 @@ function resetAndLand() {
   lcdEl.innerText = 'Connected. Fetching root screen...';
   showLoading();
   markAllStableDirty();
+  // A (re)connect re-seeds the load menu from the freshly-read device: drop
+  // any staged bank/program selection so the next load-menu render takes its
+  // one-shot seed from the new dump (#138), not the previous session's pick.
+  resetPresetLoader();
   setState(
     {
       currentKey: KEY.ROOT,
@@ -273,6 +278,9 @@ syncBtn.addEventListener('click', () => {
   // Sync is the explicit "re-read the device" affordance: distrust every
   // stable-subtree cache (#113 — the front-panel-changes answer).
   markAllStableDirty();
+  // Sync is the explicit re-read: drop the staged load-menu selection too so
+  // it re-seeds from the device's current bank/program (#138).
+  resetPresetLoader();
   setState({ currentKey: KEY.ROOT, keyStack: [] }, 'main:sync-root');
   updateScreen(log);
   log('Synced to root', 'info', 'general');

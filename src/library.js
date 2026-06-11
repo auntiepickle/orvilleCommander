@@ -12,6 +12,7 @@
 // wire shape), name is the option desc as listed.
 
 import { appState } from './state.js';
+import { setState } from './store.js';
 import { sendValuePut, sendObjectInfoDump, sendValueDump, isOutputConnected } from './midi.js';
 import { KEY, KEY_PREFIX } from './sysex-commands.js';
 import { LIBRARY } from './constants.js';
@@ -38,6 +39,32 @@ export function libraryProgramCount() {
 /** Whether the corpus is large enough to enable search (#142 follow-up). */
 export function canSearch() {
   return libraryProgramCount() >= LIBRARY.SEARCH_MIN_PROGRAMS;
+}
+
+/**
+ * All bank options for the load-menu BANK select, in SET-option shape
+ * ({ index, desc }; index is the decimal-string PUT shape). The
+ * preset-loader (#138 redesign) renders the bank dropdown from this
+ * instead of the slow per-visit device dump. Empty when unsynced.
+ *
+ * @returns {Array<{index: string, desc: string}>}
+ */
+export function libraryBankOptions() {
+  return library ? library.banks.map((b) => ({ index: b.idx, desc: b.name })) : [];
+}
+
+/**
+ * The program options for one bank (decimal index), SET-option shape. The
+ * device exposes only one bank's list at a time, so this library lookup is
+ * what makes bank-hopping instant and race-free (#138). Empty when the bank
+ * is not in the library.
+ *
+ * @param {number} bankIdx
+ * @returns {Array<{index: string, desc: string}>}
+ */
+export function libraryProgramsForBank(bankIdx) {
+  const bank = library?.banks.find((b) => parseInt(b.idx, 10) === bankIdx);
+  return bank ? bank.programs.map((p) => ({ index: p.idx, desc: p.name })) : [];
 }
 
 /** Hydrates the library from persisted config (boot); null clears (tests). */
@@ -205,37 +232,60 @@ export async function syncLibrary(onProgress) {
 }
 
 /**
- * Loads a search hit into the ACTIVE DSP: bank PUT, program PUT, load
- * trigger — each step settled (the device re-lists between steps).
+ * Loads a bank+program into the ACTIVE DSP: bank PUT, program PUT (with a
+ * readback), then the active-DSP load trigger — each step settled (the
+ * device re-lists between steps). The single device-touching action for
+ * BOTH search hits and the preset-loader dropdowns (#138). Optimistically
+ * updates the top-bar DSP name so the load feels immediate; the caller's
+ * root refetch (onDone) reconciles the real name (~2s, device-bound).
  *
- * @param {{bankIdx: string, programIdx: string, programName: string}} hit
+ * @param {{bankIdx: string, programIdx: string, programName: string}} target
  * @param {Function} [onDone] - Called after the load trigger fires (the
  *   caller refreshes the screen / root names).
  */
-export async function loadSearchHit(hit, onDone) {
+export async function loadProgram(target, onDone) {
   if (syncing) {
     // The scan owns the bank selection: a load interleaved with it would
     // land in whatever bank the scan happens to be visiting (review).
-    log('Search load ignored: library sync in progress', 'error', 'error');
+    log('Load ignored: library sync in progress', 'error', 'error');
     return;
   }
-  log(`Search load: '${hit.programName}' (bank ${hit.bankIdx})`, 'info', 'general');
-  sendValuePut(KEY.BANK_SELECT, hit.bankIdx);
+  const activeIsA = appState.presetKey.startsWith(KEY_PREFIX.DSP_A);
+  log(
+    `Load: '${target.programName}' (bank ${target.bankIdx}) -> DSP ${activeIsA ? 'A' : 'B'}`,
+    'info',
+    'general'
+  );
+  // Optimistic top-bar name: show the loaded program on the active DSP at
+  // once; the root refetch in onDone confirms or corrects it.
+  if (target.programName) {
+    const cleanName = String(target.programName)
+      .trim()
+      .replace(/^\d+\s+/, ''); // strip a leading index token if present
+    setState({ [activeIsA ? 'dspAName' : 'dspBName']: cleanName }, 'library:load-optimistic-name');
+  }
+  sendValuePut(KEY.BANK_SELECT, target.bankIdx);
   await sleep(LIBRARY.LOAD_SETTLE_MS);
-  sendValuePut(KEY.PROGRAM_SELECT, hit.programIdx);
-  // Readback before the trigger: the device clamps out-of-range puts, so
-  // a stale library hit would otherwise load a DIFFERENT program silently
-  // — the echo lands in currentValues/the log for the eye to catch
-  // (review; full verify-or-abort is more wire round-trips than the
-  // explicit-resync freshness model warrants).
+  sendValuePut(KEY.PROGRAM_SELECT, target.programIdx);
+  // Readback before the trigger: the device clamps out-of-range puts, so a
+  // stale library target would otherwise load a DIFFERENT program silently
+  // — the echo lands in currentValues/the log for the eye to catch.
   sendValueDump(KEY.PROGRAM_SELECT);
   await sleep(LIBRARY.LOAD_SETTLE_MS);
-  const trigger = appState.presetKey.startsWith(KEY_PREFIX.DSP_A)
-    ? KEY.LOAD_TRIGGER_A
-    : KEY.LOAD_TRIGGER_B;
-  sendValuePut(trigger, '1');
+  sendValuePut(activeIsA ? KEY.LOAD_TRIGGER_A : KEY.LOAD_TRIGGER_B, '1');
   await sleep(LIBRARY.LOAD_SETTLE_MS);
   onDone?.();
+}
+
+/**
+ * Loads a search hit — thin delegate to loadProgram so search and the
+ * preset-loader dropdowns share one apply path.
+ *
+ * @param {{bankIdx: string, programIdx: string, programName: string}} hit
+ * @param {Function} [onDone]
+ */
+export function loadSearchHit(hit, onDone) {
+  return loadProgram(hit, onDone);
 }
 
 // Keep the library's bank entries refreshed from live memo updates: when a

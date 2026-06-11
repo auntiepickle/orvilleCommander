@@ -808,6 +808,32 @@ device-ID poisoning, corrupt-localStorage hardening, demo SET hex echo). Tests 2
 blocked on the WinMM port: bank select does not refilter the program list (probe ready at
 logs/probe-bank.mjs). OPEN BOARD: #9, #10, #12, #14, #45 (gated), #135.
 
+2026-06-11 night — LOAD-MENU ARCHITECTURE REDESIGN (branch feat/preset-loader, PR open).
+Maintainer report: "lots of race conditions ... the dropdowns keep swapping themselves and
+things take a while to commit." ROOT CAUSE: the program/load-menu bank+program dropdowns were
+reconciled at RENDER time from five competing sources (live dump, optimistic hex cache, session
+memo, synced library, a module-state bank index) and repainted by several async triggers, so any
+repaint could resolve a different source (swap) and every commit waited on a device round-trip
+(slow). FIX: a single source of truth — new DOM-free src/preset-loader.js holds one local
+{bankIdx, programIdx} selection backed by the synced library. Picking a bank/program is PURE LOCAL
+staging (no device I/O), like scrolling on the hardware; the device is touched ONLY when the user
+hits "load program in A/B" (library.js loadProgram: bank->program->trigger PUTs + optimistic
+top-bar name). Every async repaint reads the same selection, so repaints are idempotent — nothing
+swaps. renderer.js: renderLoadMenuSelect sources options/selection from the loader+library and
+seeds once from the live dump (ensureInitialized); handleSelectChange routes the load menu to local
+staging; the LOAD_TRIGGER routes through loadProgram. UNSYNCED fallback: the legacy dump-driven
+current-bank path plus a "sync to browse all banks" hint (RENDER.SYNC_TO_BROWSE). tree.js/parser.js/
+event-bridge.js unchanged (the memo, stale-exemptions, and 0x2e early-return still back the scan,
+the load PUT sequence, and the fallback). main.js resetPresetLoader() on reconnect + Sync so the
+next open re-seeds. VALIDATED LIVE against the powered Orville (logs/probe-loadmenu.mjs, raw output
+in session): [1] no-swap — staged bank held through 3 repaints; [2] instant — bank/program picks
+emit zero PUT/bank/program traffic; [3] load — ordered bank->program->trigger PUTs, optimistic name
+same-tick, device-confirmed after settle (load persisted: device reported the new DSP-A program);
+[4] fallback — legacy put+targeted-fetch fires with no library. Tests 234/234, lint clean. New
+coverage: tests/preset-loader.test.js (8), library.js helpers + loadProgram, renderer load-menu
+library/fallback paths. Foundation for #153 (preset browser) and #152 (inbound Program Change),
+which can reuse the DOM-free loader.
+
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24
 - 8-step decoupling refactor — PR #23

@@ -695,12 +695,20 @@ HUMAN-GATE: none
 HUMAN-GATE: none
 
 ### Batch 5.2 — HIL screenshot regression + live self-loop   (GH #45)
-- [ ] G2  Offline golden-PNG screenshot regression on the 0.4 replay harness
-- [ ] G2  Live loop: drive Orville via MIDI masks -> 0x18 screengrab -> diff against golden.
+- [x] G2a (branch feat/golden-screen-regression) Offline golden screenshot regression SHIPPED:
+      tests/screen-golden.test.js decodes each captured 0x17 fixture (denibble -> parseScreenHeader
+      integrity -> computePixels) and compares PIXEL-EXACT against the 5 hardware-captured golden
+      PNGs (tests/fixtures/golden/, physical Orville 2026-06-08). Comparison is pixel-level, not
+      PNG-byte-level — deflate output is not stable across Node/zlib versions. The PNG codec is
+      extracted to build_tools/png-codec.js (encode + a strict subset decoder that throws on
+      foreign shapes), shared by render-screen.js (verified: refactored CLI output byte-identical
+      to the committed goldens) and the test. Fail-on-mutation verified (a flipped golden byte
+      fails exactly that screen, with a pixel-coordinate error message + regeneration pointer).
+- [ ] G2b Live loop: drive Orville via MIDI masks -> 0x18 screengrab -> diff against golden.
       Substrate already shipped: build_tools/live-app.mjs (real app headless against the device,
-      walk/load/eager/smoke modes) + tree-audit (per-node DOM diffing). What remains is the
-      golden-capture format + diff harness.
-HUMAN-GATE: needs-decision — live drive-the-physical-machine loop held until maintainer go signal
+      walk/load/eager/smoke/prog modes) + tree-audit (per-node DOM diffing) + hil-screenshot.cjs
+      (capture). What remains is the drive-grab-diff loop itself.
+HUMAN-GATE: needs-decision — live drive-the-physical-machine loop (G2b) held until maintainer go signal
 
 ---
 

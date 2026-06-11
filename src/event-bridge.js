@@ -48,7 +48,7 @@ import { renderBitmap } from './bitmap.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendSysEx } from './midi.js';
-import { getNode, parentOf, deriveKeyStack, withinGangOf } from './tree.js';
+import { getNode, parentOf, deriveKeyStack, withinGangOf, isGangCol } from './tree.js';
 import { startEagerLoad } from './eager-loader.js';
 import { CMD, KEY, KEY_PREFIX, PARAM_TYPES } from './sysex-commands.js';
 import { log } from './logger.js';
@@ -125,9 +125,14 @@ export function registerEventBridge({ hideLoading }) {
         setState({ pendingDescend: false, pendingLanding: null }, 'bridge:descend-consume');
         const children = subs.slice(1);
         const hasParams = children.some((s) => PARAM_TYPES.includes(s.type));
-        // T1b: every COL child counts (labels no longer gate navigability).
-        const colChildren = children.filter((s) => s.type === 'COL');
-        if (!hasParams && colChildren.length > 1) {
+        // T1b: every COL child counts (labels no longer gate navigability) —
+        // EXCEPT gang groups (#132 review blocker): they are page content
+        // (renderGangInline assembles them into this menu's one-page
+        // matrix), so a menu whose children are gang groups must render
+        // here, never auto-descend into its first group.
+        const colChildren = children.filter((s) => s.type === 'COL' && !isGangCol(s));
+        const hasGang = children.some((s) => isGangCol(s));
+        if (!hasParams && !hasGang && colChildren.length > 1) {
           log(
             `Auto-loading first menu: ${colChildren[0].key} - ${colChildren[0].tag || colChildren[0].statement}`,
             'info',

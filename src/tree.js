@@ -107,12 +107,14 @@ export function ancestorsOf(key) {
   return chain;
 }
 
-// How deep a gang chain can nest below a menu before the search/fan-out
-// gives up. Live ground truth (#132 probe): the routing matrix is the
-// deepest observed — menu -> 'Source 1-4' -> 'Source 1/2' -> SET, i.e. 3
-// levels; 4 leaves one level of margin without letting a malformed parent
-// loop walk far.
-const GANG_MAX_DEPTH = 4;
+// How deep a gang chain can nest below a menu before the search/fan-out/
+// render gives up — the ONE depth bound every gang consumer shares
+// (renderer inline walk, audit reachability walk, ancestry checks here).
+// Live ground truth (#132 probe): the routing matrix is the deepest
+// observed — menu -> 'Source 1-4' -> 'Source 1/2' -> SET, i.e. 3 levels;
+// 4 leaves one level of margin without letting a malformed parent loop
+// walk far.
+export const GANG_MAX_DEPTH = 4;
 
 /**
  * Is this sub line a "gang group" COL (#132)? Live ground truth from the

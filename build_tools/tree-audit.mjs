@@ -64,7 +64,8 @@ await import('../src/main.js');
 const { appState } = await import('../src/state.js');
 const { setState } = await import('../src/store.js');
 const { updateScreen } = await import('../src/renderer.js');
-const { deriveKeyStack, getNode, recordDump, isGangCol } = await import('../src/tree.js');
+const { deriveKeyStack, getNode, recordDump, isGangCol, GANG_MAX_DEPTH } =
+  await import('../src/tree.js');
 const { KEY, CMD, SYSEX, TYPE_EMPTY } = await import('../src/sysex-commands.js');
 const { log } = await import('../src/logger.js');
 
@@ -260,7 +261,7 @@ for (const [key, node] of colNodes) {
   // never as softkeys — mirror the renderer: reachable when any descendant
   // param's data-key (or the group's header text) made it into the page.
   const gangContentRendered = (c, depth = 0) => {
-    if (depth > 3) return false;
+    if (depth > GANG_MAX_DEPTH) return false;
     if (c.statement && mainText.includes(c.statement.trim())) return true;
     for (const s of (getNode(c.key) || []).slice(1)) {
       if (s.type === 'COL') {

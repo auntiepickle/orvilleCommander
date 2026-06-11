@@ -332,6 +332,65 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     expect(updateScreen).not.toHaveBeenCalled();
   });
 
+  test('descend one-shot never descends into gang groups — they are page content (#132)', () => {
+    // Review blocker: the live routing menu (1001008f) has ONLY gang COL
+    // children ('Source 1-4' pos 13, 'In 1-4' pos c — blank tags). The old
+    // filter saw a COL-only menu with >1 children and descended into the
+    // first group, so the assembled one-page matrix never showed on the
+    // normal click path.
+    appState.currentKey = '1001008f';
+    appState.pendingDescend = true;
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '1001008f',
+        parent: '1001008f',
+        statement: 'Dsp A i/p routing',
+        tag: 'dsp A',
+      },
+      {
+        type: 'COL',
+        position: '13',
+        key: '1001008c',
+        parent: '1001008f',
+        statement: 'Source 1-4',
+        tag: '',
+      },
+      {
+        type: 'COL',
+        position: 'c',
+        key: '1001008b',
+        parent: '1001008f',
+        statement: 'In 1-4',
+        tag: '',
+      },
+    ];
+    recordDump(subs);
+    emit('objectinfo:received', { key: '1001008f', subs });
+
+    expect(appState.pendingDescend).toBe(false); // consumed
+    expect(appState.currentKey).toBe('1001008f'); // no descend
+    expect(updateScreen).not.toHaveBeenCalled();
+  });
+
+  test('BUSY LED lights on wave:opened and clears on dumpComplete (#131)', () => {
+    document.body.innerHTML = '<span id="busy-led" class="status-led busy"></span>';
+    const led = document.getElementById('busy-led');
+
+    emit('wave:opened', { kind: 'objectinfo' });
+    expect(led.classList.contains('lit')).toBe(true);
+
+    emit('dumpComplete', { reason: 'all-received', objectinfoSends: 1 });
+    expect(led.classList.contains('lit')).toBe(false);
+
+    // A watchdog settle clears it too — the LED must never strand lit.
+    emit('wave:opened', { kind: 'value' });
+    expect(led.classList.contains('lit')).toBe(true);
+    emit('dumpComplete', { reason: 'watchdog' });
+    expect(led.classList.contains('lit')).toBe(false);
+  });
+
   test('descend consumes without descending when the menu has params', () => {
     appState.currentKey = '10010001';
     appState.pendingDescend = true;

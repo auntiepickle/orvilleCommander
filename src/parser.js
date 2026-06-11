@@ -18,6 +18,14 @@ import { denibble } from './bitmap.js';
 import { emit } from './events.js';
 import { splitLine } from './sysex-split.js';
 
+// Keys the gang fan-out (#132) has already requested for the CURRENT menu
+// visit. Structural guard (review): the gang fan-out is the first
+// response->request chain in the parser, and a malformed dump graph (gang
+// COLs listing each other as children) would otherwise re-request forever —
+// each refetch reopens a wave, so the watchdog never breaks the loop. Reset
+// when the current menu's own dump lands (one fan-out budget per visit).
+let gangFanOutRequested = new Set();
+
 export function parseResponse(data) {
   // Atomic parse (A5): snapshot state so a throw mid-parse reverts cleanly
   // instead of leaving appState half-applied from a malformed dump.
@@ -108,6 +116,7 @@ export function parseResponse(data) {
           sendObjectInfoDump(s.key);
           sendValueDump(s.key);
         });
+        gangFanOutRequested = new Set(); // new visit, fresh gang fan-out budget (#132)
         setState({ lastAscii: ascii }, 'parser:current-key-ascii');
         setState({ currentSubs: subs }, 'parser:current-subs');
         emit('objectinfo:received', { key: main.key, subs, ascii });
@@ -143,7 +152,8 @@ export function parseResponse(data) {
           // contain only params.
           if (isGangCol(main)) {
             for (const s of subs.slice(1)) {
-              if (s.type === 'COL') {
+              if (s.type === 'COL' && !gangFanOutRequested.has(s.key)) {
+                gangFanOutRequested.add(s.key);
                 sendObjectInfoDump(s.key);
                 sendValueDump(s.key);
               }

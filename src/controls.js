@@ -201,9 +201,20 @@ export function setupDataKnob() {
     }, KNOB.SETTLE_REFRESH_MS);
   };
 
+  // Accumulate wheel travel into detents (review): pixel-mode trackpads
+  // stream dozens of small-delta events per flick, and a per-event detent
+  // would burst keypresses onto the link; zero-delta events (horizontal
+  // scroll over the knob) must not spin at all — INC/DEC mutate the
+  // selected parameter on the device.
+  let wheelTravel = 0;
   knob.addEventListener('wheel', (e) => {
     e.preventDefault();
-    spin(e.deltaY < 0 ? 1 : -1);
+    if (e.deltaY === 0) return;
+    wheelTravel += e.deltaY;
+    while (Math.abs(wheelTravel) >= KNOB.WHEEL_DELTA_PER_DETENT) {
+      spin(wheelTravel < 0 ? 1 : -1);
+      wheelTravel -= Math.sign(wheelTravel) * KNOB.WHEEL_DELTA_PER_DETENT;
+    }
   });
 
   let dragLastY = null;

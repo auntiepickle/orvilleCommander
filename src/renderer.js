@@ -5,7 +5,14 @@ import { TIMING, LAYOUT, RENDER } from './constants.js';
 import { setState } from './store.js';
 import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
 import { showLoading } from './main.js';
-import { getNode, deriveKeyStack, findParamUnder, labelForSub, isGangCol } from './tree.js';
+import {
+  getNode,
+  deriveKeyStack,
+  findParamUnder,
+  labelForSub,
+  isGangCol,
+  GANG_MAX_DEPTH,
+} from './tree.js';
 import { log } from './logger.js';
 
 /**
@@ -153,6 +160,13 @@ const handleSelectChange = (e) => {
     'debug',
     'valueChange'
   );
+  // Release focus (review): a closed select that keeps focus would park
+  // every subsequent repaint (#131 defer guard) until the user happens to
+  // click elsewhere — the post-change refresh and gang-sibling updates
+  // must paint. Safe ordering: the blur-flush replays one tick later and
+  // re-checks the parked slot, and the change's discard listener (runs
+  // synchronously after this handler) clears it first — no stale replay.
+  e.target.blur();
   showLoading();
   sendValuePut(key, selectedIndex);
   setState(
@@ -400,9 +414,17 @@ const discardDeferredPaint = () => {
 
 const flushDeferredPaint = () => {
   if (!deferredPaint) return;
-  const args = deferredPaint;
-  deferredPaint = null;
-  renderScreen(...args);
+  // One tick later, never synchronously (review): blur fires between the
+  // mousedown and click of whatever the user clicked next inside #lcd —
+  // replacing innerHTML here would destroy the click target and drop that
+  // navigation. The R3 guard re-validates the parked args against
+  // currentKey at replay time, so a navigation that wins the tick is safe.
+  setTimeout(() => {
+    if (!deferredPaint) return;
+    const args = deferredPaint;
+    deferredPaint = null;
+    renderScreen(...args);
+  }, 0);
 };
 
 // A param line with every value slot blanked to the placeholder: the
@@ -485,9 +507,8 @@ function gangParamLine(s, logParam) {
 // Source/In rows self-describe with '-> IN1' / 'A IN1 Gain'). Uncached
 // groups render a loading placeholder; the gang fan-out (parser) is
 // fetching them and the child-arrival repaint (bridge) repaints on landing.
-const GANG_RENDER_MAX_DEPTH = 3; // matches the deepest live-observed chain
 function renderGangInline(colSub, depth, paramLines, paramHtmlLines, logParam) {
-  if (depth > GANG_RENDER_MAX_DEPTH) return;
+  if (depth > GANG_MAX_DEPTH) return;
   const node = getNode(colSub.key);
   const header = (colSub.statement || '').trim();
   const children = node ? node.slice(1) : [];
@@ -939,7 +960,9 @@ export function renderScreen(subs, ascii, logParam) {
     // Set softSubs: local if present, else immediate parent's COLs for leaf menus
     if (appState.keyStack.length > 0) {
       const parentEntry = appState.keyStack[appState.keyStack.length - 1];
-      const parentColSubs = (parentEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
+      const parentColSubs = (parentEntry.subs || [])
+        .slice(1)
+        .filter((s) => s.type === 'COL' && !isGangCol(s)); // gang groups are page content, never softkeys (#132)
       softSubs = localSoftSubs.length > 0 ? localSoftSubs : parentColSubs;
     } else {
       softSubs = localSoftSubs;
@@ -984,7 +1007,9 @@ export function renderScreen(subs, ascii, logParam) {
           displayLines.push('');
           ancestorSeparatorAdded = true;
         }
-        const parentSoftSubs = (parentEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
+        const parentSoftSubs = (parentEntry.subs || [])
+          .slice(1)
+          .filter((s) => s.type === 'COL' && !isGangCol(s)); // gang groups are page content, never softkeys (#132)
         const parentHighlightKey = appState.currentKey;
         let parentSoftTextLines = [];
         for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
@@ -1016,7 +1041,9 @@ export function renderScreen(subs, ascii, logParam) {
         !upperEntry.key.startsWith(KEY_PREFIX.DSP_B)
       ) {
         // Skip if grandparent is preset
-        const upperSoftSubs = (upperEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
+        const upperSoftSubs = (upperEntry.subs || [])
+          .slice(1)
+          .filter((s) => s.type === 'COL' && !isGangCol(s)); // gang groups are page content, never softkeys (#132)
         const upperHighlightKey = appState.keyStack[appState.keyStack.length - 1].key;
         let upperSoftTextLines = [];
         for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {
@@ -1084,7 +1111,9 @@ export function renderScreen(subs, ascii, logParam) {
           mainHtmlLines.push('');
           ancestorSeparatorAdded = true;
         }
-        const parentSoftSubs = (parentEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
+        const parentSoftSubs = (parentEntry.subs || [])
+          .slice(1)
+          .filter((s) => s.type === 'COL' && !isGangCol(s)); // gang groups are page content, never softkeys (#132)
         const parentHighlightKey = appState.currentKey;
         let parentSoftHtmlLines = [];
         for (let i = 0; i < parentSoftSubs.length; i += itemsPerLine) {
@@ -1121,7 +1150,9 @@ export function renderScreen(subs, ascii, logParam) {
         !upperEntry.key.startsWith(KEY_PREFIX.DSP_B)
       ) {
         // Skip if grandparent is preset
-        const upperSoftSubs = (upperEntry.subs || []).slice(1).filter((s) => s.type === 'COL');
+        const upperSoftSubs = (upperEntry.subs || [])
+          .slice(1)
+          .filter((s) => s.type === 'COL' && !isGangCol(s)); // gang groups are page content, never softkeys (#132)
         const upperHighlightKey = appState.keyStack[appState.keyStack.length - 1].key;
         let upperSoftHtmlLines = [];
         for (let i = 0; i < upperSoftSubs.length; i += itemsPerLine) {

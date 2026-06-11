@@ -142,6 +142,7 @@ describe('renderer.js', () => {
   ];
 
   test('repaint defers while a SET dropdown is focused and flushes on blur (#131)', () => {
+    jest.useFakeTimers();
     appState.currentKey = '10020000';
     renderScreen(dropdownGuardSubs('Program'), '', mockLog);
     const select = document.querySelector('select[data-key="10020011"]');
@@ -153,8 +154,13 @@ describe('renderer.js', () => {
     expect(document.querySelector('select[data-key="10020011"]')).toBe(select);
     expect(document.getElementById('lcd').innerHTML).not.toContain('ProgramRepainted');
 
+    // The flush replays one tick after blur (it must not run synchronously
+    // inside the blur of a click elsewhere — review SF4).
     select.blur();
+    expect(document.getElementById('lcd').innerHTML).not.toContain('ProgramRepainted');
+    jest.runOnlyPendingTimers();
     expect(document.getElementById('lcd').innerHTML).toContain('ProgramRepainted');
+    jest.useRealTimers();
   });
 
   test('a change discards the parked repaint instead of replaying it (#131)', () => {
@@ -168,7 +174,9 @@ describe('renderer.js', () => {
     select.dispatchEvent(new Event('change', { bubbles: true }));
     select.blur();
     // The parked paint is stale relative to the change's own refresh flow;
-    // blur must not replay it.
+    // the (tick-deferred) blur flush must not replay it — the change
+    // discard cleared the slot before the flush fired.
+    jest.runOnlyPendingTimers();
     expect(document.getElementById('lcd').innerHTML).not.toContain('StaleParkedPaint');
     jest.useRealTimers();
   });

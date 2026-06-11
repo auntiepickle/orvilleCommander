@@ -72,6 +72,10 @@ export const KNOB = {
   DETENT_DEG: 18, // visual pointer step: 20 detents per revolution, encoder-like
   DRAG_PX_PER_DETENT: 12, // vertical drag distance per detent — comfortable mouse travel
   SETTLE_REFRESH_MS: 300, // trailing screen refresh after the last detent (≥ MIDI_SETTLE_MS)
+  WHEEL_DELTA_PER_DETENT: 100, // accumulated wheel deltaY per detent: one Chrome mouse-wheel
+  //                              notch is deltaY 100; pixel-mode trackpads stream 1-10 per
+  //                              event, so accumulation (not per-event detents) keeps a flick
+  //                              from bursting keypresses onto the 31250-baud link (review)
 };
 
 // Canvas presentation for the bitmap screen (CSS, cosmetic only).

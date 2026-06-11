@@ -10,6 +10,7 @@ import {
   isFresh,
   markDirtyIfStable,
   markAllStableDirty,
+  stampStableRequest,
   reset,
 } from '../src/tree.js';
 
@@ -134,13 +135,48 @@ describe('tree store (T1b)', () => {
 
       // Re-recording ONE node un-stales only that node — a deep visit (or
       // a dropped sibling response) can never launder staleness into the
-      // rest of the subtree.
+      // rest of the subtree. The re-record must come from a POST-mark
+      // request (#121): stamp as sendObjectInfoDump does in production.
+      stampStableRequest('10020010');
       recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
       expect(isFresh('10020010')).toBe(true);
       expect(isFresh('10020020')).toBe(false); // sibling stays stale
 
       // Puts outside any stable subtree mark nothing.
       markDirtyIfStable('4070001');
+      expect(isFresh('10020010')).toBe(true);
+    });
+
+    test('a response whose request predates the mutation stays stale (#121 race, both variants)', () => {
+      // Variant (i): a refetch in flight when the put fires. The request
+      // was stamped pre-mark; the put bumps the generation; the arriving
+      // pre-mutation dump records but is NOT trusted across visits.
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
+      markDirtyIfStable('1002001c');
+      stampStableRequest('10020010'); // refetch goes out...
+      markDirtyIfStable('1002001c'); // ...another put lands mid-flight
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]); // pre-put response
+      expect(getNode('10020010')).toBeDefined(); // recorded (newest data we have)
+      expect(isFresh('10020010')).toBe(false); // but not trusted
+
+      // A post-mark request -> response cycle restores trust.
+      stampStableRequest('10020010');
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
+      expect(isFresh('10020010')).toBe(true);
+
+      // Variant (ii): a NEVER-cached child requested pre-put, recorded
+      // post-put. markDirtyIfStable could not stale it (not cached), but
+      // the generation check still refuses trust.
+      stampStableRequest('10020020');
+      markDirtyIfStable('1002001c');
+      recordDump([col('10020020', '10020020', 'save program', 'save')]);
+      expect(isFresh('10020020')).toBe(false);
+    });
+
+    test('generation 0 trusts unstamped records — seeding before any mutation (#121)', () => {
+      // The audit seeds the tree via direct recordDump with no requests;
+      // with no mutation ever marked, nothing can be pre-mutation.
+      recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
       expect(isFresh('10020010')).toBe(true);
     });
 

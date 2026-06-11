@@ -702,8 +702,9 @@ HUMAN-GATE: none
       PNG-byte-level — deflate output is not stable across Node/zlib versions. The PNG codec is
       extracted to build_tools/png-codec.js (encode + a strict subset decoder that throws on
       foreign shapes), shared by render-screen.js (verified: refactored CLI output byte-identical
-      to the committed goldens) and the test. Fail-on-mutation verified (a flipped golden byte
-      fails exactly that screen, with a pixel-coordinate error message + regeneration pointer).
+      to the committed goldens) and the test. Fail-on-mutation verified (a flipped pixel-data byte
+      fails exactly that screen, with a pixel-coordinate error message + regeneration pointer;
+      chunk CRCs are deliberately not validated — pixels are the contract).
 - [ ] G2b Live loop: drive Orville via MIDI masks -> 0x18 screengrab -> diff against golden.
       Substrate already shipped: build_tools/live-app.mjs (real app headless against the device,
       walk/load/eager/smoke/prog modes) + tree-audit (per-node DOM diffing) + hil-screenshot.cjs

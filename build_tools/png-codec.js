@@ -70,8 +70,12 @@ export function encodePNG(width, height, rgba) {
 
 /**
  * Decodes a PNG produced by encodePNG back to pixels. Throws on any shape
- * outside our encoder's subset (bit depth 8, RGBA, no interlace, filter 0
- * rows) — a golden that fails to decode is itself a regression signal.
+ * outside our encoder's subset (bit depth 8, RGBA, compression/filter
+ * method 0, no interlace, filter-0 rows) — a golden that fails to decode
+ * is itself a regression signal. Chunk CRCs are NOT validated: corruption
+ * confined to a CRC field decodes silently (pixels are the golden
+ * contract); corruption of the pixel data itself is still caught by
+ * zlib's adler-32 trailer or by the pixel comparison.
  *
  * @param {Buffer} buf
  * @returns {{width: number, height: number, rgba: Uint8ClampedArray}}
@@ -91,8 +95,10 @@ export function decodePNG(buf) {
     if (type === 'IHDR') {
       width = data.readUInt32BE(0);
       height = data.readUInt32BE(4);
-      if (data[8] !== 8 || data[9] !== 6 || data[12] !== 0) {
-        throw new Error('unsupported PNG shape (want 8-bit RGBA, no interlace)');
+      if (data[8] !== 8 || data[9] !== 6 || data[10] !== 0 || data[11] !== 0 || data[12] !== 0) {
+        throw new Error(
+          'unsupported PNG shape (want 8-bit RGBA, compression/filter method 0, no interlace)'
+        );
       }
     } else if (type === 'IDAT') {
       idatParts.push(data);

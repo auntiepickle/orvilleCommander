@@ -12,8 +12,11 @@ tracker FB5).
 Each `screen-<name>.png` here is the expected render of the raw `0x17` capture in
 `tests/fixtures/screen-<name>.txt`, decoded by `build_tools/render-screen.js`
 (which shares `computePixels` from `src/framebuffer.js`). They are the reference
-set for the offline screenshot-regression net (issue G2): render the `.txt`
-fixture and byte-compare the PNG against the golden here.
+set for the offline screenshot-regression net (issue G2a, shipped):
+`tests/screen-golden.test.js` decodes both the fixture and the golden and
+compares **pixel-exact** — not whole-file PNG bytes, because deflate output is
+not stable across Node/zlib versions. The shared codec is
+`build_tools/png-codec.js`.
 
 Device state at capture: DSP A running **Black Hole**, DSP B **MetallicChamber**,
 device id 1, internal clock 48 kHz.

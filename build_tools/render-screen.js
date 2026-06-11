@@ -12,6 +12,7 @@
 
 import fs from 'node:fs';
 import { denibble, computePixels } from '../src/framebuffer.js';
+import { SYSEX } from '../src/sysex-commands.js';
 // Encoder/scaler shared with the screen-golden jest suite (G2/#45).
 import { encodePNG, scale } from './png-codec.js';
 
@@ -34,7 +35,7 @@ const frame = fs
   .trim()
   .split(/\s+/)
   .map((h) => parseInt(h, 16));
-const rawBytes = denibble(frame.slice(5, -1)); // strip F0 1C 70 dev 17 ... F7
+const rawBytes = denibble(frame.slice(SYSEX.FRAME_PREFIX_LEN, -1)); // strip F0 1C 70 dev 17 ... F7
 const pixels = computePixels(rawBytes, { width: SCREEN_W, height: SCREEN_H, header });
 const scaled = scale(pixels, SCREEN_W, SCREEN_H, factor);
 fs.writeFileSync(outFile, encodePNG(scaled.width, scaled.height, scaled.rgba));

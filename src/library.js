@@ -30,6 +30,16 @@ export function getLibrary() {
   return library;
 }
 
+/** Total program count across the synced library (0 when none). */
+export function libraryProgramCount() {
+  return library ? library.banks.reduce((n, b) => n + b.programs.length, 0) : 0;
+}
+
+/** Whether the corpus is large enough to enable search (#142 follow-up). */
+export function canSearch() {
+  return libraryProgramCount() >= LIBRARY.SEARCH_MIN_PROGRAMS;
+}
+
 /** Hydrates the library from persisted config (boot); null clears (tests). */
 export function setLibrary(persisted) {
   if (persisted === null) {
@@ -47,7 +57,7 @@ export function setLibrary(persisted) {
  */
 export function searchLibrary(query) {
   const q = query.trim().toLowerCase();
-  if (!q || !library) return [];
+  if (!q || !canSearch()) return [];
   const hits = [];
   for (const bank of library.banks) {
     for (const program of bank.programs) {
@@ -96,24 +106,53 @@ export async function syncLibrary(onProgress) {
     log('Library sync: no MIDI output connected', 'error', 'error');
     return null;
   }
-  const loadMenu = getNode(KEY.FAVORITES);
-  const bankSub = loadMenu?.find((s) => s.key === KEY.BANK_SELECT);
-  if (!bankSub?.options?.length) {
-    log('Library sync: no load-menu dump yet — visit the program page first', 'error', 'error');
-    return null;
-  }
   syncing = true;
   cancelRequested = false;
+  // Sync-from-anywhere (#142 follow-up): the bank list lives in the
+  // load-menu dump, which may not be cached if the user never opened the
+  // program page. Fetch it ourselves first instead of demanding they
+  // navigate there — onProgress(-1) signals this "preparing" phase.
+  let loadMenu = getNode(KEY.FAVORITES);
+  let bankSub = loadMenu?.find((s) => s.key === KEY.BANK_SELECT);
+  if (!bankSub?.options?.length) {
+    onProgress?.(-1, 0, 'preparing');
+    sendObjectInfoDump(KEY.FAVORITES);
+    sendValueDump(KEY.FAVORITES);
+    const deadline = Date.now() + LIBRARY.BANK_DUMP_TIMEOUT_MS;
+    while (Date.now() < deadline && !cancelRequested) {
+      await sleep(200);
+      loadMenu = getNode(KEY.FAVORITES);
+      bankSub = loadMenu?.find((s) => s.key === KEY.BANK_SELECT);
+      if (bankSub?.options?.length) break;
+    }
+  }
+  if (!bankSub?.options?.length) {
+    log('Library sync: could not load the bank list', 'error', 'error');
+    syncing = false;
+    return null;
+  }
   const originalBankIdx = parseInt(String(bankSub.value || '0').split(' ')[0], 16);
   const banks = [];
+  const total = bankSub.options.length;
+  // One cell per bank for the dialog's defrag map: 'pending' | 'current'
+  // | 'captured' | 'skipped'. emit() reports the whole scan state plus a
+  // rolling ETA (mean elapsed per finished bank * banks remaining).
+  const bankStates = new Array(total).fill('pending');
+  const startedAt = Date.now();
+  const emit = (phase, doneCount, name) => {
+    const elapsed = Date.now() - startedAt;
+    const etaMs = doneCount > 0 ? Math.round((elapsed / doneCount) * (total - doneCount)) : null;
+    onProgress?.({ phase, done: doneCount, total, name, bankStates: [...bankStates], etaMs });
+  };
   // The dump's arrival is observed through the tree memo (#141): the scan
   // waits until bankProgramsFor(idx) materializes for the bank it selected.
   try {
-    for (let i = 0; i < bankSub.options.length; i++) {
+    for (let i = 0; i < total; i++) {
       if (cancelRequested) break;
       const option = bankSub.options[i];
       const bankIdx = parseInt(option.index, 10);
-      onProgress?.(i, bankSub.options.length, option.desc);
+      bankStates[i] = 'current';
+      emit('scanning', i, option.desc);
       if (!bankProgramsFor(bankIdx)) {
         sendValuePut(KEY.BANK_SELECT, option.index);
         await sleep(LIBRARY.BANK_SETTLE_MS);
@@ -126,17 +165,23 @@ export async function syncLibrary(onProgress) {
       }
       const memo = bankProgramsFor(bankIdx);
       if (memo) {
+        bankStates[i] = 'captured';
         banks.push({
           idx: option.index,
           name: option.desc.trim(),
           programs: memo.options.map((o) => ({ idx: o.index, name: o.desc.trim() })),
         });
-      } else if (!cancelRequested) {
-        log(`Library sync: no dump for bank ${option.desc} — skipped`, 'error', 'error');
+      } else {
+        bankStates[i] = 'skipped';
+        if (!cancelRequested) {
+          log(`Library sync: no dump for bank ${option.desc} — skipped`, 'error', 'error');
+        }
       }
+      emit('scanning', i + 1, option.desc);
     }
   } finally {
     // Restore the user's bank and refresh the on-screen list.
+    emit('restoring', banks.length, '');
     sendValuePut(KEY.BANK_SELECT, String(originalBankIdx));
     await sleep(LIBRARY.BANK_SETTLE_MS);
     sendObjectInfoDump(KEY.FAVORITES);

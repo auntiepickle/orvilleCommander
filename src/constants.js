@@ -103,9 +103,15 @@ export const LIBRARY = {
   //                              only fires on a genuinely dropped response
   SEARCH_MAX_RESULTS: 24, // results dropdown cap — about a screenful; typing
   //                         more letters narrows better than scrolling
+  SEARCH_MIN_PROGRAMS: 40, // search stays DISABLED below this corpus size: a
+  //                          handful of banks gives so little coverage that
+  //                          "no results" misleads more than it informs — one
+  //                          bank is ~15 programs, so 40 ≈ a few banks synced
   LOAD_SETTLE_MS: 600, // wait between the search-load sequence's puts (bank ->
   //                      program -> load trigger): same settle rationale as
   //                      BANK_SETTLE_MS, applied to each step
+  COMPLETE_HOLD_MS: 1800, // how long the sync dialog holds on its completion
+  //                         summary before dismissing — long enough to read
 };
 
 // Demo mode (src/demo.js): the canned device built from a live capture.

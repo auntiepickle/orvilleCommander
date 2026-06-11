@@ -712,6 +712,48 @@ describe('renderer.js', () => {
     expect(lcd.querySelectorAll('select[data-key]').length).toBe(2);
   });
 
+  test('device labels with < are escaped, not parsed as HTML (live bug: fb<tap)', () => {
+    // The multitap delay's feedback label 'fb<tap1' rendered as just 'fb'
+    // and its phantom <tap1> tag wrapped every line below, so one hover lit
+    // the whole screen.
+    appState.currentKey = '8040001';
+    const subs = [
+      { type: 'COL', position: '0', key: '8040001', parent: '', statement: 'Delay', tag: 'delay' },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '8040002',
+        parent: '8040001',
+        statement: 'fb<tap1: %4.0f',
+        tag: 'fb',
+        value: '50',
+        min: '0',
+        max: '100',
+      },
+      {
+        type: 'NUM',
+        position: '2',
+        key: '8040003',
+        parent: '8040001',
+        statement: 'fb>tap2: %4.0f',
+        tag: 'fb',
+        value: '60',
+        min: '0',
+        max: '100',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+    const lcd = document.getElementById('lcd');
+    // The full label survives as text...
+    expect(lcd.textContent).toContain('fb<tap1');
+    expect(lcd.textContent).toContain('fb>tap2');
+    // ...with no phantom <tap1> element, and the escaped entity in the HTML.
+    expect(lcd.querySelector('tap1')).toBeNull();
+    expect(lcd.innerHTML).toContain('fb&lt;tap1');
+    // Both NUM values stay independently clickable (no wrapping bleed).
+    expect(lcd.querySelectorAll('.param-value')).toHaveLength(2);
+  });
+
   test('NUM edits inline in the glass — valid commits, invalid flashes, never a browser box', () => {
     appState.currentKey = '10010001';
     const subs = [

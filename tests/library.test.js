@@ -34,11 +34,15 @@ import {
   searchLibrary,
   syncLibrary,
   loadSearchHit,
+  canSearch,
+  libraryProgramCount,
 } from '../src/library.js';
 import { sendValuePut, sendObjectInfoDump } from '../src/midi.js';
 import { getNode, bankProgramsFor } from '../src/tree.js';
 import { appState } from '../src/state.js';
 
+// Padded so the corpus clears LIBRARY.SEARCH_MIN_PROGRAMS (search gating).
+const filler = (n) => Array.from({ length: n }, (_, i) => ({ idx: `${i}`, name: `${i} Filler` }));
 const sampleLibrary = {
   syncedAt: 'test',
   banks: [
@@ -48,6 +52,7 @@ const sampleLibrary = {
       programs: [
         { idx: '0', name: '0 Techno Rumble' },
         { idx: '1', name: '1 Black Hole' },
+        ...filler(40),
       ],
     },
     {
@@ -75,6 +80,18 @@ describe('library search', () => {
 
   test('empty query returns nothing', () => {
     expect(searchLibrary('   ')).toEqual([]);
+  });
+
+  test('search is gated on a minimum corpus (#142 follow-up)', () => {
+    setLibrary({
+      syncedAt: 'test',
+      banks: [{ idx: '0', name: '0 Tiny', programs: [{ idx: '0', name: '0 Black Hole' }] }],
+    });
+    expect(libraryProgramCount()).toBe(1);
+    expect(canSearch()).toBe(false);
+    expect(searchLibrary('black hole')).toEqual([]); // below the minimum
+    setLibrary(sampleLibrary);
+    expect(canSearch()).toBe(true);
   });
 });
 
@@ -120,7 +137,13 @@ describe('syncLibrary', () => {
     expect(puts).toContain('10020012:1');
     expect(puts[puts.length - 1]).toBe('10020012:0'); // restore
     expect(sendObjectInfoDump).toHaveBeenCalledWith('10020010');
-    expect(progress).toHaveBeenCalledWith(0, 2, '0 Favorites');
+    // Structured progress: the bank-map defrag state for the dialog.
+    const lastScan = progress.mock.calls
+      .map((c) => c[0])
+      .filter((p) => p.phase === 'scanning')
+      .pop();
+    expect(lastScan).toMatchObject({ done: 2, total: 2 });
+    expect(lastScan.bankStates).toEqual(['captured', 'captured']);
     expect(getLibrary()).toBe(library);
   });
 

@@ -428,10 +428,128 @@ body {
   flex-direction: column;
   border-radius: 2px;
   transition: filter 160ms ease;
+  /* The LCD is a device panel, not a document: a click-drag over a value
+     must not text-SELECT down through the whole monospace block (it ran
+     from a field to every line below, reading as a glitch). The inline
+     editor re-enables selection for itself below. */
+  user-select: none;
+}
+#lcd input.lcd-edit {
+  user-select: text;
 }
 #lcd.loading {
   filter: brightness(0.55);
   pointer-events: none;
+}
+
+/* Library-sync dialog (#142 follow-up): blocking overlay ON the LCD,
+   sibling of #lcd inside the bezel and UNDER .glass, so it refracts like
+   the real display. Phosphor styling mirrors #lcd; covers the recess
+   exactly (inset = bezel padding). */
+.sync-dialog {
+  position: absolute;
+  inset: var(--bezel-pad);
+  z-index: 1; /* over #lcd, under .glass (which has no z-index, paints later) */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  font-family: 'OrvilleLCD', ui-monospace, Consolas, monospace;
+  font-size: 22px;
+  line-height: 28px;
+  color: var(--lcd-px);
+  background:
+    radial-gradient(
+      ellipse 90% 70% at 50% 35%,
+      color-mix(in srgb, var(--lcd-px) 8%, transparent),
+      transparent 70%
+    ),
+    var(--lcd-bg);
+  text-shadow:
+    0 0 2px var(--lcd-px),
+    0 0 8px var(--lcd-glow);
+  border-radius: 2px;
+  -webkit-font-smoothing: none;
+}
+.sync-title {
+  text-align: center;
+  background: var(--lcd-px);
+  color: var(--lcd-bg);
+  text-shadow: none;
+  letter-spacing: 0.3em;
+  padding: 2px 0;
+}
+.sync-bar {
+  white-space: pre;
+}
+.sync-count {
+  color: var(--lcd-px-dim);
+}
+.sync-line {
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sync-cur {
+  background: var(--lcd-px);
+  color: var(--lcd-bg);
+  text-shadow: none;
+}
+.sync-map {
+  white-space: pre;
+  line-height: 22px;
+  letter-spacing: 3px;
+  margin: 2px 0;
+}
+.sync-map .cell-on {
+  color: var(--lcd-px);
+}
+.sync-map .cell-cur {
+  background: var(--lcd-px);
+  color: var(--lcd-bg);
+  text-shadow: none;
+  animation: sync-pulse 0.7s steps(2, jump-none) infinite;
+}
+.sync-map .cell-skip {
+  color: var(--led-amber);
+}
+.sync-map .cell-pending {
+  color: var(--lcd-px-dim);
+}
+@keyframes sync-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+.sync-foot {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sync-eta {
+  color: var(--lcd-px-dim);
+  font-size: 18px;
+}
+.sync-cancel {
+  font-family: inherit;
+  font-size: 18px;
+  color: var(--lcd-px);
+  background: var(--lcd-bg);
+  border: none;
+  box-shadow: inset 0 0 0 2px var(--lcd-px-dim);
+  padding: 2px 12px;
+  cursor: pointer;
+  text-shadow: inherit;
+}
+.sync-cancel:hover {
+  background: var(--lcd-px);
+  color: var(--lcd-bg);
+  text-shadow: none;
+}
+.sync-done {
+  text-align: center;
+  color: var(--lcd-px);
 }
 .line {
   height: var(--lcd-row-h);
@@ -821,6 +939,31 @@ body {
 }
 .util-search {
   width: 240px;
+}
+.util-search:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* Sync status chip beside the Sync Library button (#142 follow-up). */
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--legend-dim);
+  white-space: nowrap;
+}
+.sync-status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3a3a3e; /* unsynced: dark lamp */
+}
+.sync-status.synced::before {
+  background: var(--led-green);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--led-green) 60%, transparent);
 }
 .search-results {
   position: absolute;

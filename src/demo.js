@@ -15,7 +15,7 @@
 // - GET_SCREEN: replays the captured frame verbatim.
 // - KEYPRESS: accepted silently (the app's follow-up refresh drives the UI).
 
-import demoData from './demo-data.json';
+import demoData from './demo-data.js';
 import { SYSEX, CMD } from './sysex-commands.js';
 import { DEMO } from './constants.js';
 import { parseSubObject } from './parser.js';

@@ -182,6 +182,16 @@ const handleSelectChange = (e) => {
       // (#138). One targeted dump is a single wave; the R7 child-arrival
       // repaint (or the progressive paint, if the load menu IS the current
       // key) updates the dropdowns the moment it lands.
+      // Prune the load menu's cached values first (review blocker): this
+      // branch skips updateScreen's full currentValues clear, and a stale
+      // cache entry shadows the fresh dump's value in the render
+      // precedence (currentValues[key] || s.value) — the program dropdown
+      // would keep the OLD bank's selection and never self-correct.
+      const pruned = { ...appState.currentValues };
+      delete pruned[KEY.PROGRAM_SELECT];
+      delete pruned[KEY.BANK_SELECT];
+      delete pruned[KEY.FAVORITES];
+      setState({ currentValues: pruned }, 'renderer:bank-change-prune');
       sendObjectInfoDump(KEY.FAVORITES);
       sendValueDump(KEY.FAVORITES);
     } else {

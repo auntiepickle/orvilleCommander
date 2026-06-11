@@ -147,18 +147,29 @@ describe('renderer.js', () => {
     const select = document.querySelector('select[data-key="10020012"]');
     expect(select).toBeTruthy();
 
+    // Warm-path cache state: a prior visit cached the OLD bank's program
+    // value — it must be pruned, or it shadows the fresh dump's value in
+    // the render precedence (review blocker).
+    appState.currentValues['10020011'] = 'c Old Bank Program';
+
     jest.useFakeTimers();
     select.value = '0';
     select.dispatchEvent(new Event('change', { bubbles: true }));
     expect(sendValuePut).toHaveBeenCalledWith('10020012', '0');
 
     jest.advanceTimersByTime(200);
-    // Targeted: the load menu's dump (it carries both re-listed SETs)...
+    // Targeted: the load menu's dump + values (it carries both re-listed
+    // SETs)...
     expect(sendObjectInfoDump).toHaveBeenCalledWith('10020010');
+    expect(sendValueDump).toHaveBeenCalledWith('10020010');
     // ...and NOT the generic full-menu refresh that refetched the whole
-    // staled program subtree (13.3s measured live before the fix).
-    expect(sendObjectInfoDump).not.toHaveBeenCalledWith('10020000', undefined);
-    expect(sendObjectInfoDump).not.toHaveBeenCalledWith('10020000', null);
+    // staled program subtree (13.3s measured live before the fix) —
+    // first-arg sweep, so a one-arg regression cannot slip past.
+    expect(sendObjectInfoDump.mock.calls.map((c) => c[0])).not.toContain('10020000');
+    // The stale program/bank cache entries are pruned so the fresh dump's
+    // values render.
+    expect(appState.currentValues['10020011']).toBeUndefined();
+    expect(appState.currentValues['10020012']).toBeUndefined();
     jest.useRealTimers();
   });
 

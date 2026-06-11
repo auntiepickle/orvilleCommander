@@ -24,6 +24,13 @@
           value="0"
         />
         <button id="select-ports" class="util-btn util-btn-primary">Select Ports</button>
+        <button
+          id="demo-mode"
+          class="util-btn"
+          title="Browse with the unit off — a captured device tree answers instead"
+        >
+          Demo Mode
+        </button>
         <span class="conn-spacer"></span>
         <button id="save-config" class="util-btn">Save Config</button>
         <button id="clear-config" class="util-btn">Clear Config</button>
@@ -67,6 +74,11 @@
           <div class="display-block">
             <div class="bezel">
               <div id="lcd" class="lcd"></div>
+              <!-- Glass pane over the display: pure presentation, a SIBLING
+                   of #lcd (the renderer owns the #lcd subtree — never put
+                   chrome inside it). pointer-events: none keeps every LCD
+                   click affordance live underneath. -->
+              <div class="glass" aria-hidden="true"></div>
             </div>
             <div class="soft-keys">
               <button id="soft1-btn" class="key key-soft" aria-label="Soft key 1"></button>
@@ -191,6 +203,16 @@
                 ></label
               >
             </div>
+          </div>
+          <div class="service-col">
+            <h3 class="service-heading">Theme</h3>
+            <div class="service-row">
+              <label class="util-label" for="theme-preset">PRESET</label>
+              <select id="theme-preset" class="util-input"></select>
+              <button id="theme-reset" class="util-btn">Reset Overrides</button>
+            </div>
+            <!-- One swatch row per registry token (theme.js THEME_TOKENS) -->
+            <div id="theme-tokens" class="theme-tokens"></div>
           </div>
           <div class="service-col">
             <h3 class="service-heading">Diagnostics</h3>

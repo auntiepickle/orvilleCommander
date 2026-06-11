@@ -2,7 +2,15 @@
 import { WebMidi } from 'webmidi';
 import { CMD, KEY } from './sysex-commands.js';
 import { TIMING, DEFAULT_LOG_CATEGORIES } from './constants.js';
-import { loadConfig, saveConfig, clearConfig, mergeLogCategories } from './config.js';
+import {
+  loadConfig,
+  saveConfig,
+  saveThemeConfig,
+  clearConfig,
+  mergeLogCategories,
+} from './config.js';
+import { setupThemeEditor } from './theme.js';
+import { createDemoPorts, DEMO_NODE_COUNT } from './demo.js';
 import { setupKeypressControls, setupDataKnob, testKeypress, meterPollTick } from './controls.js';
 import {
   setMidiPorts,
@@ -15,7 +23,7 @@ import {
 import { updateScreen } from './renderer.js';
 import { appState } from './state.js';
 import { setState } from './store.js';
-import { denibble, renderBitmap } from './bitmap.js';
+import { denibble, renderBitmap, rerenderBitmap } from './bitmap.js';
 import { log, setLogLevel, setLogCategories, getLogCategories } from './logger.js';
 import { registerEventBridge } from './event-bridge.js';
 import { extractNibblesFromHex } from './hex-extract.js';
@@ -135,28 +143,22 @@ async function connectMidi(cachedConfig = null) {
  * Sets MIDI ports based on selected values, adds SysEx listener, and initializes the screen.
  * Fetches root and initial preset data with optional bitmap.
  */
-function selectPorts() {
-  const outputId = outputSelect.value;
-  const inputId = inputSelect.value;
-  const devId = parseInt(deviceIdInput.value, 10);
-  setMidiPorts(WebMidi.getOutputById(outputId), WebMidi.getInputById(inputId), devId);
-  addSysexListener();
-  log('Ports selected and listener added. Device ID set to ' + devId, 'info', 'general');
+// The connect/landing reset shared by real ports and demo mode.
+// NOTE: this reset block is hand-mirrored in build_tools/live-app.mjs and
+// build_tools/tree-audit.mjs (not exported) - update those when changing it.
+// C2 (#38): reset the view to root BEFORE requesting, then arm the one-shot
+// landing. Re-runnable (button + cached-config auto-run); the reset forces
+// the parser's full root branch on reconnect (background root dumps do not
+// update currentSubs, so landing from a navigated-deep state would pair the
+// root keyStack entry with stale subs). The landing itself — adopt DSP
+// keys/names, navigate to the active preset, prefetch the other DSP,
+// optional screen fetch — fires in event-bridge.js when the root dump
+// arrives. No timer, no autoLoad flag.
+// A (re)connect is an explicit re-read: distrust every stable-subtree
+// cache (#113 — front-panel changes may have happened while disconnected).
+function resetAndLand() {
   lcdEl.innerText = 'Connected. Fetching root screen...';
   showLoading();
-  // NOTE: this reset block is hand-mirrored in build_tools/live-app.mjs and
-  // build_tools/tree-audit.mjs (selectPorts is not exported) - update those
-  // when changing it.
-  // C2 (#38): reset the view to root BEFORE requesting, then arm the one-shot
-  // landing. selectPorts is re-runnable (button + cached-config auto-run);
-  // the reset forces the parser's full root branch on reconnect (background
-  // root dumps do not update currentSubs, so landing from a navigated-deep
-  // state would pair the root keyStack entry with stale subs). The landing
-  // itself — adopt DSP keys/names, navigate to the active preset, prefetch
-  // the other DSP, optional screen fetch — fires in event-bridge.js when the
-  // root dump arrives. No timer, no autoLoad flag.
-  // A (re)connect is an explicit re-read: distrust every stable-subtree
-  // cache (#113 — front-panel changes may have happened while disconnected).
   markAllStableDirty();
   setState(
     {
@@ -171,9 +173,40 @@ function selectPorts() {
   updateScreen(log);
 }
 
+function selectPorts() {
+  const outputId = outputSelect.value;
+  const inputId = inputSelect.value;
+  const devId = parseInt(deviceIdInput.value, 10);
+  setMidiPorts(WebMidi.getOutputById(outputId), WebMidi.getInputById(inputId), devId);
+  addSysexListener();
+  log('Ports selected and listener added. Device ID set to ' + devId, 'info', 'general');
+  resetAndLand();
+}
+
+/**
+ * Demo mode: swap the MIDI ports for the canned device (src/demo.js — a
+ * live-captured tree) and run the normal connect landing. No WebMIDI, no
+ * unit, no permissions needed; everything downstream of the port adapters
+ * is the real app.
+ */
+function enterDemoMode() {
+  const { outAdapter, inAdapter, deviceId } = createDemoPorts();
+  // The DEV ID input is deliberately NOT touched (review): writing the
+  // demo capture's ID there would poison the next real Select Ports (the
+  // parser drops frames whose device byte mismatches) and could be saved
+  // over the user's real ID by Save Config.
+  setMidiPorts(outAdapter, inAdapter, deviceId);
+  addSysexListener();
+  log(`Demo mode: serving a captured device tree (${DEMO_NODE_COUNT} nodes)`, 'info', 'general');
+  resetAndLand();
+}
+
 connectBtn.addEventListener('click', () => connectMidi());
 
 selectPortsBtn.addEventListener('click', selectPorts);
+
+const demoModeBtn = document.getElementById('demo-mode');
+if (demoModeBtn) demoModeBtn.addEventListener('click', enterDemoMode);
 
 saveConfigBtn.addEventListener('click', () => {
   saveConfig(
@@ -362,6 +395,38 @@ if (testTRateBtn) {
 setupKeypressControls();
 setupDataKnob();
 
+// Glass specular tracking: the pane's key light follows the pointer
+// (maintainer ask). Presentation only — rAF-throttled pointermove writes
+// the highlight position as custom properties the .glass gradient reads.
+// Values run past 0-100% on purpose: the reflection slides off the pane
+// naturally instead of pinning at the edge.
+const glassEl = document.querySelector('.glass');
+if (glassEl && typeof requestAnimationFrame === 'function') {
+  let specFrame = null;
+  let pointerX = 0;
+  let pointerY = 0;
+  document.addEventListener('pointermove', (e) => {
+    // Track every move; render the LATEST position once per frame (the
+    // first-event-wins shape lagged the highlight a frame behind).
+    pointerX = e.clientX;
+    pointerY = e.clientY;
+    if (specFrame !== null) return;
+    specFrame = requestAnimationFrame(() => {
+      specFrame = null;
+      const r = glassEl.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      glassEl.style.setProperty(
+        '--spec-x',
+        `${(((pointerX - r.left) / r.width) * 100).toFixed(1)}%`
+      );
+      glassEl.style.setProperty(
+        '--spec-y',
+        `${(((pointerY - r.top) / r.height) * 100).toFixed(1)}%`
+      );
+    });
+  });
+}
+
 const cachedConfig = loadConfig(
   deviceIdInput,
   logLevelSelect,
@@ -385,6 +450,22 @@ setState(
     presetKey: cachedConfig?.presetKey || KEY.DSP_A_PRESET,
   },
   'main:boot-init'
+);
+// Theme editor (theme.js): applies the persisted theme at boot, then saves
+// on every preset/swatch change — independent of the Save Config button.
+setupThemeEditor(
+  {
+    presetSelect: document.getElementById('theme-preset'),
+    resetButton: document.getElementById('theme-reset'),
+    tokensContainer: document.getElementById('theme-tokens'),
+  },
+  cachedConfig?.theme,
+  (theme) => {
+    saveThemeConfig(theme);
+    // The true-screen canvas renders in theme pixel colors — recolor the
+    // last captured frame immediately instead of waiting for a new fetch.
+    rerenderBitmap();
+  }
 );
 // #48: the settings checkboxes sync to appState LIVE — previously the sync
 // happened only at boot-init, so toggling mid-session was a silent no-op

@@ -362,6 +362,32 @@ if (testTRateBtn) {
 setupKeypressControls();
 setupDataKnob();
 
+// Glass specular tracking: the pane's key light follows the pointer
+// (maintainer ask). Presentation only — rAF-throttled pointermove writes
+// the highlight position as custom properties the .glass gradient reads.
+// Values run past 0-100% on purpose: the reflection slides off the pane
+// naturally instead of pinning at the edge.
+const glassEl = document.querySelector('.glass');
+if (glassEl && typeof requestAnimationFrame === 'function') {
+  let specFrame = null;
+  document.addEventListener('pointermove', (e) => {
+    if (specFrame !== null) return;
+    specFrame = requestAnimationFrame(() => {
+      specFrame = null;
+      const r = glassEl.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      glassEl.style.setProperty(
+        '--spec-x',
+        `${(((e.clientX - r.left) / r.width) * 100).toFixed(1)}%`
+      );
+      glassEl.style.setProperty(
+        '--spec-y',
+        `${(((e.clientY - r.top) / r.height) * 100).toFixed(1)}%`
+      );
+    });
+  });
+}
+
 const cachedConfig = loadConfig(
   deviceIdInput,
   logLevelSelect,

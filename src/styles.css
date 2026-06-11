@@ -26,6 +26,17 @@
      variable so the grid geometry has one source of truth. */
   --lcd-advance: 18px;
   --lcd-cell-h: 24px;
+  /* Row leading (maintainer feedback: contiguous hardware rows read
+     cramped at x3): +6px = two hardware scanlines at x3 = 25% leading,
+     the dense-monospace norm — and a 3px multiple, so glyphs stay on
+     the integer pixel grid. Section grouping still comes from the
+     renderer's blank separator lines, as on the device. */
+  --lcd-row-gap: 6px;
+  --lcd-row-h: calc(var(--lcd-cell-h) + var(--lcd-row-gap));
+  --lcd-pad: 12px; /* glass margin around the character grid */
+  --bezel-pad: 14px; /* the recess ring around the lit glass — kept thin
+                        (was 24px): pure black on near-black read as a
+                        dead moat (maintainer feedback) */
   --bezel: #0b0c0d;
   --legend-font:
     'Bahnschrift', 'Bahnschrift SemiCondensed', 'Arial Narrow', 'Helvetica Neue', sans-serif;
@@ -299,8 +310,13 @@ body {
 }
 .bezel {
   position: relative; /* anchors the .glass overlay */
-  padding: 24px;
-  background: linear-gradient(#101113, #0b0c0d);
+  padding: var(--bezel-pad);
+  /* Phosphor ambience in the recess: a real EL display bleeds into its
+     surround — the faint green wash plus #lcd's outer glow below are
+     the "diffusion" that keeps the recess from reading as dead black. */
+  background:
+    radial-gradient(65% 75% at 50% 45%, rgba(59, 240, 110, 0.05), transparent 72%),
+    linear-gradient(#101113, #0b0c0d);
   border: 1px solid #000;
   border-radius: 6px;
   box-shadow:
@@ -323,16 +339,28 @@ body {
   pointer-events: none;
   border-radius: 4px;
   background:
+    /* Pointer-driven key light (main.js sets --spec-x/--spec-y; the
+       defaults park it top-left until the first move). Tuned on
+       maintainer feedback: ~40% dimmer, ~90% tighter core, then a long
+       diffuse skirt — a small glint whose light scatters into the
+       glass rather than cutting off. */
+    radial-gradient(
+      120px 80px at var(--spec-x, 28%) var(--spec-y, -10%),
+      rgba(255, 255, 255, 0.045) 0%,
+      rgba(255, 255, 255, 0.025) 22%,
+      rgba(255, 255, 255, 0.012) 48%,
+      transparent 82%
+    ),
     linear-gradient(
       115deg,
-      rgba(255, 255, 255, 0.1) 0%,
-      rgba(255, 255, 255, 0.035) 10%,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(255, 255, 255, 0.02) 10%,
       transparent 22%,
       transparent 74%,
-      rgba(255, 255, 255, 0.03) 90%,
-      rgba(255, 255, 255, 0.06) 100%
+      rgba(255, 255, 255, 0.02) 90%,
+      rgba(255, 255, 255, 0.04) 100%
     ),
-    radial-gradient(140% 70% at 50% -15%, rgba(255, 255, 255, 0.05), transparent 60%);
+    radial-gradient(140% 70% at 50% -15%, rgba(255, 255, 255, 0.04), transparent 60%);
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.07),
     inset 0 1px 0 rgba(255, 255, 255, 0.1),
@@ -342,7 +370,7 @@ body {
   position: relative;
   font-family: 'OrvilleLCD', ui-monospace, Consolas, monospace;
   font-size: 24px;
-  line-height: var(--lcd-cell-h);
+  line-height: var(--lcd-row-h);
   letter-spacing: 0; /* the font's 6x8 cell lands on --lcd-advance natively */
   -webkit-font-smoothing: none;
   text-rendering: optimizeSpeed;
@@ -355,10 +383,13 @@ body {
   text-shadow:
     0 0 2px var(--lcd-px),
     0 0 8px var(--lcd-glow);
-  /* Exactly the 40-column grid plus glass padding. */
-  width: calc(40 * var(--lcd-advance) + 24px);
-  min-height: 192px;
-  padding: 12px;
+  /* Exactly the 40-column grid plus glass margin; min-height keeps the
+     8-row module proportion at the new row pitch. */
+  width: calc(40 * var(--lcd-advance) + 2 * var(--lcd-pad));
+  min-height: calc(8 * var(--lcd-row-h) + 2 * var(--lcd-pad));
+  padding: var(--lcd-pad);
+  /* Diffusion: the lit phosphor bleeds into the bezel recess. */
+  box-shadow: 0 0 28px rgba(59, 240, 110, 0.14);
   display: flex;
   flex-direction: column;
   border-radius: 2px;
@@ -369,7 +400,7 @@ body {
   pointer-events: none;
 }
 .line {
-  height: var(--lcd-cell-h);
+  height: var(--lcd-row-h);
 }
 .main-content,
 .top-docked,
@@ -473,7 +504,9 @@ body {
 .soft-keys {
   display: flex;
   justify-content: space-around;
-  width: calc(40 * var(--lcd-advance) + 72px); /* LCD + bezel padding */
+  width: calc(
+    40 * var(--lcd-advance) + 2 * var(--lcd-pad) + 2 * var(--bezel-pad)
+  ); /* the bezel's full width */
 }
 .key-soft {
   width: calc(8 * var(--lcd-advance));

@@ -785,8 +785,11 @@ faceplate (Option A green phosphor; true 6x8 LCD font PxPlus HP 100LX; panel fid
 the unit manual p.8-11 incl. wired BUSY LED + DATA knob). FILED from maintainer reports during
 the milestone: #131 (loading visibility / open dropdown destroyed by repaints — FIXED on the
 branch: deferred repaints while a select is focused + BUSY LED on the dump-wave lifecycle) and
-#132 (input/output routing matrix not editable — evidence logged on the issue; blocked on a live
-probe of the matrix COL keys, needs-hardware: the browser tab holds the single-client WinMM port).
+#132 (input/output routing matrix not editable — FIXED on the branch after live probes: the
+device's ganged-parameter screens are gang COL subtrees [blank tag, non-'0' position]; they now
+render INLINE as the hardware's one-page matrix — tree.js isGangCol/withinGangOf + recursive
+findParamUnder, parser gang fan-out, R7 gang-grandchild repaint, renderGangInline, audit
+reachability updated. Deepest-ever audit [depth 4, 98 COL nodes]: zero violations).
 
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24

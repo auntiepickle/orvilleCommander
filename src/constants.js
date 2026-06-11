@@ -43,6 +43,8 @@ export const LAYOUT = {
 export const RENDER = {
   VALUE_PLACEHOLDER: '...',
   LOADING_STATEMENT: 'loading ...',
+  LOADING_PROGRAMS: 'loading programs ...', // the program field while an unseen
+  //                   bank's list is on the wire (#141) — never the old bank's list
   INDICATOR_BAR_CELLS: 8, // max bar width for spec-less indicator CONs: the only live-observed
   //                         case (the Tempo 'Beat' flasher) is binary 0/1, and a full-LCD-width
   //                         flashing slab overwhelmed the page (maintainer report, external-clock

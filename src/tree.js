@@ -15,9 +15,16 @@
 // (currentKey, the derived keyStack) stays on appState.
 
 import { LAYOUT, CACHE } from './constants.js';
+import { KEY } from './sysex-commands.js';
 
 // key -> subs array (the node's own dump: main line + direct children).
 const nodes = new Map();
+// Per-bank program lists (#141): bankIdx (int) -> { options, value } from
+// the load-menu dump taken while that bank was selected. The device only
+// exposes ONE bank's program list at a time, so this session memo is the
+// only way a revisited bank can render instantly. Cleared by every
+// mutation chokepoint (program saves/deletes change the lists).
+const bankProgramLists = new Map();
 // childKey -> { parentKey, sub } where sub is the child's line in the
 // parent's dump (carries the authoritative tag/statement for labeling even
 // before the child's own dump has loaded).
@@ -62,6 +69,26 @@ export function recordDump(subs) {
   for (const s of subs.slice(1)) {
     if (s.key) parents.set(s.key, { parentKey: main.key, sub: s });
   }
+  // #141: memoize the program list under the bank it was listed FOR.
+  if (main.key === KEY.FAVORITES) {
+    const bankSub = subs.find((s) => s.key === KEY.BANK_SELECT);
+    const progSub = subs.find((s) => s.key === KEY.PROGRAM_SELECT);
+    const bankIdx = parseInt(String(bankSub?.value || '').split(' ')[0], 16);
+    if (!isNaN(bankIdx) && progSub?.options?.length) {
+      bankProgramLists.set(bankIdx, { options: progSub.options, value: progSub.value });
+    }
+  }
+}
+
+/**
+ * The memoized program list for a bank index, if this session has seen it
+ * (#141). { options, value } as captured from the load-menu dump.
+ *
+ * @param {number} bankIdx
+ * @returns {{options: Object[], value: string}|undefined}
+ */
+export function bankProgramsFor(bankIdx) {
+  return bankProgramLists.get(bankIdx);
 }
 
 /**
@@ -311,6 +338,15 @@ export function markDirtyIfStable(key) {
   for (const k of nodes.keys()) {
     if (k.startsWith(p)) staleKeys.add(k);
   }
+  // #141: selection puts (the bank/program choosers) are pure VIEW
+  // changes — they cannot alter any bank's program list, and the bank put
+  // is the very action the memo exists to accelerate (live finding: the
+  // unconditional clear wiped the memo on every bank change, defeating
+  // it). Everything else under the prefix (saves, deletes, renames, load
+  // triggers) may rewrite lists: clear.
+  if (key !== KEY.BANK_SELECT && key !== KEY.PROGRAM_SELECT) {
+    bankProgramLists.clear();
+  }
 }
 
 /**
@@ -326,6 +362,7 @@ export function markAllStableDirty() {
       if (k.startsWith(p)) staleKeys.add(k);
     }
   }
+  bankProgramLists.clear(); // #141: explicit re-read distrusts the memo too
 }
 
 /** Clears the tree (tests). */
@@ -334,5 +371,6 @@ export function reset() {
   parents.clear();
   staleKeys.clear();
   requestGeneration.clear();
+  bankProgramLists.clear();
   markGeneration = 0;
 }

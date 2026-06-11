@@ -11,6 +11,7 @@ import {
   findParamUnder,
   labelForSub,
   isGangCol,
+  bankProgramsFor,
   GANG_MAX_DEPTH,
 } from './tree.js';
 import { log } from './logger.js';
@@ -204,6 +205,11 @@ const handleSelectChange = (e) => {
       setState({ currentValues: pruned }, 'renderer:bank-change-prune');
       sendObjectInfoDump(KEY.FAVORITES);
       sendValueDump(KEY.FAVORITES);
+      // Paint NOW (#141, live finding): puts do not join waves, so without
+      // an explicit repaint nothing paints until the targeted dump drains
+      // (~4-5s) — the program field's memo (revisited bank, instant) or
+      // loading line (unseen bank) must show immediately.
+      renderScreen(appState.currentSubs, appState.lastAscii);
     } else {
       updateScreen();
     }
@@ -654,6 +660,28 @@ function renderGangInline(colSub, depth, paramLines, paramHtmlLines, logParam) {
   }
 }
 
+// Program-select view resolution (#141): the device's load-menu dump
+// carries ONLY the currently-selected bank's program list, so when the
+// user's chosen bank (optimistic/echo cache) differs from the bank the
+// dump was taken in, the dump's options are the OLD bank's — never show
+// them. Serve the session memo (tree.js) when this bank has been seen,
+// else an honest loading line until the targeted dump lands ("its the
+// fact we keep the old stuff around thats the issue" — maintainer).
+// Returns: {stale:false} = render the dump as usual; {loading:true} =
+// render RENDER.LOADING_PROGRAMS; {options,value} = render the memo.
+function programSelectView(s, siblings) {
+  if (s.key !== KEY.PROGRAM_SELECT) return { stale: false };
+  const chosenRaw = appState.currentValues[KEY.BANK_SELECT];
+  const bankSub = siblings.find((x) => x.key === KEY.BANK_SELECT);
+  if (!chosenRaw || !bankSub?.value) return { stale: false };
+  const chosen = parseInt(String(chosenRaw).split(' ')[0], 16);
+  const inDump = parseInt(String(bankSub.value).split(' ')[0], 16);
+  if (isNaN(chosen) || isNaN(inDump) || chosen === inDump) return { stale: false };
+  const memo = bankProgramsFor(chosen);
+  if (memo) return { stale: true, options: memo.options, value: memo.value };
+  return { stale: true, loading: true };
+}
+
 export function renderScreen(subs, ascii, logParam) {
   const lcdEl = document.getElementById('lcd');
   if (!subs || subs.length === 0) {
@@ -854,23 +882,35 @@ export function renderScreen(subs, ascii, logParam) {
         fullText = formatValue(s.statement, value); // Use updated formatValue with s support
         fullHtml = fullText;
       } else if (s.type === 'SET') {
-        let value = appState.currentValues[s.key] || s.value || '';
-        if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
-        let displayValue = value;
-        let indexHex = '0';
-        if (value) {
-          indexHex = value.split(' ')[0];
-          displayValue = value.substring(indexHex.length + 1);
+        const progView = programSelectView(s, subs.slice(1));
+        if (progView.loading) {
+          // #141: the chosen bank's list is on the wire and unseen — an
+          // honest loading line, never the old bank's options.
+          fullText = RENDER.LOADING_PROGRAMS;
+          fullHtml = fullText;
+        } else {
+          const options = progView.options ?? s.options;
+          let value = progView.stale
+            ? progView.value
+            : appState.currentValues[s.key] || s.value || '';
+          if (!progView.stale && appState.currentValues[s.key] === undefined && !s.value)
+            sendValueDump(s.key, logParam);
+          let displayValue = value;
+          let indexHex = '0';
+          if (value) {
+            indexHex = value.split(' ')[0];
+            displayValue = value.substring(indexHex.length + 1);
+          }
+          const indexDec = parseInt(indexHex, 16).toString(10);
+          fullText = formatValue(s.statement || '', displayValue); // Use formatValue for %-width s
+          let selectHtml = `<select data-key="${s.key}" class="param-select">`;
+          options.forEach((option) => {
+            const isSelected = option.index === indexDec;
+            selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
+          });
+          selectHtml += `</select>`;
+          fullHtml = (s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
         }
-        const indexDec = parseInt(indexHex, 16).toString(10);
-        fullText = formatValue(s.statement || '', displayValue); // Use formatValue for %-width s
-        let selectHtml = `<select data-key="${s.key}" class="param-select">`;
-        s.options.forEach((option) => {
-          const isSelected = option.index === indexDec;
-          selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
-        });
-        selectHtml += `</select>`;
-        fullHtml = (s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
       } else if (s.type === 'CON') {
         let meterValue = parseFloat(appState.currentValues[s.key] || s.value) || 0;
         if (isNaN(meterValue)) {
@@ -996,24 +1036,34 @@ export function renderScreen(subs, ascii, logParam) {
             childFullText = formatValue(cs.statement, value);
             childFullHtml = childFullText;
           } else if (cs.type === 'SET') {
-            let value = appState.currentValues[cs.key] || cs.value || '';
-            if (appState.currentValues[cs.key] === undefined && !cs.value)
-              sendValueDump(cs.key, logParam);
-            let displayValue = value;
-            let indexHex = '0';
-            if (value) {
-              indexHex = value.split(' ')[0];
-              displayValue = value.substring(indexHex.length + 1);
+            const progView = programSelectView(cs, childSubs.slice(1));
+            if (progView.loading) {
+              // #141: honest loading line — never the old bank's options.
+              childFullText = RENDER.LOADING_PROGRAMS;
+              childFullHtml = childFullText;
+            } else {
+              const options = progView.options ?? cs.options;
+              let value = progView.stale
+                ? progView.value
+                : appState.currentValues[cs.key] || cs.value || '';
+              if (!progView.stale && appState.currentValues[cs.key] === undefined && !cs.value)
+                sendValueDump(cs.key, logParam);
+              let displayValue = value;
+              let indexHex = '0';
+              if (value) {
+                indexHex = value.split(' ')[0];
+                displayValue = value.substring(indexHex.length + 1);
+              }
+              const indexDec = parseInt(indexHex, 16).toString(10);
+              childFullText = formatValue(cs.statement || '', displayValue);
+              let selectHtml = `<select data-key="${cs.key}" class="param-select">`;
+              options.forEach((option) => {
+                const isSelected = option.index === indexDec;
+                selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
+              });
+              selectHtml += `</select>`;
+              childFullHtml = (cs.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
             }
-            const indexDec = parseInt(indexHex, 16).toString(10);
-            childFullText = formatValue(cs.statement || '', displayValue);
-            let selectHtml = `<select data-key="${cs.key}" class="param-select">`;
-            cs.options.forEach((option) => {
-              const isSelected = option.index === indexDec;
-              selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
-            });
-            selectHtml += `</select>`;
-            childFullHtml = (cs.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
           } else if (cs.type === 'CON') {
             let meterValue = parseFloat(appState.currentValues[cs.key] || cs.value) || 0;
             if (isNaN(meterValue)) {

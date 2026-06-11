@@ -219,6 +219,76 @@ const handleSelectChange = (e) => {
  *
  * @param {Event} e - The click event.
  */
+// Commit a NUM/STR edit: the shared post-edit flow (cache, immediate
+// repaint, settled refresh) the prompt-era branches both carried.
+function commitParamEdit(key, newValue, origin) {
+  showLoading();
+  sendValuePut(key, newValue);
+  setState({ currentValues: { ...appState.currentValues, [key]: newValue } }, origin);
+  renderScreen(appState.currentSubs, appState.lastAscii); // Immediate local update
+  setTimeout(() => {
+    updateScreen();
+    if (appState.updateBitmapOnChange) {
+      sendSysEx(CMD.GET_SCREEN, []);
+      log('Triggered bitmap update after value change.', 'debug', 'bitmap');
+    }
+  }, TIMING.MIDI_SETTLE_MS);
+}
+
+// In-LCD inline editor (maintainer ask: no browser prompt/alert boxes).
+// Clicking a NUM/STR value swaps the span for a phosphor-styled <input>
+// IN the glass: Enter validates + commits, Escape cancels, invalid input
+// flashes inverse and stays for correction (no alert). While the editor
+// is focused the #131 defer guard parks repaints, exactly like an open
+// dropdown, so a mid-edit wave cannot destroy the field.
+function beginInlineEdit(span, sub, { validate, maxLength }) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'lcd-edit';
+  input.dataset.key = sub.key;
+  const current = String(appState.currentValues[sub.key] ?? sub.value ?? '');
+  input.value = current;
+  if (maxLength) input.maxLength = maxLength;
+  // ch tracks the LCD advance exactly (zero letter-spacing, 6x8 face), so
+  // the field occupies the columns the value did, plus room to type.
+  input.style.width = `${Math.max(current.length + 2, 8)}ch`;
+  span.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = () => {
+    if (done) return;
+    done = true;
+    input.blur(); // release the #131 guard (the Escape path keeps focus otherwise)
+    // currentSubs is always the latest pin (the parser updates it before
+    // emitting), so any paint parked during the edit is never newer than
+    // a fresh render — discard it rather than double-painting.
+    discardDeferredPaint();
+    // Next tick (the SF4 pattern): a synchronous repaint inside the blur
+    // of a click elsewhere would destroy that click's target.
+    setTimeout(() => {
+      if (input.isConnected) renderScreen(appState.currentSubs, appState.lastAscii);
+    }, 0);
+  };
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') {
+      const value = validate(input.value);
+      if (value === null) {
+        input.classList.add('lcd-edit-invalid');
+        return;
+      }
+      done = true;
+      input.blur(); // release the #131 guard BEFORE the commit's immediate repaint
+      commitParamEdit(sub.key, value, 'renderer:inline-edit-commit');
+    } else if (ev.key === 'Escape') {
+      finish();
+    } else {
+      input.classList.remove('lcd-edit-invalid');
+    }
+  });
+  input.addEventListener('blur', finish);
+}
+
 const handleParamClick = (e) => {
   if (e.target.classList.contains('param-value')) {
     const key = e.target.dataset.key;
@@ -227,32 +297,14 @@ const handleParamClick = (e) => {
       appState.currentSubs.find((s) => s.key === key) || findParamUnder(appState.currentKey, key);
     if (sub) {
       if (sub.type === 'NUM') {
-        const title = sub.statement.replace(/%.*f/, '').trim(); // Clean format specifier
-        const currentValue = appState.currentValues[key] || sub.value;
-        const newValueStr = prompt(`Enter new value for ${title}:`, currentValue);
-        if (newValueStr !== null) {
-          const newValue = parseFloat(newValueStr);
-          const min = parseFloat(sub.min) || -Infinity;
-          const max = parseFloat(sub.max) || Infinity;
-          if (!isNaN(newValue) && newValue >= min && newValue <= max) {
-            showLoading();
-            sendValuePut(key, newValueStr);
-            setState(
-              { currentValues: { ...appState.currentValues, [key]: newValueStr } },
-              'renderer:param-click-num-value-cache'
-            );
-            renderScreen(appState.currentSubs, appState.lastAscii); // Immediate local update
-            setTimeout(() => {
-              updateScreen();
-              if (appState.updateBitmapOnChange) {
-                sendSysEx(CMD.GET_SCREEN, []);
-                log('Triggered bitmap update after value change.', 'debug', 'bitmap');
-              }
-            }, TIMING.MIDI_SETTLE_MS);
-          } else {
-            alert(`Invalid value. Must be a number between ${min} and ${max}.`);
-          }
-        }
+        beginInlineEdit(e.target, sub, {
+          validate: (raw) => {
+            const parsed = parseFloat(raw);
+            const min = parseFloat(sub.min) || -Infinity;
+            const max = parseFloat(sub.max) || Infinity;
+            return !isNaN(parsed) && parsed >= min && parsed <= max ? raw.trim() : null;
+          },
+        });
       } else if (sub.type === 'TRG') {
         showLoading();
         if (key === KEY.LOAD_TRIGGER_A || key === KEY.LOAD_TRIGGER_B) {
@@ -277,38 +329,18 @@ const handleParamClick = (e) => {
         // String-edit (R8): free-text put, confirmed live (the device echoes
         // the new value as a 0x2e). Multi-word strings confirmed on hardware
         // too — the device quotes them in the echo, so readback is safe
-        // (#104).
-        const title = sub.statement.replace(/%.*s/, '').trim() || sub.tag;
-        const currentValue = appState.currentValues[key] ?? sub.value ?? '';
-        const rawValue = prompt(`Enter new value for ${title}:`, currentValue);
-        // Empty string is rejected like prompt-cancel: the device ignores
-        // empty-string puts (value unchanged — probed live, #104), so
-        // rejecting here matches hardware exactly.
-        if (rawValue !== null && rawValue !== '') {
-          // SysEx data bytes must be 7-bit: reject non-ASCII rather than
-          // throwing mid-flow with the loading overlay up. Clamp to the
-          // field width from the format (e.g. %-22s) when one is declared.
-          if (!/^[\x20-\x7e]*$/.test(rawValue)) {
-            alert('Only printable ASCII characters can be sent to the device.');
-            return;
-          }
-          const widthMatch = (sub.statement || '').match(/%-?(\d+)s/);
-          const newValue = widthMatch ? rawValue.slice(0, parseInt(widthMatch[1], 10)) : rawValue;
-          showLoading();
-          sendValuePut(key, newValue);
-          setState(
-            { currentValues: { ...appState.currentValues, [key]: newValue } },
-            'renderer:param-click-str-value-cache'
-          );
-          renderScreen(appState.currentSubs, appState.lastAscii); // Immediate local update
-          setTimeout(() => {
-            updateScreen();
-            if (appState.updateBitmapOnChange) {
-              sendSysEx(CMD.GET_SCREEN, []);
-              log('Triggered bitmap update after value change.', 'debug', 'bitmap');
-            }
-          }, TIMING.MIDI_SETTLE_MS);
-        }
+        // (#104). Validation rules carried over from the prompt era:
+        // empty rejected (the device ignores empty-string puts — probed
+        // live, #104), 7-bit printable ASCII only (SysEx data bytes),
+        // clamped to the declared field width (e.g. %-22s).
+        const widthMatch = (sub.statement || '').match(/%-?(\d+)s/);
+        beginInlineEdit(e.target, sub, {
+          maxLength: widthMatch ? parseInt(widthMatch[1], 10) : undefined,
+          validate: (raw) => {
+            if (raw === '' || !/^[\x20-\x7e]*$/.test(raw)) return null;
+            return widthMatch ? raw.slice(0, parseInt(widthMatch[1], 10)) : raw;
+          },
+        });
       }
     }
   }
@@ -405,7 +437,10 @@ let deferredPaint = null;
 
 function lcdSelectFocused(lcdEl) {
   const active = document.activeElement;
-  return !!active && active.tagName === 'SELECT' && lcdEl.contains(active);
+  if (!active || !lcdEl.contains(active)) return false;
+  // An open dropdown OR an in-glass inline editor (both are mid-interaction
+  // DOM a repaint would destroy).
+  return active.tagName === 'SELECT' || active.classList.contains('lcd-edit');
 }
 
 const discardDeferredPaint = () => {

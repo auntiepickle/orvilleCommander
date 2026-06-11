@@ -340,16 +340,16 @@ body {
   border-radius: 4px;
   background:
     /* Pointer-driven key light (main.js sets --spec-x/--spec-y; the
-       defaults park it top-left until the first move). Tuned on
-       maintainer feedback: ~40% dimmer, ~90% tighter core, then a long
-       diffuse skirt — a small glint whose light scatters into the
-       glass rather than cutting off. */
+       defaults park it top-left until the first move). Tuned across
+       four maintainer rounds: faint (~0.027 peak), tight bright core,
+       BROAD diffuse skirt (420x280) — light scattered through glass,
+       felt rather than watched. */
     radial-gradient(
-      120px 80px at var(--spec-x, 28%) var(--spec-y, -10%),
-      rgba(255, 255, 255, 0.045) 0%,
-      rgba(255, 255, 255, 0.025) 22%,
-      rgba(255, 255, 255, 0.012) 48%,
-      transparent 82%
+      420px 280px at var(--spec-x, 28%) var(--spec-y, -10%),
+      rgba(255, 255, 255, 0.027) 0%,
+      rgba(255, 255, 255, 0.016) 18%,
+      rgba(255, 255, 255, 0.008) 45%,
+      transparent 85%
     ),
     linear-gradient(
       115deg,
@@ -497,6 +497,29 @@ body {
   color: inherit;
   font: inherit;
   cursor: pointer;
+}
+/* In-glass inline editor (replaces the browser prompt/alert boxes): a
+   phosphor field on the LCD itself. Underline = the edit cursor field;
+   invalid input flashes inverse and stays for correction. Inline, zero
+   border/margin — the in-LCD geometry rule applies to editors too. */
+#lcd input.lcd-edit {
+  font: inherit;
+  letter-spacing: inherit;
+  text-shadow: inherit;
+  background: var(--lcd-bg);
+  color: var(--lcd-px);
+  caret-color: var(--lcd-px);
+  border: none;
+  outline: none;
+  padding: 0;
+  margin: 0;
+  display: inline;
+  box-shadow: inset 0 -2px 0 var(--lcd-px);
+}
+#lcd input.lcd-edit.lcd-edit-invalid {
+  background: var(--lcd-px);
+  color: var(--lcd-bg);
+  text-shadow: none;
 }
 
 /* Soft keys: blank caps directly under the display, one per on-screen tab

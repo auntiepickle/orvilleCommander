@@ -366,16 +366,25 @@ describe('renderer.js', () => {
     expect(lcd.querySelector('.softkey[data-key="1001008b"]')).toBeNull();
   });
 
+  // Shared inline-editor driver: click the value, type, Enter.
+  const inlineEdit = (span, text) => {
+    span.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const input = document.querySelector('#lcd input.lcd-edit');
+    expect(input).toBeTruthy();
+    input.value = text;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    return input;
+  };
+
   test('gang leaf NUM is editable through the recursive param lookup (#132)', () => {
     jest.useFakeTimers();
-    window.prompt = jest.fn(() => '-3');
     appState.currentKey = '1001008f';
     const menuSubs = recordRoutingSubtree();
     renderScreen(menuSubs, '', mockLog);
 
     const gain = document.querySelector('.param-value[data-key="10010085"]');
     expect(gain).toBeTruthy();
-    gain.dispatchEvent(new Event('click', { bubbles: true }));
+    inlineEdit(gain, '-3');
     expect(sendValuePut).toHaveBeenCalledWith('10010085', '-3');
     jest.useRealTimers();
   });
@@ -440,9 +449,7 @@ describe('renderer.js', () => {
     expect(lcd.querySelectorAll('select[data-key]').length).toBe(2);
   });
 
-  test('param click edits NUM value with validation', () => {
-    window.prompt = jest.fn(() => '75');
-    window.alert = jest.fn(() => {});
+  test('NUM edits inline in the glass — valid commits, invalid flashes, never a browser box', () => {
     appState.currentKey = '10010001';
     const subs = [
       { type: 'COL', position: '0', key: '10010001', parent: '', statement: 'Setup', tag: 'setup' },
@@ -465,18 +472,62 @@ describe('renderer.js', () => {
 
     appState.currentSubs = subs; // For handler sub lookup
     jest.useFakeTimers();
-    paramSpan.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-    // Immediate
+    // Out-of-range input flashes invalid IN the field and does not send.
+    paramSpan.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const editor = document.querySelector('#lcd input.lcd-edit');
+    expect(editor).toBeTruthy();
+    expect(editor.value).toBe('50'); // seeded with the current value
+    editor.value = '200';
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(sendValuePut).not.toHaveBeenCalled();
+    expect(editor.classList.contains('lcd-edit-invalid')).toBe(true);
+    expect(editor.isConnected).toBe(true); // stays open for correction
+
+    // Correcting and committing sends the put and repaints.
+    editor.value = '75';
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(showLoading).toHaveBeenCalled();
     expect(sendValuePut).toHaveBeenCalledWith('10010011', '75');
     expect(appState.currentValues['10010011']).toBe('75');
-    expect(window.prompt).toHaveBeenCalledWith(expect.stringContaining('Param'), '50');
+    expect(document.querySelector('#lcd input.lcd-edit')).toBeNull(); // editor closed
 
-    // Timeout 200
+    // Timeout 200: settled refresh + bitmap
     jest.advanceTimersByTime(200);
     expect(sendSysEx).toHaveBeenCalledWith(0x18, []);
+    jest.useRealTimers();
+  });
 
+  test('Escape cancels the inline editor without sending', () => {
+    appState.currentKey = '10010001';
+    const subs = [
+      { type: 'COL', position: '0', key: '10010001', parent: '', statement: 'Setup', tag: 'setup' },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '10010011',
+        parent: '10010001',
+        statement: 'Param %3.1f',
+        tag: 'Prm',
+        value: '50',
+        min: '0',
+        max: '100',
+        step: '1',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+    appState.currentSubs = subs;
+    jest.useFakeTimers();
+    document
+      .querySelector('.param-value[data-key="10010011"]')
+      .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const editor = document.querySelector('#lcd input.lcd-edit');
+    editor.value = '99';
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    jest.runOnlyPendingTimers(); // the cancel repaint is tick-deferred (SF4)
+    expect(sendValuePut).not.toHaveBeenCalled();
+    expect(document.querySelector('#lcd input.lcd-edit')).toBeNull();
+    expect(document.querySelector('.param-value[data-key="10010011"]')).toBeTruthy();
     jest.useRealTimers();
   });
 
@@ -526,10 +577,9 @@ describe('renderer.js', () => {
     jest.useRealTimers();
   });
 
-  test('STR field renders the formatted value and edits via prompt -> string PUT (R8)', () => {
+  test('STR field renders the formatted value and edits inline -> string PUT (R8)', () => {
     // Live-discovered type (device-model §3): the save program/bank name
     // editors. String PUTs verified on hardware (echoed as a 0x2e).
-    window.prompt = jest.fn(() => 'NewName');
     appState.currentKey = '10020050';
     const subs = [
       {
@@ -558,9 +608,18 @@ describe('renderer.js', () => {
 
     appState.currentSubs = subs;
     jest.useFakeTimers();
-    field.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-    expect(window.prompt).toHaveBeenCalledWith(expect.stringContaining('name'), 'Favorites');
+    // Empty input is invalid (the device ignores empty-string puts, #104).
+    field.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    const editor = document.querySelector('#lcd input.lcd-edit');
+    expect(editor.value).toBe('Favorites'); // seeded with the current value
+    editor.value = '';
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(sendValuePut).not.toHaveBeenCalled();
+    expect(editor.classList.contains('lcd-edit-invalid')).toBe(true);
+
+    editor.value = 'NewName';
+    editor.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(sendValuePut).toHaveBeenCalledWith('10020052', 'NewName');
     expect(appState.currentValues['10020052']).toBe('NewName');
     jest.useRealTimers();

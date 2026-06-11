@@ -721,6 +721,16 @@ HUMAN-GATE: needs-decision — live drive-the-physical-machine loop (G2b) held u
       appState LIVE via change listeners — previously boot-init-only, so a mid-session toggle was
       a silent no-op until Save Config + reload (the defect characterized in the #48 status
       comment). Persistence still requires Save Config, as before.
+- [x] GH #47 (branch fix/inbound-length-validation-2, stacked on the #3/#48 branch) Inbound frame
+      validation at the boundary: midi.js inboundFrameError rejects — with a logged reason —
+      before parseResponse sees the bytes: non-Eventide manufacturer/product bytes (previously
+      NEVER checked; a foreign device sharing the port could half-parse — rejected at debug
+      severity, not error: sharing a port is not a malfunction), empty 0x32/0x2e payloads, and
+      0x17 dumps with odd nibble counts or shorter than the 12-byte header (so parseScreenHeader
+      cannot read garbage). Device-id matching stays in the parser (it ADOPTS the id when
+      configured 0); unknown commands pass through (rejecting would outlaw discovery captures).
+      A rejected frame never reaches notifyResponse — the wave watchdog self-heals. The FB6/FB7
+      reassembly was the other half of the original #47 scope, long shipped.
 HUMAN-GATE: none
 
 ---

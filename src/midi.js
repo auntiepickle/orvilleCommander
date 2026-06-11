@@ -4,7 +4,7 @@ import { appState } from './state.js';
 import { setState } from './store.js';
 import { log } from './logger.js';
 import { emit } from './events.js';
-import { CMD, SYSEX } from './sysex-commands.js';
+import { CMD, SYSEX, SCREEN } from './sysex-commands.js';
 import { TIMING } from './constants.js';
 import { markDirtyIfStable, markAllStableDirty } from './tree.js';
 
@@ -190,6 +190,62 @@ export function isOutputConnected() {
 }
 
 /**
+ * Inbound frame validation (#47): the reason a complete F0..F7 frame must
+ * be REJECTED before parseResponse sees it, or null when it may pass.
+ * Checks the boundary invariants the parser assumes instead of validating:
+ * Eventide manufacturer/product bytes (previously never checked — a frame
+ * from another device on the same port could half-parse if its bytes
+ * happened to line up), a non-empty payload for the ASCII commands
+ * (0x32/0x2e), and a screen dump (0x17) with an even nibble count that at
+ * least covers the 12-byte header (so parseScreenHeader cannot read
+ * garbage). Device-id matching deliberately stays in the parser — it
+ * ADOPTS the id from the first frame when configured as 0. Unknown
+ * commands pass through: the parser ignores them, and rejecting them here
+ * would outlaw future discovery captures.
+ *
+ * Exported for tests; production callers go through addSysexListener.
+ *
+ * @param {number[]} frame - Complete frame, F0 ... F7.
+ * @returns {{reason: string, severity: 'error'|'debug'}|null} Rejection
+ *   with a log severity ('debug' for foreign-manufacturer frames — another
+ *   device sharing the port is not a malfunction), or null when valid.
+ */
+export function inboundFrameError(frame) {
+  // Smallest meaningful frame: prefix + F7 (an empty-payload command).
+  if (frame.length < SYSEX.FRAME_PREFIX_LEN + 1) {
+    return { reason: `frame too short (${frame.length} bytes)`, severity: 'error' };
+  }
+  if (frame[1] !== SYSEX.MANUFACTURER[0] || frame[2] !== SYSEX.MANUFACTURER[1]) {
+    return {
+      reason: `not an Eventide frame (manufacturer ${frame[1]?.toString(16)} ${frame[2]?.toString(16)})`,
+      severity: 'debug',
+    };
+  }
+  const cmd = frame[4];
+  const payloadLen = frame.length - SYSEX.FRAME_PREFIX_LEN - 1; // minus F7
+  if ((cmd === CMD.OBJECTINFO || cmd === CMD.VALUE_DUMP) && payloadLen < 1) {
+    return {
+      reason: `empty ${cmd === CMD.OBJECTINFO ? 'OBJECTINFO' : 'VALUE_DUMP'} payload`,
+      severity: 'error',
+    };
+  }
+  if (cmd === CMD.SCREEN_BITMAP) {
+    if (payloadLen % 2 !== 0) {
+      return { reason: `odd screen-dump nibble count (${payloadLen})`, severity: 'error' };
+    }
+    // Two nibbles per byte: the payload must at least cover the header so
+    // the dimension/size fields exist.
+    if (payloadLen < SCREEN.HEADER_BYTES * 2) {
+      return {
+        reason: `screen dump shorter than its header (${payloadLen} nibbles)`,
+        severity: 'error',
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * Whether a request wave is currently open (responses outstanding). The
  * meter-poll gate (#107): the live saturation smoke measured poll ticks
  * joining waves faster than the 31250-baud link drains them — outstanding
@@ -267,7 +323,16 @@ export function addSysexListener() {
     // Flush only a properly framed message (starts F0, ends F7). The F0 guard
     // discards a stray continuation packet that arrives with no header.
     if (sysexBuffer[0] === SYSEX.START && sysexBuffer[sysexBuffer.length - 1] === SYSEX.END) {
-      parseResponse(sysexBuffer);
+      // #47: reject malformed frames at the boundary with a logged reason
+      // instead of letting them half-parse into state. A rejected frame
+      // never reaches notifyResponse; if it was the answer to a counted
+      // request, the wave watchdog self-heals.
+      const rejection = inboundFrameError(sysexBuffer);
+      if (rejection) {
+        log(`Rejected inbound SysEx (#47): ${rejection.reason}`, rejection.severity, 'error');
+      } else {
+        parseResponse(sysexBuffer);
+      }
       sysexBuffer = [];
     }
   };

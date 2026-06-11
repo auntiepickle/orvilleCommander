@@ -48,9 +48,19 @@ tracker FB7); the CLI capture tool does the same (tracker FB5; see
 hardware-specific chunk sizes/timing). This applies to *all* inbound types
 (`0x17`, `0x2e`, `0x32`), not just screens.
 
+**Boundary validation (#47).** Every reassembled frame is validated before
+`parseResponse` sees it (`midi.js inboundFrameError`): Eventide
+manufacturer/product bytes (`1C 70`), non-empty `0x32`/`0x2e` payloads, and
+`0x17` nibble counts that are even and at least header-sized (24 nibbles).
+Foreign-manufacturer frames drop at debug severity (a shared port is not a
+malfunction); malformed Eventide frames log at error. Unknown commands pass
+through for discovery. A rejected frame never reaches `notifyResponse`; the
+wave watchdog self-heals.
+
 **Device ID.** The hardware uses 1–63. OrvilleCommander treats `0` as an
 auto-detect sentinel: on the first inbound message it adopts `data[3]` as the
-device ID, then matches on it thereafter.
+device ID, then matches on it thereafter. (Device-id matching deliberately
+stays in the parser, after boundary validation, because of this adoption.)
 
 ## Commands
 

@@ -99,12 +99,21 @@ describe('renderer.js', () => {
     expect(sendValuePut).toHaveBeenCalledWith('10020011', '5');
     expect(appState.currentValues['10020011']).toBe('5 Preset5');
 
+    // No loading dim: a program select is instant and confirms with a
+    // VALUE dump only, which never fires hideLoading — so showing the dim
+    // would strand the screen dimmed forever (regression).
+    expect(showLoading).not.toHaveBeenCalled();
+
     // Run every timer to completion — the load trigger must NEVER fire,
     // and root must not be refetched as a post-load step (maintainer:
     // selecting a program should not apply it).
     jest.runOnlyPendingTimers();
     expect(sendValuePut).not.toHaveBeenCalledWith('1002001c', '1'); // LOAD_TRIGGER_A
     expect(sendValuePut).not.toHaveBeenCalledWith('1002001d', '1'); // LOAD_TRIGGER_B
+    // No full-menu refetch either (the "syncing" lag) — only the targeted
+    // program-value confirm.
+    expect(sendObjectInfoDump).not.toHaveBeenCalled();
+    expect(sendValueDump).toHaveBeenCalledWith('10020011');
     jest.useRealTimers();
   });
 

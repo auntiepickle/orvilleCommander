@@ -176,7 +176,12 @@ const handleSelectChange = (e) => {
   // re-checks the parked slot, and the change's discard listener (runs
   // synchronously after this handler) clears it first — no stale replay.
   e.target.blur();
-  showLoading();
+  // No loading dim for a program select (regression fix): it only moves the
+  // highlight and confirms with a VALUE dump, but hideLoading fires only on
+  // OBJECTINFO/screen waves (#3) — so the dim would never lift. The pick is
+  // instant via the optimistic repaint below; the dim is for the menu
+  // refetches the bank/other branches do.
+  if (key !== KEY.PROGRAM_SELECT) showLoading();
   sendValuePut(key, selectedIndex);
   // Optimistic cache in the DEVICE's value shape: puts are parsed decimal
   // but values/echoes report the index in HEX (probed live,

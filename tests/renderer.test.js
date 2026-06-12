@@ -26,6 +26,12 @@ jest.mock('../src/logger.js', () => ({
   log: jest.fn(),
 }));
 
+jest.mock('../src/midi-map-ui.js', () => ({
+  openParamMapping: jest.fn(),
+}));
+
+import { openParamMapping } from '../src/midi-map-ui.js';
+
 describe('renderer.js', () => {
   let consoleLogSpy;
 
@@ -370,6 +376,71 @@ describe('renderer.js', () => {
     const progSel = document.querySelector('select[data-key="10020011"]');
     expect([...progSel.options].map((o) => o.text)).toEqual(['0 Mono Delay', '1 PingPong']);
     expect(document.getElementById('lcd').textContent).toContain('sync to browse all banks');
+  });
+
+  test('a DSP preset NUM gets a MIDI badge that opens the mapping card (#146)', () => {
+    appState.currentKey = '401000b';
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '401000b',
+        parent: '401000b',
+        statement: 'Black Hole',
+        tag: '',
+      },
+      {
+        type: 'NUM',
+        position: '0',
+        key: '4070001', // DSP A preset param
+        parent: '401000b',
+        statement: 'diff/time : %3.0f %%',
+        tag: '',
+        value: '50',
+      },
+      {
+        type: 'NUM',
+        position: '0',
+        key: '4060001',
+        parent: '401000b',
+        statement: 'size : %3.0f %%',
+        tag: '',
+        value: '50',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+    const badges = document.querySelectorAll('.lcd-midi-badge');
+    expect(badges).toHaveLength(2); // one per modulatable param
+    expect(badges[0].dataset.midiRow).toBe('0'); // first param = row 0 (no DOWN)
+    expect(badges[1].dataset.midiRow).toBe('1');
+
+    badges[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(openParamMapping).toHaveBeenCalledWith(expect.objectContaining({ rowIndex: 1 }));
+  });
+
+  test('non-DSP params (load menu / setup) get NO MIDI badge (#146)', () => {
+    appState.currentKey = '10010001';
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '10010001',
+        parent: '10010001',
+        statement: 'Input',
+        tag: 'input',
+      },
+      {
+        type: 'NUM',
+        position: '0',
+        key: '10010011', // setup key, not a preset param
+        parent: '10010001',
+        statement: 'lvl %3.0f',
+        tag: '',
+        value: '5',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+    expect(document.querySelector('.lcd-midi-badge')).toBeNull();
   });
 
   // #131: progressive paints during a wave must not destroy an open SET

@@ -949,11 +949,31 @@ BOARD: #9, #10, #12, #14, #45 (G2b, gated), #147, #148, #149, #150, #160-#168. A
 remain closed; the board is entirely feature enhancements + the gated live loop. Suggested next:
 #147 backup/restore (battery-RAM safety), then #148 snapshots.
 
+2026-06-12 — FULL UNIT BACKUP & RESTORE (#147, PR #170, squash). Device-native backup/restore over the
+Tech Note 34 dump protocol (logs/tn34.txt): a "want" opcode requests a dump; the same dump opcode sent
+back loads/replaces that data. Four targets — current program (0x06/0x15), unit setup (0x07/0x16), all
+presets (0x10), full unit / internal NV RAM (0x12) — captured to a .syx with a verified checksum;
+restore replays a .syx (wide-blast restores confirmed first). New src/backup.js (DOM-free engine:
+want-send + checksum-verify + frame helpers), src/backup-ui.js (modal: kind picker, live progress,
+download/upload), a raw-capture hook in midi.js (setBackupCapture), BACKUP timeouts in constants.js, a
+Backup button + styles. VALIDATED LIVE: program (14712 B), setup (2064 B), and the full INTERNAL dump
+(524288 B / 512 KB) all checksum-OK. KEY FINDING: the Orville's internal-dump opcode is 0x38, NOT
+TN34's 0x11 (TN34 is the DSP4000 note) — so capture is opcode-AGNOSTIC (any non-object-protocol frame
+during a backup is the dump), immune to such differences. Also hardened parser.js against a ~1 MB frame
+(chunked ASCII decode, no spread overflow) and widened the backup start window (the internal dump has a
+variable, sometimes-slow startup; cutting it off mid-stream jams the link, so it must run to
+completion). Reviewed (correctness + docs); fixed the one should-fix (guard onProgress so a stray
+SEQUENCE_OUT/foreign frame can't arm the slow-dump watchdog). Tests 311/311, lint clean. Closed #147.
+FOLLOW-UPS (open, not yet filed): live-validate RESTORE (destructive — test with a safe program restore
+first) and the FILES/CARD backups (program/setup/internal validated; files/card use the same
+opcode-agnostic path but weren't captured live).
+
 ## Done (verified merged — do not redo)
 (This is a sparse quick-list; the authoritative record is the dated reconciliation log above.)
 - #138 single-source-of-truth load menu (preset-loader) — PR #155 (44e40c3)
 - #153/#135 preset browser + program preview + live Favorites — PR #156 (191cc2d)
 - #146/#152 device-native MIDI mapping — PR #157 (ccd1dde)
 - #146 MIDI-mapping follow-ups (generic sub-block bind + sequence-out polling fix) — PR #158 (02e7287)
+- #147 full unit backup & restore to a .syx (validated live, internal dump 512 KB checksum-OK) — PR #170
 - A1  main.js debug-upload slice bounds — PR #24
 - 8-step decoupling refactor — PR #23

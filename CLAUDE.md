@@ -31,6 +31,8 @@ index.html
       ├─ sync-dialog.js     library-sync progress overlay drawn on the LCD (defrag-style bank map)
       ├─ preset-loader.js   DOM-free single source of truth for the load-menu dropdowns: local staging backed by the library (#138)
       ├─ preset-browser.js  top-level modal: browse/search the library, preview a program on the idle DSP (remember-and-restore), load to A/B (#153/#135)
+      ├─ midi-map.js        DOM-free device-native modulation engine: assign controllers, per-param source/range/type, bindParam (#146)
+      ├─ midi-map-ui.js     MIDI controllers panel + per-parameter mapping card modals (#146)
       ├─ navigation.js      toggleDspKey
       ├─ tree.js            persistent device object tree: recordDump, deriveKeyStack, labels (T1b/#105)
       ├─ eager-loader.js    background preset-subtree structure warm-up, one request in flight (#106)

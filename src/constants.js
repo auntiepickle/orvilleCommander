@@ -123,6 +123,28 @@ export const LIBRARY = {
   //                             objectinfo:received listener to re-record it
 };
 
+// MIDI mapping (#146, src/midi-map.js): device-native modulation config.
+export const MIDI_MAP = {
+  CAPTURE_SETTLE_MS: 800, // wait after arming Capture Midi before the user/app
+  //                         sends the CC to be learned: the device needs to be
+  //                         listening; 800ms is comfortably past the ~100ms
+  //                         echo seen on the assign Capture probes, still snappy
+  UI_REFRESH_MS: 600, // the MIDI modals wait this long after a write/refresh
+  //                     before re-reading the device and repainting — long
+  //                     enough for the assign/surface OBJECTINFO + VALUE echoes
+  //                     to land (PUTs are self-confirming, §9)
+  BIND_STEP_MS: 300, // pace between cursor keypresses while binding a parameter
+  //                    (driving the device highlight to the target row)
+  BIND_SETTLE_MS: 600, // wait after parameter/select-hold before reading the
+  //                      bound surface back (the page swap is near-instant but
+  //                      the OBJECTINFO round-trip needs room)
+  BIND_READ_TRIES: 4, // re-request the bound surface up to this many times if its
+  //                     OBJECTINFO hasn't landed yet (a single read sometimes
+  //                     came back blank and falsely reported "could not bind")
+  LEARN_POLL_TRIES: 20, // how many times the Learn flow polls for a captured
+  //                       controller before giving up (x UI_REFRESH_MS ~= 12s)
+};
+
 // Demo mode (src/demo.js): the canned device built from a live capture.
 export const DEMO = {
   REPLY_LATENCY_MS: 25, // per-reply delay so the dump-wave lifecycle (BUSY

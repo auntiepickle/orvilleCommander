@@ -124,6 +124,26 @@ export function saveLibraryConfig(library) {
   log(`Preset library saved (${library.banks.length} banks)`, 'info', 'general');
 }
 
+/**
+ * Persists the per-program MIDI mapping badges (#146) into midiConfig without
+ * touching the rest. The device holds the real mapping in the preset; this is
+ * the app's render hint (which params are mapped) so the badges survive a page
+ * reload — the dev server's HMR reload included — instead of vanishing until
+ * each param is re-read.
+ *
+ * @param {Object} mappings - { [programId]: { [paramKey]: sourceName } }
+ */
+export function saveMidiMappings(mappings) {
+  const existing = readStoredConfig();
+  existing.midiMappings = mappings;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(existing));
+}
+
+/** Reads the persisted MIDI mapping badges (#146), or {} if none stored. */
+export function loadMidiMappings() {
+  return readStoredConfig().midiMappings || {};
+}
+
 // Stored config, tolerating corruption (review): the read-modify-write
 // savers must remain the self-healing path — a corrupt midiConfig string
 // becomes an empty object and the next save overwrites it, instead of

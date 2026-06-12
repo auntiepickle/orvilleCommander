@@ -17,7 +17,7 @@ import { sendValuePut, sendObjectInfoDump, sendValueDump, isOutputConnected } fr
 import { KEY, KEY_PREFIX } from './sysex-commands.js';
 import { LIBRARY } from './constants.js';
 import { getNode, bankProgramsFor } from './tree.js';
-import { on } from './events.js';
+import { on, emit } from './events.js';
 import { log } from './logger.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -280,6 +280,10 @@ export async function loadProgramToDsp(target, dspSlot, onDone) {
     onDone?.();
     return;
   }
+  // A program load replaces a DSP's parameters, so any observed MIDI-map badge
+  // state is now stale. Announce it on the bus (kept decoupled — importing
+  // midi-map here would drag controls->renderer->main into library; review).
+  emit('program:loaded', { dspSlot });
   const isA = dspSlot === 'A';
   log(
     `Load: '${target.programName}' (bank ${target.bankIdx}) -> DSP ${dspSlot}`,

@@ -30,6 +30,7 @@ import {
   renderBrowser,
   resetPresetBrowser,
 } from './preset-browser.js';
+import { setupMidiMapUI, openControllers, resetMidiMapUI } from './midi-map-ui.js';
 import { setupKeypressControls, setupDataKnob, testKeypress, meterPollTick } from './controls.js';
 import {
   setMidiPorts,
@@ -186,6 +187,7 @@ function resetAndLand() {
   // one-shot seed from the new dump (#138), not the previous session's pick.
   resetPresetLoader();
   resetPresetBrowser(); // also drop any open browser + in-flight preview state
+  resetMidiMapUI(); // close MIDI modals; the new device re-reads on demand
   setState(
     {
       currentKey: KEY.ROOT,
@@ -289,6 +291,7 @@ syncBtn.addEventListener('click', () => {
   // it re-seeds from the device's current bank/program (#138).
   resetPresetLoader();
   resetPresetBrowser();
+  resetMidiMapUI();
   setState({ currentKey: KEY.ROOT, keyStack: [] }, 'main:sync-root');
   updateScreen(log);
   log('Synced to root', 'info', 'general');
@@ -506,6 +509,12 @@ function setupLibraryUI() {
   setupPresetBrowser({ onLoadComplete: afterLoad });
   const browseBtn = document.getElementById('open-browser');
   if (browseBtn) browseBtn.addEventListener('click', openPresetBrowser);
+
+  // MIDI mapping (#146): device-native modulation config. afterLoad re-reads
+  // the device after a write (refreshes DSP names / screen).
+  setupMidiMapUI({ onChange: afterLoad });
+  const midiBtn = document.getElementById('open-midi-map');
+  if (midiBtn) midiBtn.addEventListener('click', openControllers);
 
   // "12m ago" style relative time from an ISO stamp.
   const timeAgo = (iso) => {

@@ -17,6 +17,7 @@ import { keypressMasks } from './controls.js';
 import { MOD, MOD_SOURCES } from './sysex-commands.js';
 import { MIDI_MAP } from './constants.js';
 import { getNode } from './tree.js';
+import { on } from './events.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -42,6 +43,9 @@ export function paramMappingOf(key) {
 export function resetParamMappings() {
   mappedParams = {};
 }
+
+// A program load (library.js) replaces a DSP's params, staling the badge state.
+on('program:loaded', resetParamMappings);
 
 /** The child key at `offset` within a slot/surface base key (hex math). */
 export function childKey(base, offset) {
@@ -97,7 +101,9 @@ function subDetail(o) {
     .trim();
   if (!label || /^[-\s]+$/.test(label)) return null;
   const raw = String(o.value ?? '');
-  return { label, value: raw.replace(/^[0-9a-f]+\s/i, '') || raw };
+  const value = raw.replace(/^[0-9a-f]+\s/i, '') || raw;
+  if (/^[-\s]*$/.test(value)) return null; // an unset value placeholder ("-----")
+  return { label, value };
 }
 
 /** Reads assign slot `i`'s current state from the tree (after a refresh). */

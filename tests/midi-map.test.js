@@ -62,6 +62,7 @@ import {
 import { sendValuePut, sendObjectInfoDump, sendValueDump, sendKeypress } from '../src/midi.js';
 import { getNode } from '../src/tree.js';
 import { bindParam } from '../src/midi-map.js';
+import { emit } from '../src/events.js';
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -186,6 +187,12 @@ describe('param mapping state (the LCD "mapped" badge, #146)', () => {
     recordParamMapping('4060001', 'volume');
     resetParamMappings();
     expect(paramMappingOf('4060001')).toBeNull();
+  });
+
+  test('a program:loaded event clears the badges (stale after a load, review)', () => {
+    recordParamMapping('4050001', 'pan');
+    emit('program:loaded', { dspSlot: 'A' });
+    expect(paramMappingOf('4050001')).toBeNull();
   });
 });
 

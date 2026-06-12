@@ -832,7 +832,36 @@ same-tick, device-confirmed after settle (load persisted: device reported the ne
 [4] fallback — legacy put+targeted-fetch fires with no library. Tests 234/234, lint clean. New
 coverage: tests/preset-loader.test.js (8), library.js helpers + loadProgram, renderer load-menu
 library/fallback paths. Foundation for #153 (preset browser) and #152 (inbound Program Change),
-which can reuse the DOM-free loader.
+which can reuse the DOM-free loader. MERGED to main (PR #155, squash 44e40c3; #145 sync-dialog
+merged first as bf60326 — the stacked #154 auto-closed when its base branch was deleted, rebased +
+reopened as #155).
+
+2026-06-12 — PRESET BROWSER + PREVIEW + LIVE FAVORITES (#153/#135, branch feat/preset-browser-153-135,
+PR open). Built on the #138 preset-loader foundation. NEW src/preset-browser.js: a top-level modal
+(theme-tokened, modeled on sync-dialog) browsing the synced library — bank list + program list +
+name search (reuses searchLibrary/canSearch), with per-program Preview / load-to-A / load-to-B.
+PREVIEW (#135) is remember-and-restore: the Orville runs BOTH DSPs, so auditioning necessarily
+overwrites the target engine — preview captures the slot's EXACT current program (indices, since
+names repeat across banks) BEFORE loading onto the IDLE engine, and offers Keep (leave it) vs Cancel
+(reload the remembered program). Explicit action only (no auto-preview — the ~2s DSP rebuild),
+controls lock during a load. library.js: loadProgramToDsp(target, dspSlot, onDone) generalizes
+loadProgram (slot-chosen trigger + optimistic name by slot; loadProgram is now a thin active-slot
+caller); lastLoadedBySlot + getRememberedProgram (exact app-load memory, best-effort running-name
+fallback) + resetLibraryLoadMemory. LIVE FAVORITES (maintainer report "favorites gets out of sync
+since that's a live menu"): bank 0 is the device's auto-generated MRU that reorders on every load,
+so its static library snapshot is always stale — isFavoritesBank + refreshFavoritesBank re-read it
+live whenever viewed (load menu bank-0 select + browser bank-0 select), while the 70 static banks
+stay on the race-free library path. main.js: BROWSE button, setupPresetBrowser({onLoadComplete}),
+resetPresetBrowser() next to both resetPresetLoader() seams. Tests 253/253 (+19: loadProgramToDsp
+slot targeting/order, getRememberedProgram exact/fallback/null, isFavoritesBank, refreshFavoritesBank,
+new tests/preset-browser.test.js render/search/empty/preview-remember-restore/keep/no-auto-preview/
+live-favorites/reset), lint clean. VALIDATED LIVE against the powered Orville
+(logs/probe-preview-135.mjs, raw output in session): with DSP A active, loaded '10 Delaytaps' into
+the IDLE slot B (explicit-slot targeting — idle name changed); getRememberedProgram returned the
+EXACT {bank 5, prog 0} just loaded (not a name guess); previewed '11 Delaytaps 2' onto B (overwrite);
+restored -> idle name back to '10 Delaytaps' (RESTORE-ROUND-TRIP PASS). Reviewed (correctness + docs);
+fixed one blocker (loadProgramToDsp now fires onDone on its sync-guard early-return so a browser load
+during a sync cannot stick the control lock — regression-tested).
 
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24

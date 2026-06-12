@@ -27,6 +27,10 @@ index.html
       ├─ bitmap.js          screen-capture denibble + canvas render (pure pixel decode in framebuffer.js)
       ├─ theme.js           tokenized theme engine: presets + per-token overrides on :root, service-panel editor
       ├─ demo.js            demo mode: captured device tree (demo-data.json) served via the midi.js port contract
+      ├─ library.js         synced preset library (#142): full bank scan, name search, the device-touching load path (loadProgram/loadProgramToDsp)
+      ├─ sync-dialog.js     library-sync progress overlay drawn on the LCD (defrag-style bank map)
+      ├─ preset-loader.js   DOM-free single source of truth for the load-menu dropdowns: local staging backed by the library (#138)
+      ├─ preset-browser.js  top-level modal: browse/search the library, preview a program on the idle DSP (remember-and-restore), load to A/B (#153/#135)
       ├─ navigation.js      toggleDspKey
       ├─ tree.js            persistent device object tree: recordDump, deriveKeyStack, labels (T1b/#105)
       ├─ eager-loader.js    background preset-subtree structure warm-up, one request in flight (#106)

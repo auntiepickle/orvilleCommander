@@ -24,7 +24,13 @@ jest.mock('../src/constants.js', () => {
   return {
     ...actual,
     // Millisecond-scale waits so the serialized scan runs in test time.
-    LIBRARY: { ...actual.LIBRARY, BANK_SETTLE_MS: 1, BANK_DUMP_TIMEOUT_MS: 50, LOAD_SETTLE_MS: 1 },
+    LIBRARY: {
+      ...actual.LIBRARY,
+      BANK_SETTLE_MS: 1,
+      BANK_DUMP_TIMEOUT_MS: 50,
+      LOAD_SETTLE_MS: 1,
+      FAVORITES_REFRESH_MS: 1,
+    },
   };
 });
 
@@ -35,12 +41,17 @@ import {
   syncLibrary,
   loadSearchHit,
   loadProgram,
+  loadProgramToDsp,
+  getRememberedProgram,
+  resetLibraryLoadMemory,
+  isFavoritesBank,
+  refreshFavoritesBank,
   libraryBankOptions,
   libraryProgramsForBank,
   canSearch,
   libraryProgramCount,
 } from '../src/library.js';
-import { sendValuePut, sendObjectInfoDump } from '../src/midi.js';
+import { sendValuePut, sendObjectInfoDump, sendValueDump } from '../src/midi.js';
 import { getNode, bankProgramsFor } from '../src/tree.js';
 import { appState } from '../src/state.js';
 
@@ -247,5 +258,93 @@ describe('loadProgram / loadSearchHit', () => {
       '10020011:12',
       '1002001c:1',
     ]);
+  });
+});
+
+describe('loadProgramToDsp / preview slot targeting (#135)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetLibraryLoadMemory();
+  });
+
+  test('targets the CHOSEN slot regardless of the active DSP', async () => {
+    appState.presetKey = '401000b'; // DSP A is active...
+    await loadProgramToDsp({ bankIdx: '5', programIdx: '0', programName: '0 Mono Delay' }, 'B');
+    // ...but the explicit slot B trigger fires, and B's name updates.
+    expect(appState.dspBName).toBe('Mono Delay');
+    expect(sendValuePut.mock.calls.map((c) => c.join(':'))).toEqual([
+      '10020012:5',
+      '10020011:0',
+      '1002001d:1', // LOAD_TRIGGER_B, not A
+    ]);
+  });
+
+  test('the program readback fires before the trigger (clamp-catch)', async () => {
+    appState.presetKey = '401000b';
+    await loadProgramToDsp({ bankIdx: '0', programIdx: '1', programName: '1 X' }, 'A');
+    expect(sendValueDump).toHaveBeenCalledWith('10020011');
+  });
+
+  test('a load ignored mid-sync STILL fires onDone (review B1: no stuck UI lock)', async () => {
+    // Hold syncing=true: a sync with no bank list polls until it gives up.
+    getNode.mockReturnValue(undefined);
+    const syncPromise = syncLibrary(); // sets syncing=true synchronously
+    const done = jest.fn();
+    await loadProgramToDsp({ bankIdx: '5', programIdx: '0', programName: '0 X' }, 'A', done);
+    expect(done).toHaveBeenCalled(); // the lock-holder unlocks...
+    expect(sendValuePut).not.toHaveBeenCalledWith('1002001c', '1'); // ...but no load happened
+    await syncPromise;
+  });
+});
+
+describe('getRememberedProgram (preview restore, #135)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetLibraryLoadMemory();
+    setLibrary(sampleLibrary);
+  });
+
+  test('after an app load, returns the EXACT indices that slot now holds', async () => {
+    await loadProgramToDsp({ bankIdx: '50', programIdx: '12', programName: '12 Black Hole' }, 'A');
+    expect(getRememberedProgram('A')).toEqual({
+      bankIdx: '50',
+      programIdx: '12',
+      programName: '12 Black Hole',
+    });
+    expect(getRememberedProgram('B')).toBeNull(); // nothing loaded into B
+  });
+
+  test('cold start falls back to the running name resolved against the library', () => {
+    appState.dspAName = 'Techno Rumble'; // running, never loaded by the app
+    // Index-based, not the colliding "Black Hole" — exact program in bank 0.
+    expect(getRememberedProgram('A')).toEqual({
+      bankIdx: '0',
+      programIdx: '0',
+      programName: '0 Techno Rumble',
+    });
+  });
+
+  test('null when the slot was never app-loaded and the running name is unknown', () => {
+    appState.dspBName = 'Nonexistent Patch';
+    expect(getRememberedProgram('B')).toBeNull();
+  });
+});
+
+describe('Favorites bank is live (#138/#135 follow-up)', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  test('isFavoritesBank only matches bank 0', () => {
+    expect(isFavoritesBank(0)).toBe(true);
+    expect(isFavoritesBank('0')).toBe(true);
+    expect(isFavoritesBank(50)).toBe(false);
+  });
+
+  test('refreshFavoritesBank selects bank 0 and re-dumps the load menu', async () => {
+    const done = jest.fn();
+    await refreshFavoritesBank(done);
+    expect(sendValuePut).toHaveBeenCalledWith('10020012', '0'); // select bank 0
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('10020010'); // re-fetch live
+    expect(sendValueDump).toHaveBeenCalledWith('10020010');
+    expect(done).toHaveBeenCalled();
   });
 });

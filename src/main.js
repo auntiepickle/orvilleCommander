@@ -24,6 +24,12 @@ import {
   canSearch,
 } from './library.js';
 import { showSyncProgress, showSyncComplete, hideSyncDialog } from './sync-dialog.js';
+import {
+  setupPresetBrowser,
+  openPresetBrowser,
+  renderBrowser,
+  resetPresetBrowser,
+} from './preset-browser.js';
 import { setupKeypressControls, setupDataKnob, testKeypress, meterPollTick } from './controls.js';
 import {
   setMidiPorts,
@@ -179,6 +185,7 @@ function resetAndLand() {
   // any staged bank/program selection so the next load-menu render takes its
   // one-shot seed from the new dump (#138), not the previous session's pick.
   resetPresetLoader();
+  resetPresetBrowser(); // also drop any open browser + in-flight preview state
   setState(
     {
       currentKey: KEY.ROOT,
@@ -281,6 +288,7 @@ syncBtn.addEventListener('click', () => {
   // Sync is the explicit re-read: drop the staged load-menu selection too so
   // it re-seeds from the device's current bank/program (#138).
   resetPresetLoader();
+  resetPresetBrowser();
   setState({ currentKey: KEY.ROOT, keyStack: [] }, 'main:sync-root');
   updateScreen(log);
   log('Synced to root', 'info', 'general');
@@ -486,6 +494,19 @@ function setupLibraryUI() {
   const statusEl = document.getElementById('sync-status');
   setLibrary(cachedConfig?.presetLibrary);
 
+  // The post-load root refetch shared by the search and the browser — keeps
+  // device I/O out of those modules (they call library.js loaders + this).
+  const afterLoad = () => {
+    sendObjectInfoDump(KEY.ROOT); // refresh the DSP preset names
+    updateScreen(log);
+    if (appState.fetchBitmap) sendSysEx(CMD.GET_SCREEN, []);
+  };
+
+  // Preset browser (#153) + preview (#135): a modal over the synced library.
+  setupPresetBrowser({ onLoadComplete: afterLoad });
+  const browseBtn = document.getElementById('open-browser');
+  if (browseBtn) browseBtn.addEventListener('click', openPresetBrowser);
+
   // "12m ago" style relative time from an ISO stamp.
   const timeAgo = (iso) => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -515,6 +536,7 @@ function setupLibraryUI() {
       statusEl.textContent = lib ? `${count} presets · ${timeAgo(lib.syncedAt)}` : 'not synced';
       if (lib) statusEl.title = `Last synced ${new Date(lib.syncedAt).toLocaleString()}`;
     }
+    renderBrowser(); // keep an open browser in step with the library (post-sync)
   };
   refreshLibraryUI();
 
@@ -553,11 +575,7 @@ function setupLibraryUI() {
         row.addEventListener('mousedown', () => {
           hideResults();
           searchInput.value = '';
-          loadSearchHit(hit, () => {
-            sendObjectInfoDump(KEY.ROOT); // refresh the DSP preset names
-            updateScreen(log);
-            if (appState.fetchBitmap) sendSysEx(CMD.GET_SCREEN, []);
-          });
+          loadSearchHit(hit, afterLoad);
         });
         resultsEl.appendChild(row);
       }

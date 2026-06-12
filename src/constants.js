@@ -163,8 +163,11 @@ export const MIDI_MAP = {
 // is generous, and the "want" can take several seconds to start (the program
 // want had ~8 s latency before the dump began).
 export const BACKUP = {
-  START_TIMEOUT_MS: 15000, // give up if a dump never starts arriving after the want
-  STALL_MS: 15000, // give up if a started transfer goes silent this long (= done/stall)
+  START_TIMEOUT_MS: 60000, // give up if a dump never starts arriving after the want.
+  //                          Generous because the full internal gather is slow to
+  //                          BEGIN (live: it can take tens of seconds before the
+  //                          first byte, unlike program/setup which start in ~1-8s).
+  STALL_MS: 20000, // give up if a STARTED transfer goes silent this long (= done/stall)
   RESTORE_SETTLE_MS: 12000, // most dumps reply nothing on restore — settle after this
 };
 

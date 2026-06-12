@@ -863,6 +863,30 @@ restored -> idle name back to '10 Delaytaps' (RESTORE-ROUND-TRIP PASS). Reviewed
 fixed one blocker (loadProgramToDsp now fires onDone on its sync-guard early-return so a browser load
 during a sync cannot stick the control lock — regression-tested).
 
+2026-06-12 — MIDI MAPPING, device-native (#146, branch feat/midi-mapping-146 stacked on the browser
+branch, PR open). The flagship: map any MIDI source to any parameter, run IN THE DEVICE DSP (zero app
+latency, persists in the preset; the app is only a configurator). Phase 0 mapped the whole system
+live (device-model.md §8b): the per-parameter modulation surface is fully OBJECTINFO/VALUE-addressable
+under "remote control" (10030400 -> <param> setup 10030401; mode 10030402, range 10030408, type
+10030409, Capture 10030406) — an earlier draft wrongly thought it un-addressable; key discovery via
+`sequence out = new` (10010016) and the internet research (Eventide Programming Manual + userobj.pdf +
+forums) corrected it. The mode index->source table (off/low/mid/high, assign 1-8, trig 1-2, pedals,
+named MIDI CCs) is set by index; the device echoes the name. NEW src/midi-map.js (DOM-free engine:
+assign read/Capture/clear, per-param set source/range/type + Capture, bindParam = the one keypress
+step [program->parameter->DOWN x row->select-hold], OBJECTINFO-verified by surface title). NEW
+src/midi-map-ui.js (two themed modals: a CONTROLLERS panel over the 8 global assigns with one-click
+Learn, and a per-parameter CARD opened from a "MIDI" badge the renderer adds to DSP-preset NUM/SET
+rows). renderer.js: the badge (DSP-keys only) + handleLcdClick branch. main.js: MIDI Map button,
+setupMidiMapUI, resetMidiMapUI at both reset seams. sysex-commands.js: MOD keys + MOD_SOURCES;
+constants.js: MIDI_MAP timings. Tests 280/280 (+27: midi-map ops/sources/bind, midi-map-ui modals,
+renderer badge), lint+format clean. VALIDATED LIVE end-to-end through the shipped module
+(logs/probe-midimap-e2e.mjs): bindParam('level') -> "level setup", set source=volume(CC7) via the
+module, then CC#7 drove level -100->0 dB with the app out of the runtime path. NEEDS browser smoke:
+the full UI click-through (badge -> card -> device) against the unit; the engine + bind are
+hardware-proven, the UI is jsdom-tested. Pre-merge reviewer pass pending. Foundation note: bindParam
+reaches params on a preset's MAIN param page; deeply-nested sub-page params need extra navigation (a
+follow-up). Also delivers #152 (inbound Program Change loads) — confirmed live.
+
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24
 - 8-step decoupling refactor — PR #23

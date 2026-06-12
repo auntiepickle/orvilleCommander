@@ -855,10 +855,13 @@ stay on the race-free library path. main.js: BROWSE button, setupPresetBrowser({
 resetPresetBrowser() next to both resetPresetLoader() seams. Tests 253/253 (+19: loadProgramToDsp
 slot targeting/order, getRememberedProgram exact/fallback/null, isFavoritesBank, refreshFavoritesBank,
 new tests/preset-browser.test.js render/search/empty/preview-remember-restore/keep/no-auto-preview/
-live-favorites/reset), lint clean. NEEDS-HARDWARE: logs/probe-preview-135.mjs (preview round-trip)
-is written + ready but the WinMM port was held by the live app tab this session — run with the tab
-closed to confirm the restore round-trip on hardware. The device-facing load mechanics are already
-hardware-proven via probe-loadmenu (same loadProgramToDsp path, explicit slot).
+live-favorites/reset), lint clean. VALIDATED LIVE against the powered Orville
+(logs/probe-preview-135.mjs, raw output in session): with DSP A active, loaded '10 Delaytaps' into
+the IDLE slot B (explicit-slot targeting — idle name changed); getRememberedProgram returned the
+EXACT {bank 5, prog 0} just loaded (not a name guess); previewed '11 Delaytaps 2' onto B (overwrite);
+restored -> idle name back to '10 Delaytaps' (RESTORE-ROUND-TRIP PASS). Reviewed (correctness + docs);
+fixed one blocker (loadProgramToDsp now fires onDone on its sync-guard early-return so a browser load
+during a sync cannot stick the control lock — regression-tested).
 
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24

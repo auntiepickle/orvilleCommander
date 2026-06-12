@@ -361,9 +361,20 @@ export function addSysexListener() {
     if (!isSequenceOut) noteLinkActivity();
     if (data[0] === SYSEX.START) sysexBuffer = data;
     else sysexBuffer = sysexBuffer.concat(data);
-    // #147: while a backup is armed, report the growing dump frame's size so the
-    // UI can show progress through a multi-minute transfer.
-    if (backupCapture) backupCapture.onProgress(sysexBuffer.length);
+    // #147: while a backup is armed, report the growing DUMP frame's size so the
+    // UI can show progress through a multi-minute transfer. Guard it with the same
+    // manufacturer + non-object-protocol check as the capture routing below: a
+    // stray SEQUENCE_OUT/foreign frame must NOT arm the engine's `started` flag,
+    // or it would flip the slow-start watchdog to the short stall window and abort
+    // a legitimately slow internal dump (review).
+    if (
+      backupCapture &&
+      sysexBuffer[1] === SYSEX.MANUFACTURER[0] &&
+      sysexBuffer[2] === SYSEX.MANUFACTURER[1] &&
+      !BACKUP_OBJECT_PROTOCOL.has(sysexBuffer[4])
+    ) {
+      backupCapture.onProgress(sysexBuffer.length);
+    }
     // Flush only a properly framed message (starts F0, ends F7). The F0 guard
     // discards a stray continuation packet that arrives with no header.
     if (sysexBuffer[0] === SYSEX.START && sysexBuffer[sysexBuffer.length - 1] === SYSEX.END) {

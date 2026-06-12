@@ -43,45 +43,60 @@ sources the unit can't use.
 - **Scale equation** (manual p.78): `(max - min) / full-range = scale` — replace
   the manual's trial-and-error with a calculator.
 
-## The decisive open question (Phase 0 spike)
+## The two-layer model (Phase 0 spike — RESOLVED)
 
-`OBJECTINFO` stays **context-free**: `OBJECTINFO(4050001)` returned the plain
-`level` NUM both before and after SELECT-hold. The modulation page is therefore
-**not** at the param key. Guessed mirror keys — the hidden type-8 node
-`14030400` under the preset, and `1`-prefixed param keys (`14050001`, …) — all
-returned **type-8 EMPTY placeholders** (`8 0 <key> … '' ''`). All params are
-currently `mode: off`, so those slots may simply be empty until a mapping is
-active.
+The Orville's mapping is **two layers**, and the spike settled how each is
+configured:
 
-**Spike to resolve (first implementation step):** activate a mapping on one
-parameter (drive cursor onto it, SELECT-hold, fire `Capture Midi`, emit a CC),
-then re-scan the candidate keys.
+1. **Global assign controllers** (`10010100`) — the 8 reusable MIDI sources.
+   **Fully OBJECTINFO-addressable**: I dumped and edited their objects, and the
+   `Capture Midi` TRG (`…115`) learns a CC end-to-end over emulated MIDI. The
+   app configures these **directly by object** (fire Capture + emit/await a CC,
+   set channel via the `channel` SET).
+2. **Per-parameter modulation page** (SELECT-hold) — picks which assign drives
+   *this* parameter, plus `range` / `type`. **NOT cleanly object-addressable.**
 
-- If a `<param> setup` COL **materializes** at a discoverable key -> **render
-  the page as ordinary objects** (the clean path; the rest of this plan).
-- If nothing materializes -> the page is a **transient UI overlay**, and the
-  feature becomes a **remote-control** model: drive the device cursor by
-  keypress and mirror its screen bitmap (we already capture + render the
-  bitmap). More limited, more fragile — fall back only if forced.
+Resolution evidence (`logs/probe-midi-146c/d/e.mjs`, `logs/mod-activated.png`):
 
-Either way the app needs a small **cursor-control layer** (cursor up/down/
-left/right + the `-hold` keys) to drive SELECT-hold onto a chosen parameter,
-since SELECT-hold is cursor-position dependent. (Add the `-hold` keys to
-`build_tools/hil-screenshot.cjs` too — they were used for the screenshots and
-are generally useful.)
+- `OBJECTINFO` is **context-free**: `OBJECTINFO(4050001)` returns the plain
+  `level` NUM before *and* after SELECT-hold — the page is not at the param key.
+- Every guessed mirror key (the hidden `14030400` under the preset; `1`-prefixed
+  and low-digit param keys) returns **type-8 EMPTY** — and the device returns
+  type-8 for *any* unallocated key, so a scan yields **no discovery signal**.
+- Activating a real mapping confirmed the model but populated **no** candidate
+  key: `parameter -> SELECT-hold -> INC` cycled `level`'s `mode`
+  `off -> assign 1 -> assign 2 -> assign 3`, and the level value moved
+  `-9 dB -> 0 dB` (modulation live, driving the parameter) — yet every candidate
+  stayed type-8. So the per-parameter page's key is not derivable/scannable.
+
+**Consequence (runtime unaffected):** per-parameter assignment is written by
+**driving the device UI** (position the cursor on the target param, SELECT-hold,
+set `mode = assign N` + `range`/`type`, `*done*`). The app is a configurator
+only; **at runtime the Orville does MIDI -> parameter entirely in its DSP — zero
+app latency, works after the app disconnects.** This is the explicit goal: no app
+middleman in the signal path.
+
+**Needed primitive — a cursor-control layer** in `controls.js`: drive the device
+highlight to a chosen parameter (the dump's `position` field gives in-menu
+ordering), then SELECT-hold. This is the one genuinely new capability (the app
+currently navigates by key, not by driving the physical cursor). Add the `-hold`
+keys to `build_tools/hil-screenshot.cjs` as well.
 
 ## Build phases
 
-0. **Addressing spike** (above) + the cursor-control layer in `controls.js`
-   (drive the device highlight to a parameter by position; the dump's
-   `position` field gives ordering).
-1. **Modulation card** — a "MIDI Map" badge on every editable NUM/SET; clicking
-   it positions the cursor, SELECT-holds, and opens the modulation page as a
-   focused card (render-as-objects path) — `mode` / `channel` / `con` /
-   `range` / `type` / live monitor, all existing renderers.
-2. **One-click Learn** — a button that fires the on-screen `Capture Midi` TRG,
-   then waits for the user's controller OR emits an app CC sweep, and shows the
-   captured source. (Proven end-to-end on the global assigns.)
+0. **Cursor-control layer** in `controls.js`: drive the device highlight to a
+   parameter by its menu `position`, then SELECT-hold to open its modulation
+   page. The one new primitive everything else builds on.
+1. **Global controllers panel** (the addressable layer first — highest value,
+   lowest risk): a panel over the 8 assigns (`10010100`) showing each source +
+   live monitor, with a one-click **Learn** (fire `Capture Midi` TRG + emit/await
+   a CC) and clear. All object-addressable, proven end-to-end.
+2. **Per-parameter mapping** (the keypress-driven layer): a "MIDI Map" badge on
+   every editable NUM/SET that positions the cursor, SELECT-holds, and presents
+   the modulation page. Since the page is not object-addressable, drive its
+   fields by keypress (set `mode = assign N`, `range`, `type`) and mirror the
+   captured screen bitmap (we already decode/render it) for confirmation.
+   Read-back of the chosen assign closes the loop visually.
 3. **Scale calculator** — user types desired min/max parameter range -> apply
    the manual's equation -> write `scale`.
 4. **Mappings overview** — list every mapped parameter (`mode != off`), with
@@ -99,13 +114,18 @@ modulation page). Unit tests mock the SysEx boundary like the rest of the suite.
 
 ## Risks
 
-- **Page addressability** (the Phase 0 spike) — the whole "render-as-objects"
-  shape depends on it; the remote-control fallback exists but is weaker.
-- **Cursor-drive fragility** — SELECT-hold is position-dependent; mitigated by
-  the dump `position` field + screen-capture verification.
-- **Source enumeration** — the `mode` SET options are degenerate; set the source
-  via Capture (proven) or by index once the index->source map is derived. Do not
-  build a 127-entry CC dropdown.
+- **Cursor-drive correctness** — per-parameter config is keypress-driven, so the
+  app must reliably land the device cursor on the intended parameter before
+  SELECT-hold. Mitigated by the dump `position` field for ordering + a
+  screen-capture read-back after each step to confirm the right page/field.
+  Keypress sequences proved reliable in the `hil-screenshot` captures.
+- **Source enumeration** — the `mode` SET options are degenerate placeholders;
+  set the source via Capture (proven), not a 127-entry CC dropdown. The
+  per-parameter `mode` enumerates the 8 assigns (off / assign 1-8) — a clean,
+  short list.
+- **Leaving the device modified** — driving config changes device state; the app
+  must read-back and let the user confirm/undo, and never leave a half-written
+  mapping.
 
 ## Out of scope
 

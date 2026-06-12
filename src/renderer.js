@@ -11,11 +11,21 @@ import {
   findParamUnder,
   labelForSub,
   isGangCol,
-  bankProgramsFor,
   GANG_MAX_DEPTH,
 } from './tree.js';
 import { log } from './logger.js';
-import { isSyncing } from './library.js';
+import { isSyncing, loadProgram } from './library.js';
+import {
+  isLoadMenuActive,
+  hasLibrary,
+  bankOptions,
+  programsForBank,
+  getSelection,
+  selectBank,
+  selectProgram,
+  ensureInitialized,
+  selectionTarget,
+} from './preset-loader.js';
 
 /**
  * Updates the current screen by requesting OBJECTINFO_DUMP and VALUE_DUMP for the current key.
@@ -154,9 +164,7 @@ const handleLcdClick = (e) => {
  * @param {Event} e - The change event.
  */
 const handleSelectChange = (e) => {
-  // The library scan owns the bank/program selection while it runs — a
-  // user put interleaved with it lands in whatever bank the scan happens
-  // to be visiting, and the program auto-load would fire there (review).
+  // The library scan owns the bank/program selection while it runs (review).
   if (isSyncing()) {
     log('Value change ignored: library sync in progress', 'error', 'error');
     return;
@@ -164,75 +172,53 @@ const handleSelectChange = (e) => {
   const key = e.target.dataset.key;
   const selectedIndex = e.target.value;
   const selectedDesc = e.target.options[e.target.selectedIndex].text;
-  log(
-    `Selected option for key ${key}: index ${selectedIndex}, desc ${selectedDesc}`,
-    'debug',
-    'valueChange'
-  );
-  // Release focus (review): a closed select that keeps focus would park
-  // every subsequent repaint (#131 defer guard) until the user happens to
-  // click elsewhere — the post-change refresh and gang-sibling updates
-  // must paint. Safe ordering: the blur-flush replays one tick later and
-  // re-checks the parked slot, and the change's discard listener (runs
-  // synchronously after this handler) clears it first — no stale replay.
+  log(`Selected ${key}: index ${selectedIndex}, desc ${selectedDesc}`, 'debug', 'valueChange');
+  // Release focus so the #131 defer guard does not park subsequent repaints.
   e.target.blur();
-  // No loading dim for a program select (regression fix): it only moves the
-  // highlight and confirms with a VALUE dump, but hideLoading fires only on
-  // OBJECTINFO/screen waves (#3) — so the dim would never lift. The pick is
-  // instant via the optimistic repaint below; the dim is for the menu
-  // refetches the bank/other branches do.
+
+  // #138 LIBRARY PATH: the load-menu choosers are PURE LOCAL STAGING — pick
+  // a bank/program like scrolling on the hardware (manual p.21), sending
+  // NOTHING to the device. Options come from the library, the selection is
+  // explicit local state, so a synchronous repaint shows it instantly and
+  // every async repaint is idempotent. The device is touched only by the
+  // explicit '<- load program in A/B' TRG (handleParamClick -> loadProgram).
+  if (isLoadMenuActive() && hasLibrary() && isLoadMenuChooser({ key })) {
+    if (key === KEY.BANK_SELECT) selectBank(parseInt(selectedIndex, 10));
+    else selectProgram(parseInt(selectedIndex, 10));
+    renderScreen(appState.currentSubs, appState.lastAscii);
+    return;
+  }
+
+  // GENERIC PATH (params, gangs, and the load menu when UNSYNCED): the
+  // dump-driven model with the optimistic value cache. PROGRAM_SELECT shows
+  // no loading dim (it only confirms with a value dump, which never clears
+  // the dim — #3); everything else does.
   if (key !== KEY.PROGRAM_SELECT) showLoading();
   sendValuePut(key, selectedIndex);
-  // Optimistic cache in the DEVICE's value shape: puts are parsed decimal
-  // but values/echoes report the index in HEX (probed live,
-  // logs/probe-bank-radix.mjs) — and renderScreen decodes the first token
-  // with parseInt(_, 16). Caching the decimal index mis-selected options
-  // >= 10 on every repaint until the echo corrected it.
+  // Optimistic cache in the device's value shape: puts are parsed decimal
+  // but values/echoes report the index in HEX (probed live), and the render
+  // decodes the first token with parseInt(_, 16).
   const optimisticValue = `${parseInt(selectedIndex, 10).toString(16)} ${selectedDesc}`;
   setState(
     { currentValues: { ...appState.currentValues, [key]: optimisticValue } },
     'renderer:select-change-value-cache'
-  ); // Removed immediate renderScreen to avoid old subs with new value
+  );
   setTimeout(() => {
     if (key === KEY.BANK_SELECT) {
-      // Bank scroll: the ONLY node whose options change is the load menu
-      // (both of its SETs re-list for the new bank). The generic
-      // updateScreen path refetches EVERY child of the staled program
-      // subtree — measured live at 13.3s before the program list updated
-      // (#138). One targeted dump is a single wave; the R7 child-arrival
-      // repaint (or the progressive paint, if the load menu IS the current
-      // key) updates the dropdowns the moment it lands.
-      // Prune the load menu's STALE cached values (review blocker): this
-      // branch skips updateScreen's full currentValues clear, and a stale
-      // cache entry shadows the fresh dump's value in the render
-      // precedence (currentValues[key] || s.value) — the program dropdown
-      // would keep the OLD bank's selection and never self-correct.
-      // The BANK key itself is deliberately KEPT: it holds the user's
-      // just-made choice (optimistic hex cache above, confirmed by the
-      // echo) — pruning it made the dropdown visibly SNAP BACK to the old
-      // bank for the ~5s dump transfer, which the maintainer read as the
-      // selection not taking at all (live-reproduced).
+      // Unsynced bank scroll: one targeted load-menu dump (not the whole
+      // staled subtree — #138). Prune the stale program value so the old
+      // bank's list cannot shadow the fresh dump; keep the bank value (the
+      // user's just-made choice).
       const pruned = { ...appState.currentValues };
       delete pruned[KEY.PROGRAM_SELECT];
       delete pruned[KEY.FAVORITES];
       setState({ currentValues: pruned }, 'renderer:bank-change-prune');
-      // Wipe-proof copy of the choice (#141 review): currentValues can be
-      // cleared mid-transfer by any updateScreen; programSelectView falls
-      // back to this until the load-menu dump converges.
-      chosenBankIdx = parseInt(selectedIndex, 10);
       sendObjectInfoDump(KEY.FAVORITES);
       sendValueDump(KEY.FAVORITES);
-      // Paint NOW (#141, live finding): puts do not join waves, so without
-      // an explicit repaint nothing paints until the targeted dump drains
-      // (~4-5s) — the program field's memo (revisited bank, instant) or
-      // loading line (unseen bank) must show immediately.
       renderScreen(appState.currentSubs, appState.lastAscii);
     } else if (key === KEY.PROGRAM_SELECT) {
-      // Choosing a program only moves the highlight (no load now — the
-      // auto-load was removed). It does NOT change the menu, so skip the
-      // full updateScreen refetch (the "syncing with the system" lag the
-      // maintainer saw): the optimistic hex cache already shows the pick,
-      // so repaint immediately and just confirm the value on the wire.
+      // Unsynced program pick: lightweight optimistic repaint + value
+      // confirm (no full refetch).
       renderScreen(appState.currentSubs, appState.lastAscii);
       sendValueDump(KEY.PROGRAM_SELECT);
     } else {
@@ -242,24 +228,7 @@ const handleSelectChange = (e) => {
       sendSysEx(CMD.GET_SCREEN, []);
       log('Triggered bitmap update after value change.', 'debug', 'bitmap');
     }
-    setTimeout(() => {
-      const newValue = appState.currentValues[key];
-      if (newValue && newValue.includes(selectedDesc)) {
-        log(`Value update successful for key ${key}: ${newValue}`, 'debug', 'valueChange');
-      } else {
-        log(
-          `Value update failed for key ${key}. Expected desc: ${selectedDesc}, got: ${newValue}`,
-          'debug',
-          'valueChange'
-        );
-      }
-    }, TIMING.VALUE_DUMP_WAIT_MS); // Wait for VALUE_DUMP to arrive
-    // NOTE: choosing a program from the dropdown only HIGHLIGHTS it (sets
-    // the device's selected slot) — it does NOT load it. Loading is the
-    // explicit '<- load program in A/B' TRG (handleParamClick), matching
-    // the hardware: scroll picks, SELECT/<load>/ENT applies (manual p.21,
-    // maintainer request). The old auto-load fired the trigger here.
-  }, TIMING.MIDI_SETTLE_MS); // Delay to allow MIDI update
+  }, TIMING.MIDI_SETTLE_MS);
 };
 
 /**
@@ -369,25 +338,38 @@ const handleParamClick = (e) => {
           },
         });
       } else if (sub.type === 'TRG') {
-        showLoading();
-        if (key === KEY.LOAD_TRIGGER_A || key === KEY.LOAD_TRIGGER_B) {
-          log('Started loading preset.', 'info', 'general');
-        }
-        sendValuePut(key, '1');
-        log(`Triggered TRG for key ${key}: ${sub.statement}`, 'info', 'general');
-        renderScreen(appState.currentSubs, appState.lastAscii); // Immediate local update
-        setTimeout(() => {
+        const isLoadTrigger = key === KEY.LOAD_TRIGGER_A || key === KEY.LOAD_TRIGGER_B;
+        const onLoadDone = () => {
           updateScreen();
-          if (key === KEY.LOAD_TRIGGER_A || key === KEY.LOAD_TRIGGER_B) {
-            // Fetch root to update preset names after loading a new program
-            sendObjectInfoDump(KEY.ROOT);
+          if (isLoadTrigger) {
+            sendObjectInfoDump(KEY.ROOT); // refresh DSP names after a load
             log('Fetched root after preset load.', 'debug', 'general');
           }
           if (appState.updateBitmapOnChange) {
             sendSysEx(CMD.GET_SCREEN, []);
             log('Triggered bitmap update after TRG.', 'debug', 'bitmap');
           }
-        }, TIMING.DEVICE_LOAD_MS); // Increased delay for device to process load
+        };
+        // #138 LIBRARY PATH: the load triggers apply the STAGED preset-loader
+        // selection via loadProgram (bank -> program -> trigger, with the
+        // optimistic top-bar name). This is the ONLY device-touching action
+        // for the library load menu.
+        if (isLoadTrigger && isLoadMenuActive() && hasLibrary()) {
+          const target = selectionTarget();
+          if (target) {
+            showLoading();
+            log('Started loading preset (staged).', 'info', 'general');
+            loadProgram(target, onLoadDone);
+            return;
+          }
+          // No resolvable staged selection: fall through to the raw trigger.
+        }
+        showLoading();
+        if (isLoadTrigger) log('Started loading preset.', 'info', 'general');
+        sendValuePut(key, '1');
+        log(`Triggered TRG for key ${key}: ${sub.statement}`, 'info', 'general');
+        renderScreen(appState.currentSubs, appState.lastAscii); // Immediate local update
+        setTimeout(onLoadDone, TIMING.DEVICE_LOAD_MS);
       } else if (sub.type === 'STR') {
         // String-edit (R8): free-text put, confirmed live (the device echoes
         // the new value as a 0x2e). Multi-word strings confirmed on hardware
@@ -698,44 +680,39 @@ function renderGangInline(colSub, depth, paramLines, paramHtmlLines, logParam) {
   }
 }
 
-// Program-select view resolution (#141): the device's load-menu dump
-// carries ONLY the currently-selected bank's program list, so when the
-// user's chosen bank differs from the bank the dump was taken in, the
-// dump's options are the OLD bank's — never show them. Serve the session
-// memo (tree.js) when this bank has been seen, else an honest loading
-// line until the targeted dump lands ("its the fact we keep the old
-// stuff around thats the issue" — maintainer).
-// Returns: {stale:false} = render the dump as usual; {loading:true} =
-// render RENDER.LOADING_PROGRAMS; {options,value} = render the memo.
-//
-// The chosen bank lives in MODULE state, not only the optimistic cache
-// (review): a program pick from the memoized list runs the generic
-// updateScreen refresh, which wipes currentValues wholesale mid-transfer
-// — the cache-only check then fell back to the dump and repainted the
-// old bank's list. Set by the bank-change handler; self-clears when the
-// load-menu dump converges on the chosen bank.
-let chosenBankIdx = null;
-
-/** Clears the chosen-bank module state (tests). */
-export function resetProgramSelectView() {
-  chosenBankIdx = null;
+// Whether a SET sub is one of the load-menu CHOOSERS (#138 redesign).
+function isLoadMenuChooser(s) {
+  return s.key === KEY.BANK_SELECT || s.key === KEY.PROGRAM_SELECT;
 }
 
-function programSelectView(s, siblings) {
-  if (s.key !== KEY.PROGRAM_SELECT) return { stale: false };
-  const bankSub = siblings.find((x) => x.key === KEY.BANK_SELECT);
-  if (!bankSub?.value) return { stale: false };
-  const cachedRaw = appState.currentValues[KEY.BANK_SELECT];
-  const cached = cachedRaw ? parseInt(String(cachedRaw).split(' ')[0], 16) : NaN;
-  const chosen = !isNaN(cached) ? cached : chosenBankIdx;
-  const inDump = parseInt(String(bankSub.value).split(' ')[0], 16);
-  if (chosen === null || isNaN(inDump) || chosen === inDump) {
-    if (chosen !== null && chosen === inDump) chosenBankIdx = null; // converged
-    return { stale: false };
-  }
-  const memo = bankProgramsFor(chosen);
-  if (memo) return { stale: true, options: memo.options, value: memo.value };
-  return { stale: true, loading: true };
+// Render a load-menu bank/program dropdown from the preset-loader's staged
+// selection + the synced library — the SINGLE source of truth (#138). The
+// device's load-menu dump only ever lists the current bank, and reconciling
+// five sources at render time made the dropdowns "swap"; now options come
+// from the library and the selected value from the local staged selection,
+// so async repaints are idempotent. Same <select class="param-select">
+// markup as the generic SET path, spliced into the statement, so it renders
+// inside #lcd. Only reached when isLoadMenuActive() && hasLibrary().
+//
+// Seeds the staged selection once from the live dump (siblings carry the
+// device's current bank/program), then local state wins.
+function renderLoadMenuSelect(s, siblings) {
+  const bankSub = siblings.find((x) => x.key === KEY.BANK_SELECT) || s;
+  const progSub = siblings.find((x) => x.key === KEY.PROGRAM_SELECT) || s;
+  ensureInitialized(
+    parseInt(String(bankSub?.value || '').split(' ')[0], 16),
+    parseInt(String(progSub?.value || '').split(' ')[0], 16)
+  );
+  const sel = getSelection();
+  const options = s.key === KEY.BANK_SELECT ? bankOptions() : programsForBank(sel.bankIdx);
+  const selectedIdx = String(s.key === KEY.BANK_SELECT ? sel.bankIdx : sel.programIdx);
+  let selectHtml = `<select data-key="${s.key}" class="param-select">`;
+  options.forEach((option) => {
+    const isSelected = String(parseInt(option.index, 10)) === selectedIdx;
+    selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${escapeHtml(option.desc)}</option>`;
+  });
+  selectHtml += `</select>`;
+  return escapeHtml(s.statement || '%s').replace(/%(-)?(\d*)s/g, selectHtml);
 }
 
 export function renderScreen(subs, ascii, logParam) {
@@ -937,40 +914,31 @@ export function renderScreen(subs, ascii, logParam) {
         if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
         fullText = formatValue(s.statement, value); // Use updated formatValue with s support
         fullHtml = escapeHtml(fullText); // INF isn't clickable: escape, add no span
+      } else if (s.type === 'SET' && isLoadMenuActive() && hasLibrary() && isLoadMenuChooser(s)) {
+        // #138: the load-menu choosers render from the library-backed
+        // preset-loader (single source of truth) — instant, race-free.
+        fullText = s.statement || '';
+        fullHtml = renderLoadMenuSelect(s, subs.slice(1));
       } else if (s.type === 'SET') {
-        const progView = programSelectView(s, subs.slice(1));
-        if (progView.loading) {
-          // #141: the chosen bank's list is on the wire and unseen — an
-          // honest loading line, never the old bank's options.
-          fullText = RENDER.LOADING_PROGRAMS;
-          fullHtml = fullText;
-        } else {
-          const options = progView.options ?? s.options;
-          // Stale branch: a program the user just picked from the memoized
-          // list (optimistic cache) beats the memo's remembered selection.
-          let value = progView.stale
-            ? appState.currentValues[s.key] || progView.value
-            : appState.currentValues[s.key] || s.value || '';
-          if (!progView.stale && appState.currentValues[s.key] === undefined && !s.value)
-            sendValueDump(s.key, logParam);
-          let displayValue = value;
-          let indexHex = '0';
-          if (value) {
-            indexHex = value.split(' ')[0];
-            displayValue = value.substring(indexHex.length + 1);
-          }
-          const indexDec = parseInt(indexHex, 16).toString(10);
-          fullText = formatValue(s.statement || '', displayValue); // Use formatValue for %-width s
-          let selectHtml = `<select data-key="${s.key}" class="param-select">`;
-          options.forEach((option) => {
-            const isSelected = option.index === indexDec;
-            selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${escapeHtml(option.desc)}</option>`;
-          });
-          selectHtml += `</select>`;
-          // Escape the statement's literal text before splicing in the
-          // select (which is intentional markup).
-          fullHtml = escapeHtml(s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
+        // Generic SET (params, gangs, and the load menu when UNSYNCED):
+        // dump-driven, with the optimistic value cache.
+        let value = appState.currentValues[s.key] || s.value || '';
+        if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
+        let displayValue = value;
+        let indexHex = '0';
+        if (value) {
+          indexHex = value.split(' ')[0];
+          displayValue = value.substring(indexHex.length + 1);
         }
+        const indexDec = parseInt(indexHex, 16).toString(10);
+        fullText = formatValue(s.statement || '', displayValue);
+        let selectHtml = `<select data-key="${s.key}" class="param-select">`;
+        s.options.forEach((option) => {
+          const isSelected = option.index === indexDec;
+          selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${escapeHtml(option.desc)}</option>`;
+        });
+        selectHtml += `</select>`;
+        fullHtml = escapeHtml(s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
       } else if (s.type === 'CON') {
         let meterValue = parseFloat(appState.currentValues[s.key] || s.value) || 0;
         if (isNaN(meterValue)) {
@@ -1095,37 +1063,37 @@ export function renderScreen(subs, ascii, logParam) {
               sendValueDump(cs.key, logParam);
             childFullText = formatValue(cs.statement, value);
             childFullHtml = escapeHtml(childFullText);
+          } else if (
+            cs.type === 'SET' &&
+            isLoadMenuActive() &&
+            hasLibrary() &&
+            isLoadMenuChooser(cs)
+          ) {
+            // #138: the embedded load-menu choosers (the common case — the
+            // load menu embeds under the program page) render from the
+            // library-backed preset-loader. childSubs are the load menu's
+            // own children, so they carry BANK_SELECT/PROGRAM_SELECT.
+            childFullText = cs.statement || '';
+            childFullHtml = renderLoadMenuSelect(cs, childSubs.slice(1));
           } else if (cs.type === 'SET') {
-            const progView = programSelectView(cs, childSubs.slice(1));
-            if (progView.loading) {
-              // #141: honest loading line — never the old bank's options.
-              childFullText = RENDER.LOADING_PROGRAMS;
-              childFullHtml = childFullText;
-            } else {
-              const options = progView.options ?? cs.options;
-              // A just-picked program (optimistic cache) beats the memo's
-              // remembered selection — same rule as the top-level branch.
-              let value = progView.stale
-                ? appState.currentValues[cs.key] || progView.value
-                : appState.currentValues[cs.key] || cs.value || '';
-              if (!progView.stale && appState.currentValues[cs.key] === undefined && !cs.value)
-                sendValueDump(cs.key, logParam);
-              let displayValue = value;
-              let indexHex = '0';
-              if (value) {
-                indexHex = value.split(' ')[0];
-                displayValue = value.substring(indexHex.length + 1);
-              }
-              const indexDec = parseInt(indexHex, 16).toString(10);
-              childFullText = formatValue(cs.statement || '', displayValue);
-              let selectHtml = `<select data-key="${cs.key}" class="param-select">`;
-              options.forEach((option) => {
-                const isSelected = option.index === indexDec;
-                selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${escapeHtml(option.desc)}</option>`;
-              });
-              selectHtml += `</select>`;
-              childFullHtml = escapeHtml(cs.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
+            let value = appState.currentValues[cs.key] || cs.value || '';
+            if (appState.currentValues[cs.key] === undefined && !cs.value)
+              sendValueDump(cs.key, logParam);
+            let displayValue = value;
+            let indexHex = '0';
+            if (value) {
+              indexHex = value.split(' ')[0];
+              displayValue = value.substring(indexHex.length + 1);
             }
+            const indexDec = parseInt(indexHex, 16).toString(10);
+            childFullText = formatValue(cs.statement || '', displayValue);
+            let selectHtml = `<select data-key="${cs.key}" class="param-select">`;
+            cs.options.forEach((option) => {
+              const isSelected = option.index === indexDec;
+              selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${escapeHtml(option.desc)}</option>`;
+            });
+            selectHtml += `</select>`;
+            childFullHtml = escapeHtml(cs.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
           } else if (cs.type === 'CON') {
             let meterValue = parseFloat(appState.currentValues[cs.key] || cs.value) || 0;
             if (isNaN(meterValue)) {
@@ -1177,6 +1145,12 @@ export function renderScreen(subs, ascii, logParam) {
         });
         break; // Only embed the first local COL
       }
+    }
+    // #138: unsynced load menu shows only the current bank's programs (the
+    // device lists one bank at a time) — hint that a sync unlocks browsing.
+    if (isLoadMenuActive() && !hasLibrary() && !prePainting) {
+      paramLines.push(RENDER.SYNC_TO_BROWSE);
+      paramHtmlLines.push(escapeHtml(RENDER.SYNC_TO_BROWSE));
     }
     displayLines = displayLines.concat(paramLines);
     // Filter out the embedded local COL from softkeys

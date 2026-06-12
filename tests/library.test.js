@@ -34,6 +34,9 @@ import {
   searchLibrary,
   syncLibrary,
   loadSearchHit,
+  loadProgram,
+  libraryBankOptions,
+  libraryProgramsForBank,
   canSearch,
   libraryProgramCount,
 } from '../src/library.js';
@@ -188,17 +191,61 @@ describe('syncLibrary', () => {
   });
 });
 
-describe('loadSearchHit', () => {
-  test('puts bank, program, then the active-DSP load trigger', async () => {
+describe('library load-menu options (#138)', () => {
+  beforeEach(() => setLibrary(sampleLibrary));
+
+  test('libraryBankOptions yields SET-option shape with decimal-string index', () => {
+    expect(libraryBankOptions()).toEqual([
+      { index: '0', desc: '0 Favorites' },
+      { index: '50', desc: '50 Reverbs - Unusual' },
+    ]);
+  });
+
+  test('libraryProgramsForBank returns the bank programs, or [] for an unknown bank', () => {
+    expect(libraryProgramsForBank(50)).toEqual([{ index: '12', desc: '12 Black Hole' }]);
+    expect(libraryProgramsForBank(99)).toEqual([]);
+  });
+
+  test('options are empty with no library', () => {
+    setLibrary(null);
+    expect(libraryBankOptions()).toEqual([]);
+    expect(libraryProgramsForBank(0)).toEqual([]);
+  });
+});
+
+describe('loadProgram / loadSearchHit', () => {
+  test('puts bank, program, then the active-DSP load trigger + optimistic name', async () => {
     jest.clearAllMocks();
     appState.presetKey = '401000b'; // DSP A active
+    appState.dspAName = 'Old';
     const done = jest.fn();
-    await loadSearchHit({ bankIdx: '50', programIdx: '12', programName: '12 Black Hole' }, done);
+    await loadProgram({ bankIdx: '50', programIdx: '12', programName: '12 Black Hole' }, done);
+    // Optimistic top-bar name (index token stripped), applied before the puts.
+    expect(appState.dspAName).toBe('Black Hole');
     expect(sendValuePut.mock.calls.map((c) => c.join(':'))).toEqual([
       '10020012:50',
       '10020011:12',
       '1002001c:1', // LOAD_TRIGGER_A
     ]);
     expect(done).toHaveBeenCalled();
+  });
+
+  test('targets DSP B when B is the active preset', async () => {
+    jest.clearAllMocks();
+    appState.presetKey = '801000b'; // DSP B active
+    await loadProgram({ bankIdx: '0', programIdx: '0', programName: '0 X' });
+    expect(appState.dspBName).toBe('X');
+    expect(sendValuePut.mock.calls.map((c) => c.join(':')).pop()).toBe('1002001d:1'); // LOAD_TRIGGER_B
+  });
+
+  test('loadSearchHit delegates to loadProgram', async () => {
+    jest.clearAllMocks();
+    appState.presetKey = '401000b';
+    await loadSearchHit({ bankIdx: '50', programIdx: '12', programName: '12 Black Hole' });
+    expect(sendValuePut.mock.calls.map((c) => c.join(':'))).toEqual([
+      '10020012:50',
+      '10020011:12',
+      '1002001c:1',
+    ]);
   });
 });

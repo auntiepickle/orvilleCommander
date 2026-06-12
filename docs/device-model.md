@@ -384,6 +384,71 @@ observe), and otherwise tracks it as app-side view state.
 The factory default **device ID is 1** `[D]`; multiple units share a chain via
 distinct ids; id 0 = broadcast (§1).
 
+## 8b. Remote control of parameters (MIDI modulation) `[V]`
+
+Probed live 2026-06-12 (`logs/probe-midi-*.mjs`, screenshots `logs/mod-*.png`).
+The Orville natively maps any source (MIDI CC, pedal, internal) to any parameter;
+mappings live in the preset and run in the DSP. The whole system is reachable as
+ordinary userobjects — no special command, no keypress automation for the config.
+
+**Two layers.**
+
+1. **Global external controllers** (`10010100`, SETUP -> ext controllers): 8
+   reusable `assign` slots + 2 `trig` slots. Each (e.g. assign 1 = `10010110`) has
+   children `mode` (`…111`), `channel` (`…112`), a sub (`…113`), `monitor` CON
+   (`…114`), `Capture Midi` TRG (`…115`). These define named sources used by the
+   per-parameter `assign 1-8` modes.
+
+2. **Per-parameter modulation** — a SINGLE context-bound editing surface under
+   `remote control` (`10030400`), child `10030401` = `<param> setup`. SELECT-hold
+   on a highlighted parameter **binds** the surface to it (confirmed: the same
+   keys read `level setup` then `t_delay setup` after binding each). Fields (fixed
+   keys, regardless of bound param):
+
+   | key | obj | meaning |
+   |-----|-----|---------|
+   | `10030402` | SET `mode` | the source (set by index; see table) |
+   | `10030403` | SET | sub: `channel` (base+0..15) for a MIDI source; the assign's state for an `assign N` mode; empty for off/low/mid/high |
+   | `10030404` | SET | second sub (controller #, for sources that need it) |
+   | `10030405` | CON `monitor` | live source value (%) |
+   | `10030406` | TRG `Capture Midi` | one-click learn |
+   | `10030408` | NUM `range` (tag `scale`) | modulation depth (±32767) |
+   | `10030409` | SET `type` | `absolute` / `unipolar` / `bipolar` |
+   | `50001` | NUM | the bound parameter's value mirror |
+
+**`mode` index -> source** (decimal index via `VALUE_PUT`; device echoes hex idx
++ name; the SET's own option list is DEGENERATE — it repeats the current value, so
+set by index, do not read options):
+
+```
+0 off · 1 low · 2 mid · 3 high · 4-11 assign 1-8 · 12-13 trig 1-2 ·
+14-15 pedal 1-2 · 16-21 tip 1/ring 1/tip&ring 1/tip 2/ring 2/tip&ring 2 ·
+22 mod wheel · 23 breath con · 24 foot con · 25 damper · 26 portamento ·
+27 sostenuto · 28 soft · 29 hold 2 · 30 volume · 31 balance · 32 pan ·
+33 expression · 34-40 general 1-7 · … (52 total; named MIDI CCs continue)
+```
+
+The named MIDI sources are the standard CCs (mod wheel = CC1, breath = CC2,
+foot = CC4, volume = CC7, pan = CC10, expression = CC11, general 1-8 = CC16-23).
+
+**Writing a mapping is clean and deterministic** (`probe-midi-confirm.mjs`):
+`VALUE_PUT(10030402, 3)` over SysEx flipped the mode `low -> high` and the bound
+parameter moved in response — no keypress needed for the config. The one
+UI-driven step is **binding**: drive the device cursor onto the target parameter
+(`program`->`parameter`->`CURSOR-DOWN`×n, masks in `system_commands.txt`) then
+SELECT-hold, verified by the screen title `<param> setup`. After binding, all
+config is `VALUE_PUT` to the fixed keys above.
+
+**`sequence out`** (`10010016`, options off/old/new): set to `new`, the unit
+EMITS the key of any field changed — `F0 1C 70 <dev> 3C <ascii-hex key> 20
+<ascii value> F7`. This is how the `1003…` keys were discovered (they are not
+derivable from the parameter's `4…` key) and is usable for key discovery + live
+mirroring.
+
+**Inbound MIDI** (live-confirmed): a CC#0 sets the bank; a Program Change loads
+that slot from the current bank of the target DSP (`MonoDelay` -> `1x4 Delay` on
+PC #2). The app can also emit CC/PC from its output to drive/test mappings.
+
 ## 9. Behavioral contract & quirks
 
 - **PUTs are echoed** `[V]` (corrected) — a `VALUE_PUT` triggers a `VALUE_DUMP`

@@ -81,11 +81,15 @@ Two enablers (both from the internet research):
   `VALUE_PUT`; the device echoes the real name (`3 high`), so the app can
   enumerate the index->source map once (PUT 0..N, read echoes).
 
-**Open detail (small):** map how each parameter's setup-page key is reached —
-`10030400` showed one child (`level setup`) for the *current* param, so confirm
-whether every param has a fixed setup key (fully direct) or the param must be
-selected first to populate `10030400` (a single OBJECTINFO navigate, still no
-keypress edit). Use sequence-out to enumerate the keys across a preset's params.
+**Binding model (RESOLVED, 2026-06-12):** `10030401` is a SINGLE context-bound
+editing surface, not per-param keys (`10030400` has one child). SELECT-hold on a
+parameter binds it — confirmed it rebinds `level setup` -> `t_delay setup` with
+the same field keys. So mapping a parameter is: **bind** (drive the device cursor
+to the param — `program`->`parameter`->`CURSOR-DOWN`×n then SELECT-hold, verified
+by the screen title `<param> setup`) then **configure** by clean `VALUE_PUT` to
+the fixed keys (`10030402` mode, `10030408` range, `10030409` type, `10030406`
+Capture). Bind is one short verified keypress sequence; config is pure object
+writes. Full `mode` index->source table + field keys: `device-model.md` §8b.
 
 **Runtime is pure device, zero app latency** — the app only writes config; the
 Orville does MIDI -> parameter in its DSP, persisted in the preset.

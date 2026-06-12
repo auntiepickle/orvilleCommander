@@ -45,6 +45,7 @@ import {
   sendKeypress,
   addSysexListener,
   inboundFrameError,
+  setBackupCapture,
 } from '../src/midi.js';
 import { parseResponse } from '../src/parser.js';
 import { on } from '../src/events.js';
@@ -174,6 +175,37 @@ describe('midi.js per-wave counter and watchdog (7c)', () => {
     jest.advanceTimersByTime(1); // t=1500: the ORIGINAL idle deadline fires
     expect(received).toHaveLength(1);
     expect(received[0]).toMatchObject({ reason: 'watchdog' });
+  });
+
+  test('backup capture: a dump frame routes to onFrame; object-protocol frames do not (#147)', () => {
+    let handler;
+    const input = {
+      addListener: (type, fn) => {
+        handler = fn;
+      },
+      removeListener: jest.fn(),
+    };
+    setMidiPorts({ sendSysex: jest.fn() }, input, 0);
+    addSysexListener();
+
+    const onProgress = jest.fn();
+    const onFrame = jest.fn();
+    setBackupCapture({ onProgress, onFrame });
+
+    // A sequence-out (object protocol) frame: NOT a dump — must not be captured,
+    // must not arm progress (else it flips the engine's slow-start watchdog).
+    handler({ data: [0xf0, 0x1c, 0x70, 0x00, 0x3c, 0x31, 0x30, 0xf7] });
+    expect(onFrame).not.toHaveBeenCalled();
+    expect(onProgress).not.toHaveBeenCalled();
+
+    // A dump frame with the Orville internal opcode 0x38 (not in the object set):
+    // captured + progress reported, regardless of the specific opcode.
+    const dump = [0xf0, 0x1c, 0x70, 0x00, 0x38, 0x00, 0x00, 0x00, 0x00, 0xf7];
+    handler({ data: dump });
+    expect(onProgress).toHaveBeenCalledWith(dump.length);
+    expect(onFrame).toHaveBeenCalledWith(dump);
+
+    setBackupCapture(null);
   });
 
   test('isWaveOpen tracks outstanding across send/receive/watchdog (#107 poll gate)', () => {

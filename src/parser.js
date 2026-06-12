@@ -18,6 +18,19 @@ import { denibble } from './bitmap.js';
 import { emit } from './events.js';
 import { splitLine } from './sysex-split.js';
 
+// Bytes -> string without spreading the whole array into String.fromCharCode:
+// a `String.fromCharCode(...bytes)` spread overflows the call stack on very
+// large frames (a ~1 MB backup dump that bypasses the capture hook hit this).
+// Chunked apply() stays well under the argument-count limit (#147).
+function bytesToString(bytes) {
+  const CHUNK = 8192;
+  let s = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    s += String.fromCharCode.apply(null, bytes.slice(i, i + CHUNK));
+  }
+  return s;
+}
+
 // Keys the gang fan-out (#132) has already requested for the CURRENT menu
 // visit. Structural guard (review): the gang fan-out is the first
 // response->request chain in the parser, and a malformed dump graph (gang
@@ -35,7 +48,7 @@ export function parseResponse(data) {
       setState({ deviceId: data[3] }, 'parser:device-id-detect');
       log(`Detected device ID: ${appState.deviceId}`, 'info', 'general');
     }
-    const ascii = String.fromCharCode(...data.slice(SYSEX.FRAME_PREFIX_LEN, data.length - 1))
+    const ascii = bytesToString(data.slice(SYSEX.FRAME_PREFIX_LEN, data.length - 1))
       .replace(/\0+$/, '')
       .trim();
     if (data[3] === appState.deviceId && data[4] === CMD.OBJECTINFO) {

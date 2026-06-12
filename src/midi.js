@@ -291,6 +291,28 @@ export function setMidiPorts(output, input, devId) {
   setState({ deviceId: devId }, 'midi:set-ports');
 }
 
+// --- Backup/restore capture (#147) ---------------------------------------
+// A dump is a large frame that is NOT the object protocol. When a backup is
+// armed, the inbound handler routes any non-object-protocol frame to the capture
+// callback (skipping parseResponse) and reports the in-progress byte count for a
+// multi-minute dump's progress. Capturing by EXCLUSION (not an opcode allowlist)
+// is deliberate: the Orville's dump opcodes differ from Tech Note 34 (the full
+// internal dump is 0x38, not 0x11 — live-verified), so an allowlist would miss
+// them. During a backup the app pauses polling and doesn't navigate, so the only
+// inbound frames are the dump itself plus OK/ERROR acks.
+const BACKUP_OBJECT_PROTOCOL = new Set([
+  CMD.OBJECTINFO,
+  CMD.VALUE_DUMP,
+  CMD.SCREEN_BITMAP,
+  CMD.SEQUENCE_OUT,
+]);
+let backupCapture = null; // { onProgress(bytes), onFrame(frameBytes) } | null
+
+/** Arms (or disarms, with null) capture of backup dump frames (#147). */
+export function setBackupCapture(cap) {
+  backupCapture = cap;
+}
+
 /**
  * Adds a SysEx event listener to the selected MIDI input.
  * Parses incoming SysEx messages and categorizes them (e.g., screenDump for bitmap data).
@@ -339,9 +361,36 @@ export function addSysexListener() {
     if (!isSequenceOut) noteLinkActivity();
     if (data[0] === SYSEX.START) sysexBuffer = data;
     else sysexBuffer = sysexBuffer.concat(data);
+    // #147: while a backup is armed, report the growing DUMP frame's size so the
+    // UI can show progress through a multi-minute transfer. Guard it with the same
+    // manufacturer + non-object-protocol check as the capture routing below: a
+    // stray SEQUENCE_OUT/foreign frame must NOT arm the engine's `started` flag,
+    // or it would flip the slow-start watchdog to the short stall window and abort
+    // a legitimately slow internal dump (review).
+    if (
+      backupCapture &&
+      sysexBuffer[1] === SYSEX.MANUFACTURER[0] &&
+      sysexBuffer[2] === SYSEX.MANUFACTURER[1] &&
+      !BACKUP_OBJECT_PROTOCOL.has(sysexBuffer[4])
+    ) {
+      backupCapture.onProgress(sysexBuffer.length);
+    }
     // Flush only a properly framed message (starts F0, ends F7). The F0 guard
     // discards a stray continuation packet that arrives with no header.
     if (sysexBuffer[0] === SYSEX.START && sysexBuffer[sysexBuffer.length - 1] === SYSEX.END) {
+      // #147: a backup dump frame is not the object protocol — hand the raw
+      // frame to the capture callback and skip parseResponse entirely.
+      if (
+        backupCapture &&
+        sysexBuffer[1] === SYSEX.MANUFACTURER[0] &&
+        sysexBuffer[2] === SYSEX.MANUFACTURER[1] &&
+        !BACKUP_OBJECT_PROTOCOL.has(sysexBuffer[4])
+      ) {
+        const frame = sysexBuffer;
+        sysexBuffer = [];
+        backupCapture.onFrame(frame);
+        return;
+      }
       // #47: reject malformed frames at the boundary with a logged reason
       // instead of letting them half-parse into state. A rejected frame
       // never reaches notifyResponse; if it was the answer to a counted

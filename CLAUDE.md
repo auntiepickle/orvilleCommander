@@ -35,6 +35,8 @@ index.html
       ├─ preset-browser.js  top-level modal: browse/search the library, preview a program on the idle DSP (remember-and-restore), load to A/B (#153/#135)
       ├─ midi-map.js        DOM-free device-native modulation engine: assign controllers, per-param source/range/type, bindParam (#146)
       ├─ midi-map-ui.js     MIDI controllers panel + per-parameter mapping card modals (#146)
+      ├─ backup.js          DOM-free backup/restore engine: Tech Note 34 want/dump opcodes, capture + checksum, restore-by-replay (#147)
+      ├─ backup-ui.js       Backup & Restore modal: kind picker, progress, .syx download/upload, restore confirm (#147)
       ├─ navigation.js      toggleDspKey
       ├─ tree.js            persistent device object tree: recordDump, deriveKeyStack, labels (T1b/#105)
       ├─ eager-loader.js    background preset-subtree structure warm-up, one request in flight (#106)

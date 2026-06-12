@@ -58,6 +58,7 @@ Every message: `F0 1C 70 <deviceId> <cmd> <payload…> F7` (Tech Note 34).
 | `0x2e` | in  | Value dump        | `"<key> <value…>"` (see §6)               |
 | `0x18` | out | Request screen    | (none)                                   |
 | `0x17` | in  | Screen bitmap     | nibbled framebuffer (see §7)              |
+| `0x3c` | in  | Sequence-out echo | unsolicited `<ascii-hex key> 20 <value>` per changed field when `sequence out = new` (see §8b) |
 
 `0x01`, `0x17`, `0x18` are documented in Tech Note 34 `[D]`. **`0x2d`/`0x2e`/
 `0x31`/`0x32` are NOT** — they're the reverse-engineered object protocol `[V]`.
@@ -345,6 +346,17 @@ selector went `' 12 Black Hole'` → `' 12 Auto Tape Flanger'` → back). So the
 both *controls* the active DSP (drive A/B) and can *detect* it (toggle and
 observe), and otherwise tracks it as app-side view state.
 
+**Auditioning on the idle engine** `[V/D]`: because A and B run independently and
+the A/B toggle only changes which one is *displayed*, loading a program onto the
+**non-displayed** engine (load trigger `1002001c`/`1002001d` for A/B) does not
+disturb the audio on the displayed one — a program can be auditioned on the
+engine the user isn't watching, then the original restored by re-loading it. Each
+load (and each restore) is a full preset compile/load (~2 s DSP rebuild — Tech
+Note 34's "encode, compile, load … takes time"), so it is a deliberate action,
+not free. This is the device behavior the app's program-preview feature (#135,
+`preset-browser.js`) builds on; the remember-and-restore bookkeeping itself is
+app state.
+
 ### Banks & program loading `[D]` (Orville User Manual)
 
 - **Banks & slots:** up to **100 internal banks**, each with **128 program
@@ -412,9 +424,9 @@ ordinary userobjects — no special command, no keypress automation for the conf
    | `10030404` | SET | second sub (controller #, for sources that need it) |
    | `10030405` | CON `monitor` | live source value (%) |
    | `10030406` | TRG `Capture Midi` | one-click learn |
-   | `10030408` | NUM `range` (tag `scale`) | modulation depth (±32767) |
+   | `10030408` | NUM `range` (tag `scale`) | modulation depth, **in the bound parameter's own display units** (e.g. dB/ms/%), ±32767. The amount the parameter moves across a full controller sweep: `span` (below) covers the parameter's whole range, `2·span` is twice as sensitive (hits both ends at mid-travel), negative inverts. |
    | `10030409` | SET `type` | `absolute` / `unipolar` / `bipolar` |
-   | `50001` | NUM | the bound parameter's value mirror (observed in the bound `10030401` dump; key is the param's short form) |
+   | *(param's own key, e.g.* `50001`*)* | NUM | the bound parameter's value mirror. Its key is the param's short form, so identify it structurally — the surface's NUM that is **not** `range` (`midi-map.js readParamSetup`: `type==='NUM' && key!==MOD.RANGE`). It carries the parameter's own display unit + full span (`min`/`max`/`statement`), the reference that makes a bare `range` value interpretable. |
 
 **`mode` index -> source** (decimal index via `VALUE_PUT`; device echoes hex idx
 + name; the SET's own option list is DEGENERATE — it repeats the current value, so
@@ -467,11 +479,16 @@ tree (`paramCoords`), so it works for any program — not the legacy flat
 `CURSOR-DOWN×row` model, which only reached block 0 page 0 and mis-bound every
 sub-block param (it walked block 0 and hit whatever sat at that row).
 
-**`sequence out`** (`10010016`, options off/old/new): set to `new`, the unit
-EMITS the key of any field changed — `F0 1C 70 <dev> 3C <ascii-hex key> 20
-<ascii value> F7`. This is how the `1003…` keys were discovered (they are not
-derivable from the parameter's `4…` key) and is usable for key discovery + live
-mirroring.
+**`sequence out`** (`10010016`, options off/old/new = SET indices 0/1/2): set to
+`new` (index 2), the unit EMITS the key of any field changed —
+`F0 1C 70 <dev> 3C <ascii-hex key> 20 <ascii value> F7` (command `0x3C`, §2). The
+app sets it to `new` once at boot (`midi-map.js enableSequenceOut`). This is how
+the `1003…` keys were discovered (they are not derivable from the parameter's
+`4…` key) and is usable for key discovery + live mirroring. Note for the wave
+model: a `0x3C` emit is unsolicited — it is not a counted response and the
+inbound handler excludes it from the wave-watchdog rearm, so a stream of emits
+(e.g. a tempo-synced value under incoming MIDI clock) can't starve meter polling
+(see [`protocol.md`](protocol.md) §Sequence-out / §Request-response tracking).
 
 **Inbound MIDI** (live-confirmed): a CC#0 sets the bank; a Program Change loads
 that slot from the current bank of the target DSP (`MonoDelay` -> `1x4 Delay` on

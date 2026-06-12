@@ -16,10 +16,15 @@ This project emulates the Orville's LCD screen and controls in a browser, using 
 
 - **Core Features**:
   - MIDI connection and SysEx handling.
-  - Screen rendering (text-based with params, softkeys, and breadcrumbs).
-  - Virtual controls (buttons, keypad).
-  - State management for navigation (key stack, values).
-  - Debugging tools (logs, polling, config saving).
+  - Screen rendering (text-based with params, softkeys, and breadcrumbs) plus an optional pixel-accurate bitmap canvas.
+  - Virtual rack-unit faceplate with a phosphor LCD and a tokenized theme engine (theme presets + per-token color overrides, persisted).
+  - Virtual controls (buttons, keypad, data knob) and in-glass inline parameter editing (no browser prompt/alert dialogs).
+  - State management for navigation (key stack, values) backed by a persistent device object tree.
+  - Synced preset library with name search and a per-program Favorites list, with an on-LCD sync progress dialog.
+  - Preset browser modal: search, preview a program on the idle DSP (auto-restored on dismiss), and load to A/B.
+  - Device-native MIDI mapping: assign MIDI controllers to any parameter (source/range/type) running in the DSP itself, with persisted mapped-param badges.
+  - Demo Mode: a captured device tree for offline, hardware-free browsing of the full UI.
+  - Debugging tools (logs, meter polling, config saving, debug-file processing).
 
 - **Tech Stack**:
   - JavaScript (ES modules).
@@ -83,13 +88,31 @@ graph TD
 
 * bitmap.js / framebuffer.js: Decode the `0x17` screen dump and paint the capture canvas. Exports: renderBitmap, computePixels.
 
-* controls.js: Maps buttons to keypress masks; sets up event listeners. Exports: setupKeypressControls.
+* controls.js: Maps buttons to keypress masks; sets up event listeners and the meter-poll tick. Exports: setupKeypressControls, meterPollTick.
+
+* library.js: Synced preset library (full bank scan + name search) and the device-touching load path (loadProgram / loadProgramToDsp). Backs the load menu, preset browser, and preview.
+
+* preset-loader.js: DOM-free single source of truth for the load-menu dropdowns — local staging backed by the library (#138).
+
+* preset-browser.js: Top-level modal to browse/search the library, preview a program on the idle DSP (remember-and-restore), and load to A/B (#153/#135).
+
+* sync-dialog.js: Library-sync progress overlay drawn on the LCD (defrag-style bank map).
+
+* midi-map.js / midi-map-ui.js: Device-native MIDI mapping — assign controllers, per-parameter source/range/type, tree-derived parameter binding, and the two themed modals (#146).
+
+* theme.js: Tokenized theme engine — presets + per-token overrides on `:root`, with the service-panel editor.
+
+* demo.js / demo-data.js: Demo Mode — a captured device tree (an ES module) served through the real midi.js port contract for offline use.
+
+* sysex-commands.js / constants.js: Protocol constants (CMD / KEY / MOD / MOD_SOURCES) and named app constants (timing, cache prefixes, MIDI_MAP grid, storage key) — the no-magic-numbers home.
+
+* logger.js: Gated `log()` that owns its own log level and per-category visibility.
 
 * main.js: Bootstraps app, connects MIDI, adds listeners. Exports: showLoading, hideLoading.
 
-* config.js: Loads/saves config (ports, logs). Exports: loadConfig, saveConfig.
+* config.js: Loads/saves config to `localStorage.midiConfig` (ports, logs, theme, synced library, MIDI-map badges). Exports: loadConfig, saveConfig, saveThemeConfig, saveLibraryConfig, saveMidiMappings.
 
-* index.html: UI layout (LCD, buttons, debug tools).
+* index.html: UI layout (faceplate, LCD, buttons, service panel, debug tools).
 
 ## Data Flow
 

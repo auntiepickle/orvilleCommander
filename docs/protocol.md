@@ -46,7 +46,12 @@ listener is ever attached — re-registration detaches the prior one first,
 tracker FB7); the CLI capture tool does the same (tracker FB5; see
 **Capturing screens (HIL)** for the
 hardware-specific chunk sizes/timing). This applies to *all* inbound types
-(`0x17`, `0x2e`, `0x32`), not just screens.
+(`0x17`, `0x2e`, `0x32`, `0x3c`), not just screens. One inbound type is special
+only for the *watchdog*, not reassembly: an unsolicited `0x3c` sequence-out emit
+(detected in `midi.js:addSysexListener` as `data[0] === F0 && data[4] === 0x3C`)
+is reassembled normally but does **not** rearm the wave watchdog — see the
+sequence-out subsection below and the watchdog note under §Request/response
+tracking.
 
 **Boundary validation (#47).** Every reassembled frame is validated before
 `parseResponse` sees it (`midi.js inboundFrameError`): Eventide
@@ -73,6 +78,7 @@ stays in the parser, after boundary validation, because of this adoption.)
 | `0x2e` | in  | Value dump      | `CMD.VALUE_DUMP`      |
 | `0x31` | out | Object-info request | `CMD.OBJECTINFO_DUMP` |
 | `0x32` | in  | Object-info dump | `CMD.OBJECTINFO`     |
+| `0x3c` | in  | Sequence-out emit | `CMD.SEQUENCE_OUT`  |
 
 ### Keypress — `0x01` (out)
 
@@ -210,6 +216,33 @@ child-menu param already on screen (C7; see "Key conventions" below for the
 observability-only: values paint once per request wave, on `dumpComplete` (see
 "Request/response tracking" below).
 
+### Sequence-out emit — `0x3c` (in, unsolicited)
+
+When the `sequence out` setting (`MOD.SEQ_OUT`, key `10010016`) is set to
+**`new`** (SET index 2, `MOD.SEQ_OUT_NEW`), the device emits an **unsolicited**
+`0x3c` message every time a field changes, reporting the changed field's key and
+new value. It is *not* a response to any request. The payload is the key as
+ASCII-hex, a `SYSEX.VALUE_SEPARATOR` (`0x20`), then the value as ASCII:
+
+```
+F0 1C 70 <dev> 3C <ascii-hex key> 20 <ascii value> F7
+```
+
+The other `sequence out` settings (`off` / `old`) produce nothing. The MIDI-
+mapping feature turns this on once at boot (`midi-map.js:enableSequenceOut`) so
+that live monitors update and so changed-field keys can be discovered (it is how
+the `1003…` modulation keys were found — see [`device-model.md`](device-model.md)
+§8b). Two consequences for the wave model (both load-bearing — see
+§Request/response tracking): a `0x3c` emit is **neither a counted wave response**
+(`parser.js` calls `notifyResponse` only for `0x32`/`0x2e`/`0x17`, so the
+`outstanding` counter is untouched) **nor allowed to rearm the wave watchdog**
+(`midi.js` excludes it via the `isSequenceOut` check). Without the watchdog
+carve-out, a stream of `0x3c` emits (e.g. a tempo-synced value moving under
+incoming MIDI clock) would hold every open wave to `WATCHDOG_MAX_MS` and starve
+the gated meter poll. The app does not currently parse the `0x3c` payload into
+state — it is received, validated, and dropped (a no-op in `parseResponse`);
+consuming it for live value mirroring is a tracked follow-up.
+
 ## Key conventions
 
 Most keys are discovered dynamically from object-info dumps. A few are referenced
@@ -243,7 +276,10 @@ The planned Phase 3.3 eager loader builds on the same substrate (see
   `outstanding` (via `recordRequest`). `VALUE_PUT` is **not** counted, although
   the device does echo a `0x2e` for a put (see the `0x2d` section above): with
   no wave in flight the echo is a no-op (`notifyResponse` returns at zero), but
-  mid-wave it decrements the counter as an uncounted response.
+  mid-wave it decrements the counter as an uncounted response. An unsolicited
+  `0x3c` sequence-out emit is different again: it is neither counted nor a wave
+  response, and it is the one inbound frame **excluded from the watchdog rearm**
+  (`midi.js isSequenceOut`), so a stream of them cannot keep a wave alive.
 - `GET_SCREEN` is additionally **serialized after the open wave** (#107): the
   device drops requests that collide with its own bitmap transmission
   (measured live: send=7 recv=4 waves riding to the 10s cap), so a fetch
@@ -285,7 +321,11 @@ of `all` vs `watchdog` reasons.
   while a wave is in flight. It fires only after this much *silence*, i.e. a
   genuine stall. The raw-packet rearm matters for the streaming `0x17` bitmap:
   its partial packets arrive continuously for ~1.2–1.5s before the complete
-  message parses, and rearm-on-parse-only misread that as a stall.
+  message parses, and rearm-on-parse-only misread that as a stall. **Exception
+  (#146):** packets of an unsolicited `0x3c` sequence-out emit do *not* rearm the
+  watchdog — they are not a wave response, and under incoming MIDI clock a
+  sequence-out stream would otherwise hold every open wave to the
+  `WATCHDOG_MAX_MS` ceiling and starve the gated meter poll.
 - `WATCHDOG_MAX_MS` (10000 ms) — an absolute per-wave ceiling measured from wave
   start; a rearm never extends the timer past this, so a pathological wave that
   keeps producing traffic still terminates.

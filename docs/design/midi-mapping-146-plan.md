@@ -1,5 +1,12 @@
 # MIDI Mapping (#146) — Implementation Plan
 
+> **STATUS: SHIPPED** via PR #157 (#146/#152) and PR #158 (generic sub-block bind
+> + sequence-out polling fix), 2026-06-12. This document is the historical design
+> record; the as-built system is documented in [`device-model.md`](../device-model.md)
+> §8b and the [issue tracker](../issue-tracker.md). Remaining open work is tracked
+> as follow-ups M1–M3 in the issue tracker (programs with >4 blocks, non-grid block
+> layouts, optional live value mirroring from sequence-out).
+
 Device-native MIDI mapping: an app UI over the Orville's own modulation system,
 so mappings live in the preset and keep working after the app disconnects.
 Grounded in live hardware probing (June 2026; harnesses in `logs/probe-midi-146*.mjs`,
@@ -125,11 +132,12 @@ modulation page). Unit tests mock the SysEx boundary like the rest of the suite.
 
 ## Risks
 
-- **Per-parameter setup-key reachability** (the one open detail above) — confirm
-  every parameter's setup page has a directly addressable key vs. needing a
-  one-time OBJECTINFO navigate to populate `10030400`. Either way it is object
-  access, not keypress automation; resolved by a short sequence-out enumeration
-  in Phase 0.
+- **Per-parameter setup-key reachability** — RESOLVED (Phase 0 + `bindParam`,
+  #157/#158). The surface is a single context-bound page (`10030401`) populated by
+  SELECT-hold on the highlighted parameter; the one keypress step is the bind, and
+  reaching ANY parameter (across blocks/pages) is now generic — see the navigation
+  model in [`device-model.md`](../device-model.md) §8b. The remaining edges (>4
+  blocks, non-grid layouts) are follow-ups M1/M2 in the issue tracker.
 - **Source enumeration** — the `mode` SET options are degenerate placeholders, so
   set by index and read the echo for the real name; enumerate the index->source
   table once. (Not a 127-entry dropdown.)

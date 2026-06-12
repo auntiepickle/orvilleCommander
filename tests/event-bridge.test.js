@@ -1,4 +1,4 @@
-// tests/event-bridge.test.js
+﻿// tests/event-bridge.test.js
 // Pins the C1 (#37) bridge contract directly: exactly three render triggers
 // (current-key dump; child-of-current-menu arrival, R7; dumpComplete), hideLoading
 // driven solely by dumpComplete (C4/#40), teardown unsubscribing everything, and the
@@ -138,7 +138,7 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     expect(hideLoading).toHaveBeenCalledTimes(1);
   });
 
-  test('a screen-only wave hides loading — the bitmap fetch shows its own progress (#3)', () => {
+  test('a screen-only wave hides loading â€” the bitmap fetch shows its own progress (#3)', () => {
     emit('dumpComplete', { reason: 'all-received', objectinfoSends: 0, screenSends: 1 });
     expect(hideLoading).toHaveBeenCalledTimes(1);
   });
@@ -239,7 +239,7 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
 
     emit('dumpComplete', { reason: 'all-received', objectinfoSends: 3 });
     expect(startEagerLoad).toHaveBeenCalledTimes(1);
-    expect(startEagerLoad).toHaveBeenCalledWith('401000b');
+    expect(startEagerLoad).toHaveBeenCalledWith('401000b', ['10020000']);
 
     // One-shot: later drains do not restart it.
     emit('dumpComplete', { reason: 'all-received', objectinfoSends: 1 });
@@ -256,15 +256,15 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
   test('eager load stays armed through a stalled wave and starts on the next clean drain (#106)', () => {
     // Live-validated: with fetchBitmap on, the landing wave routinely
     // watchdogs on the ~1.2s bitmap transfer (R5a) and self-heals on the
-    // next wave — disarming on the stall would skip the eager load on the
+    // next wave â€” disarming on the stall would skip the eager load on the
     // most common config.
     land();
     emit('dumpComplete', { reason: 'watchdog', objectinfoSends: 3 });
-    expect(startEagerLoad).not.toHaveBeenCalled(); // not yet — but still armed
+    expect(startEagerLoad).not.toHaveBeenCalled(); // not yet â€” but still armed
 
     emit('dumpComplete', { reason: 'all-received', objectinfoSends: 1 });
     expect(startEagerLoad).toHaveBeenCalledTimes(1);
-    expect(startEagerLoad).toHaveBeenCalledWith('401000b');
+    expect(startEagerLoad).toHaveBeenCalledWith('401000b', ['10020000']);
   });
 
   test('dumpComplete without a prior landing never starts an eager load (#106)', () => {
@@ -332,9 +332,9 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     expect(updateScreen).not.toHaveBeenCalled();
   });
 
-  test('descend one-shot never descends into gang groups — they are page content (#132)', () => {
+  test('descend one-shot never descends into gang groups â€” they are page content (#132)', () => {
     // Review blocker: the live routing menu (1001008f) has ONLY gang COL
-    // children ('Source 1-4' pos 13, 'In 1-4' pos c — blank tags). The old
+    // children ('Source 1-4' pos 13, 'In 1-4' pos c â€” blank tags). The old
     // filter saw a COL-only menu with >1 children and descended into the
     // first group, so the assembled one-page matrix never showed on the
     // normal click path.
@@ -384,7 +384,7 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
     emit('dumpComplete', { reason: 'all-received', objectinfoSends: 1 });
     expect(led.classList.contains('lit')).toBe(false);
 
-    // A watchdog settle clears it too — the LED must never strand lit.
+    // A watchdog settle clears it too â€” the LED must never strand lit.
     emit('wave:opened', { kind: 'value' });
     expect(led.classList.contains('lit')).toBe(true);
     emit('dumpComplete', { reason: 'watchdog' });

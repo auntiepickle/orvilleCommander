@@ -66,9 +66,9 @@ describe('renderer.js', () => {
 
   // ... **UNCHANGED: all prior passing tests** ...
 
-  test('select change updates SET value and triggers auto-load for program select', () => {
+  test('choosing a program HIGHLIGHTS it but never auto-loads (load is the explicit TRG)', () => {
     appState.currentKey = '10020000';
-    appState.presetKey = '401000b'; // → loadKey='1002001c'
+    appState.presetKey = '401000b';
     const subs = [
       {
         type: 'COL',
@@ -81,7 +81,7 @@ describe('renderer.js', () => {
       {
         type: 'SET',
         position: '1',
-        key: '10020011',
+        key: '10020011', // KEY.PROGRAM_SELECT
         parent: '10020000',
         statement: '%-20s',
         tag: 'Program',
@@ -91,36 +91,29 @@ describe('renderer.js', () => {
     ];
     renderScreen(subs, '', mockLog);
     const select = document.querySelector('select[data-key="10020011"]');
-    expect(select).toBeTruthy();
-
     select.value = '5';
     jest.useFakeTimers();
     select.dispatchEvent(new Event('change', { bubbles: true }));
 
-    // Immediate
-    expect(showLoading).toHaveBeenCalled();
+    // The selection is put (highlights the slot) and cached in HEX shape.
     expect(sendValuePut).toHaveBeenCalledWith('10020011', '5');
     expect(appState.currentValues['10020011']).toBe('5 Preset5');
 
-    // Timeout 200
-    jest.advanceTimersByTime(200);
-    expect(sendSysEx).toHaveBeenCalledWith(0x18, []);
+    // No loading dim: a program select is instant and confirms with a
+    // VALUE dump only, which never fires hideLoading — so showing the dim
+    // would strand the screen dimmed forever (regression).
+    expect(showLoading).not.toHaveBeenCalled();
 
-    // Nested timeout 300 (auto-load)
-    jest.advanceTimersByTime(300);
-    expect(sendValuePut).toHaveBeenCalledWith('1002001c', '1');
-    expect(mockLog).toHaveBeenCalledWith(
-      expect.stringContaining('Auto-triggered load'),
-      'info',
-      'general'
-    );
-
-    // Nested timeout 500 (post-load)
-    jest.advanceTimersByTime(500);
-    expect(sendObjectInfoDump).toHaveBeenCalledWith('0');
-    expect(mockLog).toHaveBeenCalledWith('Fetched root after preset load.', 'debug', 'general');
-    expect(sendSysEx).toHaveBeenCalledWith(0x18, []); // 2nd bitmap
-
+    // Run every timer to completion — the load trigger must NEVER fire,
+    // and root must not be refetched as a post-load step (maintainer:
+    // selecting a program should not apply it).
+    jest.runOnlyPendingTimers();
+    expect(sendValuePut).not.toHaveBeenCalledWith('1002001c', '1'); // LOAD_TRIGGER_A
+    expect(sendValuePut).not.toHaveBeenCalledWith('1002001d', '1'); // LOAD_TRIGGER_B
+    // No full-menu refetch either (the "syncing" lag) — only the targeted
+    // program-value confirm.
+    expect(sendObjectInfoDump).not.toHaveBeenCalled();
+    expect(sendValueDump).toHaveBeenCalledWith('10020011');
     jest.useRealTimers();
   });
 
@@ -710,6 +703,48 @@ describe('renderer.js', () => {
     expect(lcd.textContent).toContain('OutSource 1-4');
     expect(lcd.textContent).toContain('OutSource 1/2');
     expect(lcd.querySelectorAll('select[data-key]').length).toBe(2);
+  });
+
+  test('device labels with < are escaped, not parsed as HTML (live bug: fb<tap)', () => {
+    // The multitap delay's feedback label 'fb<tap1' rendered as just 'fb'
+    // and its phantom <tap1> tag wrapped every line below, so one hover lit
+    // the whole screen.
+    appState.currentKey = '8040001';
+    const subs = [
+      { type: 'COL', position: '0', key: '8040001', parent: '', statement: 'Delay', tag: 'delay' },
+      {
+        type: 'NUM',
+        position: '1',
+        key: '8040002',
+        parent: '8040001',
+        statement: 'fb<tap1: %4.0f',
+        tag: 'fb',
+        value: '50',
+        min: '0',
+        max: '100',
+      },
+      {
+        type: 'NUM',
+        position: '2',
+        key: '8040003',
+        parent: '8040001',
+        statement: 'fb>tap2: %4.0f',
+        tag: 'fb',
+        value: '60',
+        min: '0',
+        max: '100',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+    const lcd = document.getElementById('lcd');
+    // The full label survives as text...
+    expect(lcd.textContent).toContain('fb<tap1');
+    expect(lcd.textContent).toContain('fb>tap2');
+    // ...with no phantom <tap1> element, and the escaped entity in the HTML.
+    expect(lcd.querySelector('tap1')).toBeNull();
+    expect(lcd.innerHTML).toContain('fb&lt;tap1');
+    // Both NUM values stay independently clickable (no wrapping bleed).
+    expect(lcd.querySelectorAll('.param-value')).toHaveLength(2);
   });
 
   test('NUM edits inline in the glass — valid commits, invalid flashes, never a browser box', () => {

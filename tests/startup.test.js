@@ -491,13 +491,15 @@ describe('startup characterization (roadmap step 5.5)', () => {
       'state:renderer:render-pin:currentSoftkeys,currentSubs',
       'hideLoading',
 
-      // #106: the landing armed the eager loader; the clean drain starts it.
-      // The preset and the landed first menu are already tree-cached, so the
-      // serialized walk's first (and in this simulation only) request is the
-      // preset's second COL child. No response ever arrives here, so the
-      // walk holds at one in-flight request — pinning the one-at-a-time
-      // scheduling.
-      `midi:objectinfo:${expected401.navColKeys[1]}`,
+      // #106/#138: the landing armed the eager loader; the clean drain
+      // starts it, now warming the PROGRAM menu (10020000) alongside the
+      // preset subtree. The preset and landed menu are already tree-cached,
+      // and the program-warm key was queued right after the preset root, so
+      // it is the serialized walk's first uncached request (its ~70-name
+      // bank-list dump is the slowest on the link — warming it makes the
+      // first PROGRAM visit instant). No response arrives in this
+      // simulation, so the walk holds at one in-flight request.
+      'midi:objectinfo:10020000',
     ];
 
     const actual = drainAndSort(getEvents()).map(normalize).filter(Boolean);

@@ -231,7 +231,7 @@ describe('midi.js SysEx byte contract', () => {
       },
     ]);
     expect(isFresh('10020010')).toBe(true);
-    sendValuePut('1002001c', '1'); // the load trigger — any program-subtree put
+    sendValuePut('10020025', '1'); // a save-area put — a list-MUTATING program-subtree put
     expect(isFresh('10020010')).toBe(false);
     treeReset();
   });

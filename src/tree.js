@@ -334,28 +334,39 @@ export function isFresh(key) {
 
 /**
  * Stales every cached key under the given key's stable prefix, if any.
- * Called by sendValuePut (every in-app put — TRG/STR/SET/NUM, including
- * bank selects, which change the device's program list) — one of the two
- * in-app mutation chokepoints (the other is sendKeypress).
+ * Called by sendValuePut (every in-app put — TRG/STR/SET/NUM) — one of the
+ * two in-app mutation chokepoints (the other is sendKeypress).
  *
  * @param {string} key
  */
 export function markDirtyIfStable(key) {
+  // #138: puts that do NOT change the program/bank LISTS or the menu
+  // structure are pure view/runtime changes and must not stale the
+  // subtree (else the next PROGRAM visit refetches the multi-second
+  // 70-name bank list from cache for nothing):
+  //   - BANK_SELECT / PROGRAM_SELECT: pick which list shows.
+  //   - LOAD_TRIGGER_A/B: load a program into a DSP — changes the running
+  //     preset (root names + the preset param subtree, fetched separately)
+  //     but leaves every bank/program list intact. Live finding: staling
+  //     here made the post-load refetch reload the bank list WHILE the
+  //     device was busy loading, cascading watchdog stalls (~2s of dead
+  //     wait). Saves/deletes/renames (other TRG/STR puts) DO rewrite lists
+  //     and still stale below.
+  if (
+    key === KEY.BANK_SELECT ||
+    key === KEY.PROGRAM_SELECT ||
+    key === KEY.LOAD_TRIGGER_A ||
+    key === KEY.LOAD_TRIGGER_B
+  ) {
+    return;
+  }
   const p = stablePrefixOf(key);
   if (!p) return;
   markGeneration++; // #121: in-flight requests are now pre-mutation
   for (const k of nodes.keys()) {
     if (k.startsWith(p)) staleKeys.add(k);
   }
-  // #141: selection puts (the bank/program choosers) are pure VIEW
-  // changes — they cannot alter any bank's program list, and the bank put
-  // is the very action the memo exists to accelerate (live finding: the
-  // unconditional clear wiped the memo on every bank change, defeating
-  // it). Everything else under the prefix (saves, deletes, renames, load
-  // triggers) may rewrite lists: clear.
-  if (key !== KEY.BANK_SELECT && key !== KEY.PROGRAM_SELECT) {
-    bankProgramLists.clear();
-  }
+  bankProgramLists.clear(); // a save/delete/rename may rewrite lists
 }
 
 /**

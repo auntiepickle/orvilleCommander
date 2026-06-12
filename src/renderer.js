@@ -176,7 +176,12 @@ const handleSelectChange = (e) => {
   // re-checks the parked slot, and the change's discard listener (runs
   // synchronously after this handler) clears it first — no stale replay.
   e.target.blur();
-  showLoading();
+  // No loading dim for a program select (regression fix): it only moves the
+  // highlight and confirms with a VALUE dump, but hideLoading fires only on
+  // OBJECTINFO/screen waves (#3) — so the dim would never lift. The pick is
+  // instant via the optimistic repaint below; the dim is for the menu
+  // refetches the bank/other branches do.
+  if (key !== KEY.PROGRAM_SELECT) showLoading();
   sendValuePut(key, selectedIndex);
   // Optimistic cache in the DEVICE's value shape: puts are parsed decimal
   // but values/echoes report the index in HEX (probed live,
@@ -222,6 +227,14 @@ const handleSelectChange = (e) => {
       // (~4-5s) — the program field's memo (revisited bank, instant) or
       // loading line (unseen bank) must show immediately.
       renderScreen(appState.currentSubs, appState.lastAscii);
+    } else if (key === KEY.PROGRAM_SELECT) {
+      // Choosing a program only moves the highlight (no load now — the
+      // auto-load was removed). It does NOT change the menu, so skip the
+      // full updateScreen refetch (the "syncing with the system" lag the
+      // maintainer saw): the optimistic hex cache already shows the pick,
+      // so repaint immediately and just confirm the value on the wire.
+      renderScreen(appState.currentSubs, appState.lastAscii);
+      sendValueDump(KEY.PROGRAM_SELECT);
     } else {
       updateScreen();
     }
@@ -241,25 +254,11 @@ const handleSelectChange = (e) => {
         );
       }
     }, TIMING.VALUE_DUMP_WAIT_MS); // Wait for VALUE_DUMP to arrive
-    // Auto-load preset if changing the program select in load menu
-    if (key === KEY.PROGRAM_SELECT) {
-      setTimeout(() => {
-        const loadKey = appState.presetKey.startsWith(KEY_PREFIX.DSP_A)
-          ? KEY.LOAD_TRIGGER_A
-          : KEY.LOAD_TRIGGER_B;
-        sendValuePut(loadKey, '1');
-        log(`Auto-triggered load for ${loadKey} after program change`, 'info', 'general');
-        setTimeout(() => {
-          updateScreen();
-          sendObjectInfoDump(KEY.ROOT);
-          log('Fetched root after preset load.', 'debug', 'general');
-          if (appState.updateBitmapOnChange) {
-            sendSysEx(CMD.GET_SCREEN, []);
-            log('Triggered bitmap update after TRG.', 'debug', 'bitmap');
-          }
-        }, TIMING.DEVICE_LOAD_MS); // Delay for device to process load and fetch root
-      }, TIMING.PROGRAM_SET_MS); // Additional delay to ensure program value is set
-    }
+    // NOTE: choosing a program from the dropdown only HIGHLIGHTS it (sets
+    // the device's selected slot) — it does NOT load it. Loading is the
+    // explicit '<- load program in A/B' TRG (handleParamClick), matching
+    // the hardware: scroll picks, SELECT/<load>/ENT applies (manual p.21,
+    // maintainer request). The old auto-load fired the trigger here.
   }, TIMING.MIDI_SETTLE_MS); // Delay to allow MIDI update
 };
 
@@ -439,8 +438,25 @@ const FORMAT_SPEC_RE = /%%|%(-)?(\d*)(\.\d*)?f|%(-)?(\d*)s|%/g;
 // No /g flag: .test() on a global regex is lastIndex-stateful.
 const CON_FORMAT_RE = /%-?\d*(\.\d*)?f|%-?\d*s/;
 
+// Device text goes into #lcd via innerHTML, and device labels DO contain
+// HTML metacharacters — e.g. the multitap delay's 'fb<tap1' feedback
+// label. Unescaped, the browser parsed '<tap1' as a tag: it ate the rest
+// of the label (rendered just 'fb') and, never closing, wrapped every line
+// below it so one hover lit the whole screen. Escape all device-supplied
+// text at every HTML interpolation point (live bug).
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function formatValue(statement, value, isHtml = false, key = '') {
-  return statement.replace(
+  // When building HTML, escape the statement's LITERAL text up front; the
+  // format specs ('%4.0f' etc.) contain no HTML metacharacters, so the
+  // regex still matches, and the spans we inject below stay intact.
+  const stmt = isHtml ? escapeHtml(statement) : statement;
+  return stmt.replace(
     FORMAT_SPEC_RE,
     (match, fLeftFlag, fWidthStr, precStr, sLeftFlag, sWidthStr) => {
       if (match === '%%' || match === '%') return '%';
@@ -454,15 +470,18 @@ function formatValue(statement, value, isHtml = false, key = '') {
           valStr = leftAlign ? valStr.padEnd(width) : valStr.padStart(width);
         }
         if (isHtml) {
+          // valStr is numeric (no metacharacters); the data-key is an app
+          // hex key — both safe.
           return `<span class="param-value" data-key="${key}">${valStr}</span>`;
         }
         return valStr;
       } else if (sLeftFlag !== undefined || sWidthStr !== undefined) {
-        // %[-]widths
+        // %[-]widths — a STRING value, which CAN carry metacharacters.
         const leftAlign = sLeftFlag === '-';
         const width = parseInt(sWidthStr || '0');
-        if (width === 0) return value;
-        return leftAlign ? value.padEnd(width) : value.padStart(width);
+        const v = isHtml ? escapeHtml(value) : value;
+        if (width === 0) return v;
+        return leftAlign ? v.padEnd(width) : v.padStart(width);
       }
       return match;
     }
@@ -580,7 +599,7 @@ function gangParamLine(s, logParam) {
     const value = appState.currentValues[s.key] || s.value || '';
     if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
     const text = formatValue(s.statement, value);
-    return { text, html: text };
+    return { text, html: escapeHtml(text) };
   } else if (s.type === 'SET') {
     const value = appState.currentValues[s.key] || s.value || '';
     if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
@@ -594,23 +613,26 @@ function gangParamLine(s, logParam) {
     let selectHtml = `<select data-key="${s.key}" class="param-select">`;
     s.options.forEach((option) => {
       const isSelected = option.index === indexDec;
-      selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
+      selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${escapeHtml(option.desc)}</option>`;
     });
     selectHtml += `</select>`;
     return {
       text: formatValue(s.statement || '', displayValue),
-      html: (s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml),
+      html: escapeHtml(s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml),
     };
   } else if (s.type === 'TRG') {
     return {
       text: s.statement,
-      html: `<span class="param-value" data-key="${s.key}">${s.statement}</span>`,
+      html: `<span class="param-value" data-key="${s.key}">${escapeHtml(s.statement)}</span>`,
     };
   } else if (s.type === 'STR') {
     const value = appState.currentValues[s.key] ?? s.value ?? '';
     if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
     const text = formatValue(s.statement || '%s', value);
-    return { text, html: `<span class="param-value" data-key="${s.key}">${text}</span>` };
+    return {
+      text,
+      html: `<span class="param-value" data-key="${s.key}">${escapeHtml(text)}</span>`,
+    };
   } else if (s.type === 'CON') {
     let meterValue = parseFloat(appState.currentValues[s.key] || s.value) || 0;
     if (isNaN(meterValue)) meterValue = 0;
@@ -621,7 +643,7 @@ function gangParamLine(s, logParam) {
         : null;
     if (conFormat) {
       const text = formatValue(conFormat, meterValue);
-      return { text, html: text };
+      return { text, html: escapeHtml(text) };
     }
   }
   return null;
@@ -646,12 +668,12 @@ function renderGangInline(colSub, depth, paramLines, paramHtmlLines, logParam) {
     paramChildren.every((c) => c.statement === paramChildren[0].statement);
   if (header && (depth === 0 || identicalStatements)) {
     paramLines.push(header);
-    paramHtmlLines.push(header);
+    paramHtmlLines.push(escapeHtml(header));
   }
   if (!node) {
     const text = `${header || labelForSub(colSub)} ${RENDER.VALUE_PLACEHOLDER}`;
     paramLines.push(text);
-    paramHtmlLines.push(text);
+    paramHtmlLines.push(escapeHtml(text));
     return;
   }
   for (const cs of children) {
@@ -664,7 +686,7 @@ function renderGangInline(colSub, depth, paramLines, paramHtmlLines, logParam) {
       const text = placeholderLine(cs);
       if (text) {
         paramLines.push(text);
-        paramHtmlLines.push(text);
+        paramHtmlLines.push(escapeHtml(text));
       }
       continue;
     }
@@ -784,7 +806,7 @@ export function renderScreen(subs, ascii, logParam) {
     const isAActive = appState.presetKey.startsWith(KEY_PREFIX.DSP_A);
     const aPart = isAActive ? `[A: ${appState.dspAName}]` : `A: ${appState.dspAName}`;
     const bPart = !isAActive ? `[B: ${appState.dspBName}]` : `B: ${appState.dspBName}`;
-    topHtml = ` <span class="${isAActive ? 'dsp-clickable current' : 'dsp-clickable'}" data-key="${appState.dspAKey}">${aPart}</span> <span class="${!isAActive ? 'dsp-clickable current' : 'dsp-clickable'}" data-key="${appState.dspBKey}">${bPart}</span>`;
+    topHtml = ` <span class="${isAActive ? 'dsp-clickable current' : 'dsp-clickable'}" data-key="${appState.dspAKey}">${escapeHtml(aPart)}</span> <span class="${!isAActive ? 'dsp-clickable current' : 'dsp-clickable'}" data-key="${appState.dspBKey}">${escapeHtml(bPart)}</span>`;
     if (
       appState.currentKey === KEY.ROOT ||
       appState.currentKey.startsWith(KEY_PREFIX.DSP_A) ||
@@ -830,7 +852,7 @@ export function renderScreen(subs, ascii, logParam) {
       slice.forEach((s, idx) => {
         const t = labelForSub(s);
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
-        softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+        softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${escapeHtml(text)}</span>`;
       });
       softHtmlLines.push(softHtml);
     }
@@ -839,11 +861,11 @@ export function renderScreen(subs, ascii, logParam) {
     mainHtmlLines = mainHtmlLines.concat(softHtmlLines);
   } else {
     titleText = main.statement || main.tag || 'Menu';
-    titleHtml = titleText;
+    titleHtml = escapeHtml(titleText);
     if (appState.keyStack.length > 0) {
       const parent = appState.keyStack[appState.keyStack.length - 1];
       titleText = `[${parent.tag}] ${titleText}`;
-      titleHtml = `<span class="back-link" data-key="${parent.key}">[${parent.tag}]</span> ${titleText.replace(`[${parent.tag}] `, '')}`;
+      titleHtml = `<span class="back-link" data-key="${parent.key}">[${escapeHtml(parent.tag)}]</span> ${escapeHtml(main.statement || main.tag || 'Menu')}`;
     }
     displayLines.push(titleText);
     // Group graphic EQ NUMs with position 'a'. The pre-paint pass keeps the
@@ -857,7 +879,7 @@ export function renderScreen(subs, ascii, logParam) {
         .map((s) => `${s.tag.split(':')[0]}: ${RENDER.VALUE_PLACEHOLDER}`)
         .join(' ');
       paramLines.push(line);
-      paramHtmlLines.push(line);
+      paramHtmlLines.push(escapeHtml(line));
     } else if (graphicEqSubs.length > 0) {
       const formattedParts = graphicEqSubs.map((s) => {
         const value = appState.currentValues[s.key] || s.value;
@@ -879,7 +901,7 @@ export function renderScreen(subs, ascii, logParam) {
         const value = appState.currentValues[s.key] || s.value;
         const [label, format] = s.tag.split(':');
         const formattedValue = formatValue(format || '%3.0f', value, true, s.key);
-        return `${label}: ${formattedValue}`;
+        return `${escapeHtml(label)}: ${formattedValue}`;
       });
       graphicEqHtml = formattedHtmlParts.join(' ');
       paramLines.push(graphicEqLine);
@@ -895,7 +917,7 @@ export function renderScreen(subs, ascii, logParam) {
         const text = placeholderLine(s);
         if (text) {
           paramLines.push(text);
-          paramHtmlLines.push(text);
+          paramHtmlLines.push(escapeHtml(text));
         }
         return;
       }
@@ -914,7 +936,7 @@ export function renderScreen(subs, ascii, logParam) {
         let value = appState.currentValues[s.key] || s.value || '';
         if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
         fullText = formatValue(s.statement, value); // Use updated formatValue with s support
-        fullHtml = fullText;
+        fullHtml = escapeHtml(fullText); // INF isn't clickable: escape, add no span
       } else if (s.type === 'SET') {
         const progView = programSelectView(s, subs.slice(1));
         if (progView.loading) {
@@ -942,10 +964,12 @@ export function renderScreen(subs, ascii, logParam) {
           let selectHtml = `<select data-key="${s.key}" class="param-select">`;
           options.forEach((option) => {
             const isSelected = option.index === indexDec;
-            selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
+            selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${escapeHtml(option.desc)}</option>`;
           });
           selectHtml += `</select>`;
-          fullHtml = (s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
+          // Escape the statement's literal text before splicing in the
+          // select (which is intentional markup).
+          fullHtml = escapeHtml(s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
         }
       } else if (s.type === 'CON') {
         let meterValue = parseFloat(appState.currentValues[s.key] || s.value) || 0;
@@ -968,7 +992,7 @@ export function renderScreen(subs, ascii, logParam) {
             : null;
         if (conFormat) {
           fullText = formatValue(conFormat, meterValue); // '%%' collapses in formatValue
-          fullHtml = fullText;
+          fullHtml = escapeHtml(fullText);
         } else {
           // No format spec anywhere: an indicator CON (the Tempo 'Beat'
           // flasher is the only live-observed case) — render a compact
@@ -981,7 +1005,7 @@ export function renderScreen(subs, ascii, logParam) {
           barLength = Math.max(0, Math.min(barSpace, barLength)); // Clamp to prevent invalid repeat counts
           const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
           fullText = `${s.tag} ${bar}`.padEnd(40);
-          fullHtml = `<span class="param-label">${s.tag}</span> <span class="meter-bar">${bar}</span>`;
+          fullHtml = `<span class="param-label">${escapeHtml(s.tag)}</span> <span class="meter-bar">${bar}</span>`;
           log(
             `Rendering CON for key ${s.key}: tag=${s.tag}, value=${meterValue}, barLength=${barLength}, line="${fullText.trim()}"`,
             'debug',
@@ -989,7 +1013,7 @@ export function renderScreen(subs, ascii, logParam) {
           );
         }
       } else if (s.type === 'TRG') {
-        fullHtml = `<span class="param-value" data-key="${s.key}">${s.statement}</span>`;
+        fullHtml = `<span class="param-value" data-key="${s.key}">${escapeHtml(s.statement)}</span>`;
         fullText = s.statement;
       } else if (s.type === 'STR') {
         // String-edit field (R8; live-discovered type, device-model §3):
@@ -998,7 +1022,7 @@ export function renderScreen(subs, ascii, logParam) {
         const value = appState.currentValues[s.key] ?? s.value ?? '';
         if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
         fullText = formatValue(s.statement || '%s', value);
-        fullHtml = `<span class="param-value" data-key="${s.key}">${fullText}</span>`;
+        fullHtml = `<span class="param-value" data-key="${s.key}">${escapeHtml(fullText)}</span>`;
       }
       if (fullText) {
         paramLines.push(fullText);
@@ -1053,7 +1077,7 @@ export function renderScreen(subs, ascii, logParam) {
         // Skip childTitle if empty or duplicates parent title
         if (childTitle && childTitle !== main.statement && childTitle !== main.tag) {
           paramLines.push(childTitle);
-          paramHtmlLines.push(childTitle);
+          paramHtmlLines.push(escapeHtml(childTitle));
         }
         // Process child params
         childSubs.slice(1).forEach((cs) => {
@@ -1070,7 +1094,7 @@ export function renderScreen(subs, ascii, logParam) {
             if (appState.currentValues[cs.key] === undefined && !cs.value)
               sendValueDump(cs.key, logParam);
             childFullText = formatValue(cs.statement, value);
-            childFullHtml = childFullText;
+            childFullHtml = escapeHtml(childFullText);
           } else if (cs.type === 'SET') {
             const progView = programSelectView(cs, childSubs.slice(1));
             if (progView.loading) {
@@ -1097,10 +1121,10 @@ export function renderScreen(subs, ascii, logParam) {
               let selectHtml = `<select data-key="${cs.key}" class="param-select">`;
               options.forEach((option) => {
                 const isSelected = option.index === indexDec;
-                selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${option.desc}</option>`;
+                selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${escapeHtml(option.desc)}</option>`;
               });
               selectHtml += `</select>`;
-              childFullHtml = (cs.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
+              childFullHtml = escapeHtml(cs.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
             }
           } else if (cs.type === 'CON') {
             let meterValue = parseFloat(appState.currentValues[cs.key] || cs.value) || 0;
@@ -1117,7 +1141,7 @@ export function renderScreen(subs, ascii, logParam) {
                 : null;
             if (conFormat) {
               childFullText = formatValue(conFormat, meterValue); // '%%' collapses in formatValue
-              childFullHtml = childFullText;
+              childFullHtml = escapeHtml(childFullText);
             } else {
               // Same compact indicator block as the top-level CON branch.
               const tagLength = cs.tag.length;
@@ -1129,7 +1153,7 @@ export function renderScreen(subs, ascii, logParam) {
               barLength = Math.max(0, Math.min(barSpace, barLength)); // Clamp to prevent invalid repeat counts
               const bar = '█'.repeat(barLength) + '░'.repeat(barSpace - barLength);
               childFullText = `${cs.tag} ${bar}`.padEnd(40);
-              childFullHtml = `<span class="param-label">${cs.tag}</span> <span class="meter-bar">${bar}</span>`;
+              childFullHtml = `<span class="param-label">${escapeHtml(cs.tag)}</span> <span class="meter-bar">${bar}</span>`;
               log(
                 `Rendering CON for key ${cs.key}: tag=${cs.tag}, value=${meterValue}, barLength=${barLength}, line="${childFullText.trim()}"`,
                 'debug',
@@ -1137,14 +1161,14 @@ export function renderScreen(subs, ascii, logParam) {
               );
             }
           } else if (cs.type === 'TRG') {
-            childFullHtml = `<span class="param-value" data-key="${cs.key}">${cs.statement}</span>`;
+            childFullHtml = `<span class="param-value" data-key="${cs.key}">${escapeHtml(cs.statement)}</span>`;
             childFullText = cs.statement;
           } else if (cs.type === 'STR') {
             const value = appState.currentValues[cs.key] ?? cs.value ?? '';
             if (appState.currentValues[cs.key] === undefined && !cs.value)
               sendValueDump(cs.key, logParam);
             childFullText = formatValue(cs.statement || '%s', value);
-            childFullHtml = `<span class="param-value" data-key="${cs.key}">${childFullText}</span>`;
+            childFullHtml = `<span class="param-value" data-key="${cs.key}">${escapeHtml(childFullText)}</span>`;
           }
           if (childFullText) {
             paramLines.push(childFullText);
@@ -1294,7 +1318,7 @@ export function renderScreen(subs, ascii, logParam) {
       slice.forEach((s, idx) => {
         const t = labelForSub(s);
         const text = (s.key === appState.currentKey ? `[${t}]` : t).padEnd(columnWidth);
-        softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+        softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${escapeHtml(text)}</span>`;
       });
       softHtmlLines.push(softHtml);
     }
@@ -1323,7 +1347,7 @@ export function renderScreen(subs, ascii, logParam) {
           slice.forEach((s, idx) => {
             const t = labelForSub(s);
             const text = (s.key === parentHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
-            softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+            softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${escapeHtml(text)}</span>`;
           });
           parentSoftHtmlLines.push(softHtml);
         }
@@ -1362,7 +1386,7 @@ export function renderScreen(subs, ascii, logParam) {
           slice.forEach((s, idx) => {
             const t = labelForSub(s);
             const text = (s.key === upperHighlightKey ? `[${t}]` : t).padEnd(columnWidth);
-            softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+            softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${escapeHtml(text)}</span>`;
           });
           upperSoftHtmlLines.push(softHtml);
         }
@@ -1379,7 +1403,7 @@ export function renderScreen(subs, ascii, logParam) {
     const staticColumnWidth = Math.floor(LAYOUT.LCD_COLUMNS / staticRootSoftSubs.length);
     staticRootSoftSubs.forEach((s, idx) => {
       const text = (s.key === appState.currentKey ? `[${s.tag}]` : s.tag).padEnd(staticColumnWidth);
-      softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${text}</span>`;
+      softHtml += `<span class="softkey" data-key="${s.key}" data-idx="${idx}">${escapeHtml(text)}</span>`;
     });
     bottomHtml = softHtml;
   }

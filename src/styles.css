@@ -428,10 +428,319 @@ body {
   flex-direction: column;
   border-radius: 2px;
   transition: filter 160ms ease;
+  /* The LCD is a device panel, not a document: a click-drag over a value
+     must not text-SELECT down through the whole monospace block (it ran
+     from a field to every line below, reading as a glitch). The inline
+     editor re-enables selection for itself below. */
+  user-select: none;
+}
+#lcd input.lcd-edit {
+  user-select: text;
 }
 #lcd.loading {
   filter: brightness(0.55);
   pointer-events: none;
+}
+
+/* Library-sync dialog (#142 follow-up): blocking overlay ON the LCD,
+   sibling of #lcd inside the bezel and UNDER .glass, so it refracts like
+   the real display. Phosphor styling mirrors #lcd; covers the recess
+   exactly (inset = bezel padding). */
+/* [hidden] must win over the display below, or the dialog can never be
+   dismissed (an explicit display beats the UA [hidden] { display:none }). */
+.sync-dialog[hidden] {
+  display: none;
+}
+.sync-dialog {
+  position: absolute;
+  inset: var(--bezel-pad);
+  /* No z-index: as a positioned sibling AFTER #lcd and BEFORE .glass in
+     the DOM, it paints over the LCD and under the glass by paint order —
+     a z-index here would lift it above the glass and kill the refraction. */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 20px;
+  font-family: 'OrvilleLCD', ui-monospace, Consolas, monospace;
+  font-size: 22px;
+  line-height: 28px;
+  color: var(--lcd-px);
+  background:
+    radial-gradient(
+      ellipse 90% 70% at 50% 35%,
+      color-mix(in srgb, var(--lcd-px) 8%, transparent),
+      transparent 70%
+    ),
+    var(--lcd-bg);
+  text-shadow:
+    0 0 2px var(--lcd-px),
+    0 0 8px var(--lcd-glow);
+  border-radius: 2px;
+  -webkit-font-smoothing: none;
+  overflow: hidden;
+}
+/* Drifting CRT scanlines over the whole dialog (subtle, non-interactive). */
+.sync-dialog::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.16) 0,
+    rgba(0, 0, 0, 0.16) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  animation: sync-scanlines 6s linear infinite;
+}
+@keyframes sync-scanlines {
+  to {
+    background-position: 0 80px;
+  }
+}
+.sync-title {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  background: var(--lcd-px);
+  color: var(--lcd-bg);
+  text-shadow: none;
+  letter-spacing: 0.3em;
+  padding: 2px 0;
+}
+/* A bright band sweeps across the inverted title bar (loading-screen feel). */
+.sync-title-sweep {
+  position: relative;
+}
+.sync-title::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  animation: sync-title-sweep 2.2s linear infinite;
+}
+@keyframes sync-title-sweep {
+  from {
+    left: -40%;
+  }
+  to {
+    left: 110%;
+  }
+}
+.sync-title-flash {
+  animation: sync-flash 0.5s steps(1) 3;
+}
+@keyframes sync-flash {
+  50% {
+    background: var(--lcd-bg);
+    color: var(--lcd-px);
+  }
+}
+.sync-bar {
+  white-space: pre;
+}
+/* Energy shimmer sweeping through the filled run of the bar. */
+.sync-bar-fill {
+  position: relative;
+  color: var(--lcd-px);
+}
+.sync-bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.6) 50%,
+    transparent 65%
+  );
+  background-size: 250% 100%;
+  mix-blend-mode: screen;
+  animation: sync-shimmer 1.1s linear infinite;
+}
+@keyframes sync-shimmer {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -130% 0;
+  }
+}
+.sync-bar-empty {
+  color: var(--lcd-px-dim);
+}
+.sync-count {
+  color: var(--lcd-px);
+}
+/* Block-quadrant spinner (pixel-art activity indicator). */
+.sync-spinner::before {
+  content: '\2596';
+  animation: sync-spin 0.5s steps(1) infinite;
+}
+@keyframes sync-spin {
+  0% {
+    content: '\2596';
+  } /* ▖ */
+  25% {
+    content: '\2598';
+  } /* ▘ */
+  50% {
+    content: '\259d';
+  } /* ▝ */
+  75% {
+    content: '\2597';
+  } /* ▗ */
+}
+/* Blinking terminal caret after the current bank name. */
+.sync-caret {
+  animation: sync-blink 0.9s steps(1) infinite;
+}
+@keyframes sync-blink {
+  50% {
+    opacity: 0;
+  }
+}
+/* Animated ellipsis for the indeterminate phases. */
+.sync-ellipsis::after {
+  content: '';
+  animation: sync-ellipsis 1.2s steps(4) infinite;
+}
+@keyframes sync-ellipsis {
+  0% {
+    content: '';
+  }
+  25% {
+    content: '.';
+  }
+  50% {
+    content: '..';
+  }
+  75% {
+    content: '...';
+  }
+}
+/* Larson/Knight-Rider scanner: a bright band sweeps the dim cells while
+   the bank count is still unknown. */
+.sync-scanner {
+  white-space: pre;
+  background: linear-gradient(
+    90deg,
+    var(--lcd-px-dim) 42%,
+    var(--lcd-px) 50%,
+    var(--lcd-px-dim) 58%
+  );
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: sync-larson 1.5s ease-in-out infinite alternate;
+}
+@keyframes sync-larson {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 100% 0;
+  }
+}
+.sync-line {
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sync-cur {
+  background: var(--lcd-px);
+  color: var(--lcd-bg);
+  text-shadow: none;
+}
+.sync-map {
+  white-space: pre;
+  line-height: 22px;
+  letter-spacing: 3px;
+  margin: 2px 0;
+}
+.sync-map .cell-on {
+  color: var(--lcd-px);
+  text-shadow:
+    0 0 2px var(--lcd-px),
+    0 0 6px var(--lcd-glow);
+}
+/* The head cell strobes between filled and inverse — a working read/write
+   head (defrag activity). */
+.sync-map .cell-cur {
+  color: var(--lcd-px);
+  animation: sync-head 0.45s steps(1) infinite;
+}
+@keyframes sync-head {
+  0% {
+    background: var(--lcd-px);
+    color: var(--lcd-bg);
+  }
+  50% {
+    background: transparent;
+    color: var(--lcd-px);
+  }
+}
+.sync-map .cell-skip {
+  color: var(--led-amber);
+  animation: sync-blink 0.9s steps(1) infinite;
+}
+.sync-map .cell-pending {
+  color: var(--lcd-px-dim);
+}
+.sync-map-done .cell-on,
+.sync-map-done {
+  animation: sync-sweep-in 0.5s ease-out;
+}
+@keyframes sync-sweep-in {
+  from {
+    filter: brightness(2.2);
+  }
+}
+.sync-foot {
+  margin-top: auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sync-eta {
+  color: var(--lcd-px-dim);
+  font-size: 18px;
+}
+.sync-cancel {
+  font-family: inherit;
+  font-size: 18px;
+  color: var(--lcd-px);
+  background: var(--lcd-bg);
+  border: none;
+  box-shadow: inset 0 0 0 2px var(--lcd-px-dim);
+  padding: 2px 12px;
+  cursor: pointer;
+  text-shadow: inherit;
+}
+.sync-cancel:hover {
+  background: var(--lcd-px);
+  color: var(--lcd-bg);
+  text-shadow: none;
+}
+.sync-done {
+  text-align: center;
+  color: var(--lcd-px);
+}
+.sync-check {
+  display: inline-block;
+  animation: sync-check-pop 0.4s ease-out;
+}
+@keyframes sync-check-pop {
+  from {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.5);
+  }
 }
 .line {
   height: var(--lcd-row-h);
@@ -821,6 +1130,31 @@ body {
 }
 .util-search {
   width: 240px;
+}
+.util-search:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+/* Sync status chip beside the Sync Library button (#142 follow-up). */
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--legend-dim);
+  white-space: nowrap;
+}
+.sync-status::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3a3a3e; /* unsynced: dark lamp */
+}
+.sync-status.synced::before {
+  background: var(--led-green);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--led-green) 60%, transparent);
 }
 .search-results {
   position: absolute;

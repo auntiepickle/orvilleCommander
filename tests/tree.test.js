@@ -1,4 +1,4 @@
-// tests/tree.test.js — the T1b device-tree store (src/tree.js).
+﻿// tests/tree.test.js â€” the T1b device-tree store (src/tree.js).
 
 import {
   recordDump,
@@ -74,7 +74,7 @@ describe('tree store (T1b)', () => {
     ]);
     expect(getNode('401000b')[0].statement).toBe('Wormhole');
     expect(parentOf('4990001')).toBe('401000b');
-    // The old child's linkage survives until overwritten elsewhere — the
+    // The old child's linkage survives until overwritten elsewhere â€” the
     // tree is last-observed structure, not a garbage-collected mirror.
     expect(parentOf('4040001')).toBe('401000b');
   });
@@ -113,7 +113,7 @@ describe('tree store (T1b)', () => {
     expect(labelFor('feed0000')).toBe('...');
   });
 
-  describe('stable-subtree freshness (#113 — per-key staleness; program prefix 10020)', () => {
+  describe('stable-subtree freshness (#113 â€” per-key staleness; program prefix 10020)', () => {
     test('isFresh requires cached + stable + not stale; only a RE-RECORD un-stales', () => {
       expect(isFresh('10020010')).toBe(false); // uncached
       recordDump([
@@ -129,11 +129,11 @@ describe('tree store (T1b)', () => {
 
       // A mutating put anywhere under the prefix stales every cached key
       // under it.
-      markDirtyIfStable('1002001c'); // the load trigger
+      markDirtyIfStable('10020025'); // a save-area put (mutates the lists)
       expect(isFresh('10020010')).toBe(false);
       expect(isFresh('10020020')).toBe(false);
 
-      // Re-recording ONE node un-stales only that node — a deep visit (or
+      // Re-recording ONE node un-stales only that node â€” a deep visit (or
       // a dropped sibling response) can never launder staleness into the
       // rest of the subtree. The re-record must come from a POST-mark
       // request (#121): stamp as sendObjectInfoDump does in production.
@@ -145,6 +145,23 @@ describe('tree store (T1b)', () => {
       // Puts outside any stable subtree mark nothing.
       markDirtyIfStable('4070001');
       expect(isFresh('10020010')).toBe(true);
+
+      // A bank/program SELECT put is a pure view change and stales NOTHING
+      // (#138 perf): the 70-name bank list stays cached, so revisiting
+      // PROGRAM after a bank-hop or a library sync is instant.
+      markDirtyIfStable('10020012'); // BANK_SELECT
+      expect(isFresh('10020010')).toBe(true);
+      markDirtyIfStable('10020011'); // PROGRAM_SELECT
+      expect(isFresh('10020010')).toBe(true);
+
+      // A LOAD trigger is also a no-op (#138): loading a program changes
+      // the running preset (root names + the preset param subtree), not
+      // any bank/program list — staling here forced a bank-list refetch
+      // WHILE the device was busy loading (watchdog stalls).
+      markDirtyIfStable('1002001c'); // LOAD_TRIGGER_A
+      expect(isFresh('10020010')).toBe(true);
+      markDirtyIfStable('1002001d'); // LOAD_TRIGGER_B
+      expect(isFresh('10020010')).toBe(true);
     });
 
     test('a response whose request predates the mutation stays stale (#121 race, both variants)', () => {
@@ -152,9 +169,9 @@ describe('tree store (T1b)', () => {
       // was stamped pre-mark; the put bumps the generation; the arriving
       // pre-mutation dump records but is NOT trusted across visits.
       recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
-      markDirtyIfStable('1002001c');
+      markDirtyIfStable('10020025');
       stampStableRequest('10020010'); // refetch goes out...
-      markDirtyIfStable('1002001c'); // ...another put lands mid-flight
+      markDirtyIfStable('10020025'); // ...another put lands mid-flight
       recordDump([col('10020010', '10020010', 'load new preset', 'load')]); // pre-put response
       expect(getNode('10020010')).toBeDefined(); // recorded (newest data we have)
       expect(isFresh('10020010')).toBe(false); // but not trusted
@@ -168,7 +185,7 @@ describe('tree store (T1b)', () => {
       // post-put. markDirtyIfStable could not stale it (not cached), but
       // the generation check still refuses trust.
       stampStableRequest('10020020');
-      markDirtyIfStable('1002001c');
+      markDirtyIfStable('10020025');
       recordDump([col('10020020', '10020020', 'save program', 'save')]);
       expect(isFresh('10020020')).toBe(false);
     });
@@ -176,9 +193,9 @@ describe('tree store (T1b)', () => {
     test('a duplicate response without a new stamp stays TRUSTED (#121 review fix)', () => {
       // Rapid double navigation fans out twice: two responses for one
       // stamped request. Consuming the stamp on the first would flip the
-      // second — genuinely post-mark — back to stale.
+      // second â€” genuinely post-mark â€” back to stale.
       recordDump([col('10020010', '10020010', 'load new preset', 'load')]);
-      markDirtyIfStable('1002001c'); // gen > 0 (the norm in a live session)
+      markDirtyIfStable('10020025'); // gen > 0 (the norm in a live session)
       stampStableRequest('10020010');
       recordDump([col('10020010', '10020010', 'load new preset', 'load')]); // response 1
       expect(isFresh('10020010')).toBe(true);
@@ -186,7 +203,7 @@ describe('tree store (T1b)', () => {
       expect(isFresh('10020010')).toBe(true); // stamp kept, still trusted
 
       // A LATER mutation still wins: the kept stamp cannot launder.
-      markDirtyIfStable('1002001c');
+      markDirtyIfStable('10020025');
       recordDump([col('10020010', '10020010', 'load new preset', 'load')]); // old stamp
       expect(isFresh('10020010')).toBe(false);
     });
@@ -199,7 +216,7 @@ describe('tree store (T1b)', () => {
       expect(isFresh('10020010')).toBe(false);
     });
 
-    test('generation 0 trusts unstamped records — seeding before any mutation (#121)', () => {
+    test('generation 0 trusts unstamped records â€” seeding before any mutation (#121)', () => {
       // The audit seeds the tree via direct recordDump with no requests;
       // with no mutation ever marked, nothing can be pre-mutation.
       recordDump([col('10020010', '10020010', 'load new preset', 'load')]);

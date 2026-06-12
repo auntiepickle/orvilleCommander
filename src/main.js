@@ -20,7 +20,10 @@ import {
   isSyncing,
   cancelSync,
   loadSearchHit,
+  libraryProgramCount,
+  canSearch,
 } from './library.js';
+import { showSyncProgress, showSyncComplete, hideSyncDialog } from './sync-dialog.js';
 import { setupKeypressControls, setupDataKnob, testKeypress, meterPollTick } from './controls.js';
 import {
   setMidiPorts,
@@ -472,14 +475,40 @@ function setupLibraryUI() {
   const syncBtn = document.getElementById('sync-library');
   if (!searchInput || !resultsEl || !syncBtn) return;
 
+  const statusEl = document.getElementById('sync-status');
   setLibrary(cachedConfig?.presetLibrary);
-  const refreshPlaceholder = () => {
-    const lib = getLibrary();
-    searchInput.placeholder = lib
-      ? `Search ${lib.banks.reduce((n, b) => n + b.programs.length, 0)} presets`
-      : 'Search presets (sync first)';
+
+  // "12m ago" style relative time from an ISO stamp.
+  const timeAgo = (iso) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
   };
-  refreshPlaceholder();
+
+  // Search is gated on a decent corpus (#142 follow-up): below the
+  // minimum, "no results" misleads, so the input is disabled with a
+  // sync-first hint. The status chip always states where things stand.
+  const refreshLibraryUI = () => {
+    const count = libraryProgramCount();
+    const lib = getLibrary();
+    const enabled = canSearch();
+    searchInput.disabled = !enabled;
+    searchInput.placeholder = enabled
+      ? `Search ${count} presets`
+      : count > 0
+        ? `Sync more to search (${count})`
+        : 'Sync library to enable search';
+    if (statusEl) {
+      statusEl.classList.toggle('synced', !!lib);
+      statusEl.textContent = lib ? `${count} presets · ${timeAgo(lib.syncedAt)}` : 'not synced';
+      if (lib) statusEl.title = `Last synced ${new Date(lib.syncedAt).toLocaleString()}`;
+    }
+  };
+  refreshLibraryUI();
 
   const hideResults = () => {
     resultsEl.hidden = true;
@@ -492,10 +521,10 @@ function setupLibraryUI() {
     }
     const hits = searchLibrary(query);
     resultsEl.innerHTML = '';
-    if (!getLibrary()) {
+    if (!canSearch()) {
       const empty = document.createElement('div');
       empty.className = 'search-empty';
-      empty.textContent = 'No library yet - run Sync Library first.';
+      empty.textContent = 'Sync the library first to search.';
       resultsEl.appendChild(empty);
     } else if (hits.length === 0) {
       const empty = document.createElement('div');
@@ -547,17 +576,30 @@ function setupLibraryUI() {
       syncBtn.textContent = 'Cancelling...';
       return;
     }
-    const library = await syncLibrary((done, total, bankName) => {
-      syncBtn.textContent = `Syncing ${done + 1}/${total}: ${bankName.slice(0, 18)}`;
+    syncBtn.textContent = 'Syncing...';
+    const library = await syncLibrary((p) => {
+      showSyncProgress(p, () => {
+        cancelSync();
+        syncBtn.textContent = 'Cancelling...';
+      });
     });
     if (library) {
       saveLibraryConfig(library);
       log(`Library synced: ${library.banks.length} banks`, 'info', 'general');
-    } else if (!getLibrary()) {
-      log('Library sync produced nothing - is the program page loaded?', 'error', 'error');
+      // Completion summary on the LCD — stays until the user hits DONE
+      // (the dialog's own button), so the result is never missed.
+      showSyncComplete({
+        banks: library.banks.length,
+        programs: library.banks.reduce((n, b) => n + b.programs.length, 0),
+      });
+    } else {
+      hideSyncDialog();
+      if (!getLibrary()) {
+        log('Library sync produced nothing — is a MIDI output connected?', 'error', 'error');
+      }
     }
     syncBtn.textContent = 'Sync Library';
-    refreshPlaceholder();
+    refreshLibraryUI();
   });
 }
 setupLibraryUI();

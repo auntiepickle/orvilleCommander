@@ -291,6 +291,28 @@ export function setMidiPorts(output, input, devId) {
   setState({ deviceId: devId }, 'midi:set-ports');
 }
 
+// --- Backup/restore capture (#147) ---------------------------------------
+// The Tech Note 34 dump opcodes are large unsolicited frames, NOT the object
+// protocol. When a backup is armed, the inbound handler routes a matching dump
+// frame to the capture callback and skips parseResponse; onProgress reports the
+// in-progress byte count so a multi-minute dump can show progress.
+const BACKUP_DUMP_CMDS = new Set([
+  CMD.PROGRAM_DUMP,
+  CMD.SETUP_DUMP,
+  CMD.FILES_DUMP,
+  CMD.INTERNAL_DUMP,
+  CMD.CARD_DUMP,
+  CMD.INFO_DUMP,
+  CMD.OK,
+  CMD.ERROR,
+]);
+let backupCapture = null; // { onProgress(bytes), onFrame(frameBytes) } | null
+
+/** Arms (or disarms, with null) capture of backup dump frames (#147). */
+export function setBackupCapture(cap) {
+  backupCapture = cap;
+}
+
 /**
  * Adds a SysEx event listener to the selected MIDI input.
  * Parses incoming SysEx messages and categorizes them (e.g., screenDump for bitmap data).
@@ -339,9 +361,25 @@ export function addSysexListener() {
     if (!isSequenceOut) noteLinkActivity();
     if (data[0] === SYSEX.START) sysexBuffer = data;
     else sysexBuffer = sysexBuffer.concat(data);
+    // #147: while a backup is armed, report the growing dump frame's size so the
+    // UI can show progress through a multi-minute transfer.
+    if (backupCapture) backupCapture.onProgress(sysexBuffer.length);
     // Flush only a properly framed message (starts F0, ends F7). The F0 guard
     // discards a stray continuation packet that arrives with no header.
     if (sysexBuffer[0] === SYSEX.START && sysexBuffer[sysexBuffer.length - 1] === SYSEX.END) {
+      // #147: a backup dump frame is not the object protocol — hand the raw
+      // frame to the capture callback and skip parseResponse entirely.
+      if (
+        backupCapture &&
+        sysexBuffer[1] === SYSEX.MANUFACTURER[0] &&
+        sysexBuffer[2] === SYSEX.MANUFACTURER[1] &&
+        BACKUP_DUMP_CMDS.has(sysexBuffer[4])
+      ) {
+        const frame = sysexBuffer;
+        sysexBuffer = [];
+        backupCapture.onFrame(frame);
+        return;
+      }
       // #47: reject malformed frames at the boundary with a logged reason
       // instead of letting them half-parse into state. A rejected frame
       // never reaches notifyResponse; if it was the answer to a counted

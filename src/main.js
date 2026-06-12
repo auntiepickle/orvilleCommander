@@ -31,6 +31,7 @@ import {
   resetPresetBrowser,
 } from './preset-browser.js';
 import { setupMidiMapUI, openControllers, resetMidiMapUI } from './midi-map-ui.js';
+import { setupBackupUI, openBackup, resetBackupUI } from './backup-ui.js';
 import { setupKeypressControls, setupDataKnob, testKeypress, meterPollTick } from './controls.js';
 import {
   setMidiPorts,
@@ -188,6 +189,7 @@ function resetAndLand() {
   resetPresetLoader();
   resetPresetBrowser(); // also drop any open browser + in-flight preview state
   resetMidiMapUI(); // close MIDI modals; the new device re-reads on demand
+  resetBackupUI(); // close any backup modal on reconnect
   setState(
     {
       currentKey: KEY.ROOT,
@@ -292,6 +294,7 @@ syncBtn.addEventListener('click', () => {
   resetPresetLoader();
   resetPresetBrowser();
   resetMidiMapUI();
+  resetBackupUI();
   setState({ currentKey: KEY.ROOT, keyStack: [] }, 'main:sync-root');
   updateScreen(log);
   log('Synced to root', 'info', 'general');
@@ -515,6 +518,17 @@ function setupLibraryUI() {
   setupMidiMapUI({ onChange: afterLoad });
   const midiBtn = document.getElementById('open-midi-map');
   if (midiBtn) midiBtn.addEventListener('click', openControllers);
+
+  // Backup & restore (#147): a long dump saturates the link, so pause meter
+  // polling while a backup/restore runs and resume it after (if it was on).
+  setupBackupUI({
+    onBusy: (b) => {
+      if (b) stopPolling();
+      else if (appState.pollingEnabled) startPolling();
+    },
+  });
+  const backupBtn = document.getElementById('open-backup');
+  if (backupBtn) backupBtn.addEventListener('click', openBackup);
 
   // "12m ago" style relative time from an ISO stamp.
   const timeAgo = (iso) => {

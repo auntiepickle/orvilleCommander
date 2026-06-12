@@ -41,6 +41,25 @@ export const CMD = {
   SEQUENCE_OUT: 0x3c, // in:  UNSOLICITED emit of a changed field's key+value when
   //                     `sequence out = new` is set (device-model §8b). Not a
   //                     response to any request — see midi.js watchdog handling.
+  // Backup/restore — the Tech Note 34 want/dump pairs (#147; logs/tn34.txt). A
+  // "want" is sent to request the matching "dump"; the same "dump" opcode sent
+  // BACK TO the unit loads/replaces that data. All dumps share the FILES_DUMP
+  // wire format: 8-nibble block size + nibbled data + a 1-byte sum-to-zero
+  // checksum. These are large, slow single frames (~1.6 KB/s over the DIN link).
+  PROGRAM_WANT: 0x06, // out: request the current program -> PROGRAM_DUMP
+  PROGRAM_DUMP: 0x15, // in/out: current program (binary); sent back, it loads it
+  SETUP_WANT: 0x07, // out: request unit setup -> SETUP_DUMP
+  SETUP_DUMP: 0x16, // in/out: unit setup; sent back, it loads it
+  FILES_WANT: 0x10, // out: request the current presets -> FILES_DUMP
+  FILES_DUMP: 0x0f, // in/out: the preset files; sent back, it replaces them
+  INTERNAL_WANT: 0x12, // out: request ALL internal NV RAM -> INTERNAL_DUMP (full backup)
+  INTERNAL_DUMP: 0x11, // in/out: complete internal NV RAM; sent back, it REPLACES it
+  CARD_WANT: 0x14, // out: request the memory card -> CARD_DUMP
+  CARD_DUMP: 0x13, // in/out: memory-card contents
+  INFO_WANT: 0x1a, // out: request system info -> INFO_DUMP (ASCII)
+  INFO_DUMP: 0x19, // in:  system info (ROM name/revision/time/size), ASCII
+  OK: 0x00, // in:  "last command OK" ack (assorted commands)
+  ERROR: 0x0d, // in:  error reply; may carry an ASCII message
 };
 
 // Parameter keys referenced directly in application logic. Most keys are

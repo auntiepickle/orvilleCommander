@@ -406,27 +406,29 @@ function learnParam() {
     startLearnPoll(
       () => refreshParamSetup(),
       () => readParamSetup().source,
-      () => {
-        if (card) card.bound = readParamSetup();
-        renderCard();
-        onChange?.();
-      },
+      syncBoundMapping, // record + repaint so the LCD badge lights after Learn
       strip(card?.paramName || 'this parameter')
     )
   );
 }
 
-// Re-read the bound surface + let the rest of the app refresh, then repaint.
+// Re-read the bound surface, RECORD the mapping for the LCD badge, then repaint
+// the card AND the LCD behind it. Order matters: onChange (the LCD re-render)
+// runs LAST, after recordParamMapping — re-rendering before recording left the
+// badge unlit even though the mapping had been applied (maintainer report).
+function syncBoundMapping() {
+  if (card) {
+    card.bound = readParamSetup();
+    recordParamMapping(card.key, card.bound.source);
+  }
+  renderCard();
+  onChange?.();
+}
+
+// A write to the bound surface settles, then we re-read + record + repaint.
 function afterWrite() {
   refreshParamSetup();
-  onChange?.();
-  setTimeout(() => {
-    if (card) {
-      card.bound = readParamSetup();
-      recordParamMapping(card.key, card.bound.source); // keep the LCD badge in sync
-    }
-    renderCard();
-  }, REFRESH);
+  setTimeout(syncBoundMapping, REFRESH);
 }
 
 function field(label, control) {

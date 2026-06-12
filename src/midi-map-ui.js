@@ -245,24 +245,25 @@ function startLearnPoll(refresh, read, onClose, label) {
 
 /**
  * Opens the mapping card for a parameter and BINDS the modulation surface to
- * it (the one keypress step). rowIndex is the parameter's 0-based row on the
- * active DSP's main parameter page; paramName is its label for the bind check.
+ * it (the one keypress step). `block` is the param's block (parent COL) key and
+ * `key` its own key — bindParam derives the device keypath generically from the
+ * loaded program's tree. `name` is the label for the bind verification.
  *
- * @param {{name: string, rowIndex: number}} param
+ * @param {{name: string, key: string, block: string}} param
  */
 export function openParamMapping(param) {
   if (!cardEl) cardEl = modalShell('mm-modal');
   enableSequenceOut();
   card = {
     key: param.key,
+    block: param.block,
     paramName: param.name,
-    rowIndex: param.rowIndex,
     bound: null,
     loading: true,
   };
   cardEl.hidden = false;
   renderCard();
-  bindParam(param.rowIndex, (setup) => {
+  bindParam(param.block, param.key, (setup) => {
     card.loading = false;
     // The surface title ("<param> setup") is the binding proof. Match the WHOLE
     // first token + a trailing space, not just a prefix — a short name like
@@ -270,7 +271,11 @@ export function openParamMapping(param) {
     // could write the mapping to the wrong parameter.
     const want = strip(param.name) + ' ';
     card.bound = setup && setup.title && setup.title.startsWith(want) ? setup : null;
-    if (!card.bound) card.error = `Could not bind "${param.name}" (got "${setup?.title || '?'}")`;
+    if (!card.bound) {
+      card.error = setup?.unreachable
+        ? `"${param.name}" is in a block past the 4 the device exposes — not mappable yet`
+        : `Could not bind "${param.name}" (got "${setup?.title || '?'}")`;
+    }
     // Record what the bind read so the LCD badge reflects the real state.
     if (card.bound) recordParamMapping(card.key, card.bound.source);
     renderCard();

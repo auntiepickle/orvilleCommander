@@ -112,6 +112,10 @@ function step() {
  * event never reaches the walk's own just-added listener.
  *
  * @param {string} rootKey - Subtree root (e.g. '401000b').
+ * @param {string[]} [warmKeys=[]] - Extra roots to warm at depth 0 after the
+ *   subtree walk (#138: the program/load menu, whose ~70-name bank list is the
+ *   slowest dump on the link). Serialized like everything else; cached nodes
+ *   cost no request.
  */
 export function startEagerLoad(rootKey, warmKeys = []) {
   teardown();

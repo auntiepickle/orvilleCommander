@@ -123,7 +123,10 @@ export function isSyncing() {
  * in flight; ~70 banks at the ~4-5s wire floor each is a several-minute
  * scan, hence onProgress for UI.
  *
- * @param {(done: number, total: number, bankName: string) => void} onProgress
+ * @param {(p: {phase: string, done: number, total: number, name: string,
+ *   bankStates: string[], etaMs: number|null}) => void} onProgress Structured
+ *   progress payload (the dialog reads p.phase/p.bankStates); phase is
+ *   'preparing' while the bank list is fetched, then per-bank during the scan.
  * @returns {Promise<{syncedAt: string, banks: Object[]}|null>} The new
  *   library, or null when no load-menu dump is available / already syncing.
  */
@@ -138,7 +141,7 @@ export async function syncLibrary(onProgress) {
   // Sync-from-anywhere (#142 follow-up): the bank list lives in the
   // load-menu dump, which may not be cached if the user never opened the
   // program page. Fetch it ourselves first instead of demanding they
-  // navigate there — onProgress(-1) signals this "preparing" phase.
+  // navigate there — onProgress emits phase:'preparing' for this phase.
   let loadMenu = getNode(KEY.FAVORITES);
   let bankSub = loadMenu?.find((s) => s.key === KEY.BANK_SELECT);
   if (!bankSub?.options?.length) {

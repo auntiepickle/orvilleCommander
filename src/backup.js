@@ -111,7 +111,10 @@ export function requestBackup(kind, { onProgress, onDone, onError } = {}) {
         finish(null, 'The device reported an error.');
         return;
       }
-      if (frame[4] !== spec.dump) return; // ignore a stray OK / other frame
+      if (frame[4] === CMD.OK) return; // an ack, not the dump — keep waiting
+      // Any other (non-object-protocol) frame the capture routes here IS the
+      // dump — its opcode varies across the unit's dump types (TN34 vs Orville),
+      // so don't gate on a specific one.
       const parsed = parseDumpFrame(frame);
       finish({ kind, label: spec.label, frame, ...parsed });
     },

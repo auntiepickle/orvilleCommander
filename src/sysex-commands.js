@@ -53,7 +53,11 @@ export const CMD = {
   FILES_WANT: 0x10, // out: request the current presets -> FILES_DUMP
   FILES_DUMP: 0x0f, // in/out: the preset files; sent back, it replaces them
   INTERNAL_WANT: 0x12, // out: request ALL internal NV RAM -> INTERNAL_DUMP (full backup)
-  INTERNAL_DUMP: 0x11, // in/out: complete internal NV RAM; sent back, it REPLACES it
+  INTERNAL_DUMP: 0x38, // in/out: complete internal NV RAM; sent back, it REPLACES it.
+  //                      NOTE: TN34 (DSP4000) lists 0x11, but the Orville actually
+  //                      replies with 0x38 (live-verified: 512 KB, checksum OK).
+  //                      Backup capture is opcode-AGNOSTIC (midi.js) so it doesn't
+  //                      depend on this; it's named for the restore confirm + docs.
   CARD_WANT: 0x14, // out: request the memory card -> CARD_DUMP
   CARD_DUMP: 0x13, // in/out: memory-card contents
   INFO_WANT: 0x1a, // out: request system info -> INFO_DUMP (ASCII)

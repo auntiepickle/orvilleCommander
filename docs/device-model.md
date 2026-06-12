@@ -79,6 +79,21 @@ ack/error replies:
 | `0x08`/`0x09` | SIGFILE dump/want | **preset as a human-readable operator netlist** (HEAD…TAIL); a different representation than the §3 OBJECTINFO menu tree |
 | `0x0A`/`0x0B` | SIGFILE remote/quick | remote-editor variants; `0x0A` replies `OK`/`ERROR` |
 | `0x19`/`0x1A` | INFO dump/want    | ASCII system info (ROM name/revision/time/size) |
+| `0x10`/`0x0F` | FILES want/dump   | the current presets (FILES_DUMP wire format)    |
+| `0x12`/`0x38` | INTERNAL want/dump | **all internal NV RAM** — the full-unit backup (#147) |
+| `0x14`/`0x13` | CARD want/dump    | memory-card contents                            |
+
+The `<X>_DUMP` wire format (`0x15`/`0x16`/`0x0F`/`0x38`/`0x13`) is: an 8-nibble
+(4-byte) block size, the nibbled data, then a 1-byte checksum — the sum of every
+decoded byte (size + block + checksum) is 0 mod 256. These dumps are large/slow
+(~1.6 KB/s); sent BACK to the unit, the same opcode loads/replaces that data.
+**Opcode caveat `[V]`:** TN34 is the DSP4000 note, and the Orville's bigger dumps
+differ from it — the **internal dump replies with `0x38`, not TN34's `0x11`**
+(live-verified 2026-06-12: 512 KB, checksum OK). The app's backup capture is
+therefore opcode-AGNOSTIC (`midi.js`): during a backup any non-object-protocol
+frame is the dump. The full-unit dump has a **variable, sometimes slow startup**
+(1 s after a reboot, tens of seconds right after a prior dump) — and cutting it
+off mid-stream jams the link, so it must run to completion (see #147 notes).
 
 Whether the object commands (`0x2d`, etc.) ever reply with `OK`/`ERROR` is
 unknown — see §12.

@@ -101,6 +101,19 @@ describe('requestBackup', () => {
     expect(onError).toHaveBeenCalledWith(expect.stringMatching(/error/i));
   });
 
+  test('captures the dump regardless of its opcode (Orville internal = 0x38, not TN34 0x11)', () => {
+    const onDone = jest.fn();
+    requestBackup('internal', { onDone });
+    const cap = setBackupCapture.mock.calls[0][0];
+    // a real Orville internal dump arrives with cmd 0x38, which is NOT CMD.INTERNAL_DUMP-as-TN34
+    cap.onFrame([0xf0, 0x1c, 0x70, 1, CMD.OK, 0xf7]); // an ack first — must be ignored
+    expect(onDone).not.toHaveBeenCalled();
+    cap.onFrame(makeDumpFrame(0x38, [1, 2, 3, 4]));
+    expect(onDone).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'internal', checksumOk: true, declaredSize: 4 })
+    );
+  });
+
   test('times out when the device never replies', () => {
     jest.useFakeTimers(); // modern fake timers also advance Date.now()
     const onError = jest.fn();

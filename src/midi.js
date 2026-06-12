@@ -292,19 +292,19 @@ export function setMidiPorts(output, input, devId) {
 }
 
 // --- Backup/restore capture (#147) ---------------------------------------
-// The Tech Note 34 dump opcodes are large unsolicited frames, NOT the object
-// protocol. When a backup is armed, the inbound handler routes a matching dump
-// frame to the capture callback and skips parseResponse; onProgress reports the
-// in-progress byte count so a multi-minute dump can show progress.
-const BACKUP_DUMP_CMDS = new Set([
-  CMD.PROGRAM_DUMP,
-  CMD.SETUP_DUMP,
-  CMD.FILES_DUMP,
-  CMD.INTERNAL_DUMP,
-  CMD.CARD_DUMP,
-  CMD.INFO_DUMP,
-  CMD.OK,
-  CMD.ERROR,
+// A dump is a large frame that is NOT the object protocol. When a backup is
+// armed, the inbound handler routes any non-object-protocol frame to the capture
+// callback (skipping parseResponse) and reports the in-progress byte count for a
+// multi-minute dump's progress. Capturing by EXCLUSION (not an opcode allowlist)
+// is deliberate: the Orville's dump opcodes differ from Tech Note 34 (the full
+// internal dump is 0x38, not 0x11 — live-verified), so an allowlist would miss
+// them. During a backup the app pauses polling and doesn't navigate, so the only
+// inbound frames are the dump itself plus OK/ERROR acks.
+const BACKUP_OBJECT_PROTOCOL = new Set([
+  CMD.OBJECTINFO,
+  CMD.VALUE_DUMP,
+  CMD.SCREEN_BITMAP,
+  CMD.SEQUENCE_OUT,
 ]);
 let backupCapture = null; // { onProgress(bytes), onFrame(frameBytes) } | null
 
@@ -373,7 +373,7 @@ export function addSysexListener() {
         backupCapture &&
         sysexBuffer[1] === SYSEX.MANUFACTURER[0] &&
         sysexBuffer[2] === SYSEX.MANUFACTURER[1] &&
-        BACKUP_DUMP_CMDS.has(sysexBuffer[4])
+        !BACKUP_OBJECT_PROTOCOL.has(sysexBuffer[4])
       ) {
         const frame = sysexBuffer;
         sysexBuffer = [];

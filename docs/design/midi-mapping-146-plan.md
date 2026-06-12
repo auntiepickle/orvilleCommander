@@ -43,60 +43,67 @@ sources the unit can't use.
 - **Scale equation** (manual p.78): `(max - min) / full-range = scale` — replace
   the manual's trial-and-error with a calculator.
 
-## The two-layer model (Phase 0 spike — RESOLVED)
+## RESOLVED: fully object-addressable, no keypress automation
 
-The Orville's mapping is **two layers**, and the spike settled how each is
-configured:
+The whole modulation system is configured with the app's existing
+`OBJECTINFO` / `VALUE_PUT` machinery. (An earlier draft of this plan wrongly
+concluded the per-parameter page was not addressable — that was a key-guessing
+failure: the objects live in the `1003…` "remote control" region, **not**
+derivable from the parameter's `405…` key.)
 
-1. **Global assign controllers** (`10010100`) — the 8 reusable MIDI sources.
-   **Fully OBJECTINFO-addressable**: I dumped and edited their objects, and the
-   `Capture Midi` TRG (`…115`) learns a CC end-to-end over emulated MIDI. The
-   app configures these **directly by object** (fire Capture + emit/await a CC,
-   set channel via the `channel` SET).
-2. **Per-parameter modulation page** (SELECT-hold) — picks which assign drives
-   *this* parameter, plus `range` / `type`. **NOT cleanly object-addressable.**
+**The "remote control" menu** (`10030400`, manual: "Remote Controlling
+Parameters") holds a per-parameter **setup page** — e.g. `level setup` at
+`10030401` — whose fields are ordinary addressable objects:
 
-Resolution evidence (`logs/probe-midi-146c/d/e.mjs`, `logs/mod-activated.png`):
+| key | obj | meaning |
+|-----|-----|---------|
+| `10030402` | SET `mode` | the source: off / low / high / assign 1-8 / … (set by index) |
+| `10030403/404` | SET | sub-params (channel, controller #) — populate by mode |
+| `10030405` | CON `monitor` | live controller value (%) |
+| `10030406` | TRG `Capture Midi` | one-click learn |
+| `10030408` | NUM `range` (tag `scale`) | modulation depth |
+| `10030409` | SET `type` | absolute / relative (3 opts) |
 
-- `OBJECTINFO` is **context-free**: `OBJECTINFO(4050001)` returns the plain
-  `level` NUM before *and* after SELECT-hold — the page is not at the param key.
-- Every guessed mirror key (the hidden `14030400` under the preset; `1`-prefixed
-  and low-digit param keys) returns **type-8 EMPTY** — and the device returns
-  type-8 for *any* unallocated key, so a scan yields **no discovery signal**.
-- Activating a real mapping confirmed the model but populated **no** candidate
-  key: `parameter -> SELECT-hold -> INC` cycled `level`'s `mode`
-  `off -> assign 1 -> assign 2 -> assign 3`, and the level value moved
-  `-9 dB -> 0 dB` (modulation live, driving the parameter) — yet every candidate
-  stayed type-8. So the per-parameter page's key is not derivable/scannable.
+**Direct SysEx writes work with ZERO keypresses** (probe-midi-confirm.mjs):
+`VALUE_PUT(10030402, 3)` flipped the mode `low -> high` over SysEx alone, and the
+parameter value moved in response — verdict *"DIRECTLY ADDRESSABLE."* The 8
+**global assign controllers** (`10010100`) are likewise addressable, with a
+working `Capture Midi` learn.
 
-**Consequence (runtime unaffected):** per-parameter assignment is written by
-**driving the device UI** (position the cursor on the target param, SELECT-hold,
-set `mode = assign N` + `range`/`type`, `*done*`). The app is a configurator
-only; **at runtime the Orville does MIDI -> parameter entirely in its DSP — zero
-app latency, works after the app disconnects.** This is the explicit goal: no app
-middleman in the signal path.
+Two enablers (both from the internet research):
 
-**Needed primitive — a cursor-control layer** in `controls.js`: drive the device
-highlight to a chosen parameter (the dump's `position` field gives in-menu
-ordering), then SELECT-hold. This is the one genuinely new capability (the app
-currently navigates by key, not by driving the physical cursor). Add the `-hold`
-keys to `build_tools/hil-screenshot.cjs` as well.
+- **`sequence out = new`** (key `10010016`, options off/old/new): the unit
+  **emits the key of any field touched** — `F0 1C 70 <dev> 3C <ascii-hex key> 20
+  <ascii value> F7`. This is the discovery mechanism that located `10030402`
+  after blind key-guessing failed. The app can use it to map a parameter's
+  setup-page key by touching it once, or to mirror live changes.
+- **Degenerate `mode` options don't matter** — set the source by *index* via
+  `VALUE_PUT`; the device echoes the real name (`3 high`), so the app can
+  enumerate the index->source map once (PUT 0..N, read echoes).
+
+**Open detail (small):** map how each parameter's setup-page key is reached —
+`10030400` showed one child (`level setup`) for the *current* param, so confirm
+whether every param has a fixed setup key (fully direct) or the param must be
+selected first to populate `10030400` (a single OBJECTINFO navigate, still no
+keypress edit). Use sequence-out to enumerate the keys across a preset's params.
+
+**Runtime is pure device, zero app latency** — the app only writes config; the
+Orville does MIDI -> parameter in its DSP, persisted in the preset.
 
 ## Build phases
 
-0. **Cursor-control layer** in `controls.js`: drive the device highlight to a
-   parameter by its menu `position`, then SELECT-hold to open its modulation
-   page. The one new primitive everything else builds on.
-1. **Global controllers panel** (the addressable layer first — highest value,
-   lowest risk): a panel over the 8 assigns (`10010100`) showing each source +
-   live monitor, with a one-click **Learn** (fire `Capture Midi` TRG + emit/await
-   a CC) and clear. All object-addressable, proven end-to-end.
-2. **Per-parameter mapping** (the keypress-driven layer): a "MIDI Map" badge on
-   every editable NUM/SET that positions the cursor, SELECT-holds, and presents
-   the modulation page. Since the page is not object-addressable, drive its
-   fields by keypress (set `mode = assign N`, `range`, `type`) and mirror the
-   captured screen bitmap (we already decode/render it) for confirmation.
-   Read-back of the chosen assign closes the loop visually.
+0. **Map the remote-control region** (`10030400`): enumerate the per-parameter
+   setup-page keys for a preset (via sequence-out + OBJECTINFO walk) and the
+   `mode` index->source table. Record in `device-model.md`. No new control
+   primitive needed — it is all object access.
+1. **Global controllers panel** — a panel over the 8 assigns (`10010100`):
+   each source + live monitor, one-click **Learn** (fire `Capture Midi` +
+   emit/await a CC), clear. All object-addressable, proven end-to-end.
+2. **Per-parameter mapping** — a "MIDI Map" badge on every editable NUM/SET that
+   opens that parameter's setup page (`10030401`-style) as a focused card,
+   rendered from objects and edited by `VALUE_PUT`: pick `mode` (assign/source),
+   set `range`/`type`, fire `Capture Midi`. The live `monitor` CON shows it
+   working. No keypress automation.
 3. **Scale calculator** — user types desired min/max parameter range -> apply
    the manual's equation -> write `scale`.
 4. **Mappings overview** — list every mapped parameter (`mode != off`), with
@@ -114,18 +121,18 @@ modulation page). Unit tests mock the SysEx boundary like the rest of the suite.
 
 ## Risks
 
-- **Cursor-drive correctness** — per-parameter config is keypress-driven, so the
-  app must reliably land the device cursor on the intended parameter before
-  SELECT-hold. Mitigated by the dump `position` field for ordering + a
-  screen-capture read-back after each step to confirm the right page/field.
-  Keypress sequences proved reliable in the `hil-screenshot` captures.
-- **Source enumeration** — the `mode` SET options are degenerate placeholders;
-  set the source via Capture (proven), not a 127-entry CC dropdown. The
-  per-parameter `mode` enumerates the 8 assigns (off / assign 1-8) — a clean,
-  short list.
-- **Leaving the device modified** — driving config changes device state; the app
-  must read-back and let the user confirm/undo, and never leave a half-written
-  mapping.
+- **Per-parameter setup-key reachability** (the one open detail above) — confirm
+  every parameter's setup page has a directly addressable key vs. needing a
+  one-time OBJECTINFO navigate to populate `10030400`. Either way it is object
+  access, not keypress automation; resolved by a short sequence-out enumeration
+  in Phase 0.
+- **Source enumeration** — the `mode` SET options are degenerate placeholders, so
+  set by index and read the echo for the real name; enumerate the index->source
+  table once. (Not a 127-entry dropdown.)
+- **Leaving the device modified** — writes change preset state; the app should
+  read-back, let the user confirm/undo, and never leave a half-written mapping.
+  Note: enabling `sequence out = new` is itself a device setting the app turns
+  on (and should restore) when it wants live-change mirroring.
 
 ## Out of scope
 

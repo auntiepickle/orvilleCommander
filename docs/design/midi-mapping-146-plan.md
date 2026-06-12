@@ -62,7 +62,7 @@ Parameters") holds a per-parameter **setup page** — e.g. `level setup` at
 | `10030405` | CON `monitor` | live controller value (%) |
 | `10030406` | TRG `Capture Midi` | one-click learn |
 | `10030408` | NUM `range` (tag `scale`) | modulation depth |
-| `10030409` | SET `type` | absolute / relative (3 opts) |
+| `10030409` | SET `type` | absolute / unipolar / bipolar (3 opts) |
 
 **Direct SysEx writes work with ZERO keypresses** (probe-midi-confirm.mjs):
 `VALUE_PUT(10030402, 3)` flipped the mode `low -> high` over SysEx alone, and the

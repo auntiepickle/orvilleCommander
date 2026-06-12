@@ -103,9 +103,13 @@ export const MOD = {
 
 // The per-parameter `mode` SET source list, by DECIMAL index (device-model
 // §8b). The SET's own option list is degenerate (it repeats the current value),
-// so sources MUST be set by index, not picked from the dump. Names past 40
-// continue the standard MIDI CC set; indices 4-13 reference the global assign/
-// trig slots above. Verified live 2026-06-12 (logs/probe-midi-phase0.mjs).
+// so sources MUST be set by index, not picked from the dump. Indices 4-13
+// reference the global assign/trig slots above. INDICES 0-40 ARE ENUMERATED
+// HERE (probed live 2026-06-12, logs/probe-midi-phase0.mjs); the device reports
+// 52 sources total — the higher indices (more general/CC controllers) continue
+// the standard MIDI set and are not enumerated yet (a param can still select
+// them by index once captured). Setting an out-of-list index falls back to the
+// device's name, which the echo reports.
 export const MOD_SOURCES = [
   'off',
   'low',

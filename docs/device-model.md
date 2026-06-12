@@ -414,7 +414,7 @@ ordinary userobjects — no special command, no keypress automation for the conf
    | `10030406` | TRG `Capture Midi` | one-click learn |
    | `10030408` | NUM `range` (tag `scale`) | modulation depth (±32767) |
    | `10030409` | SET `type` | `absolute` / `unipolar` / `bipolar` |
-   | `50001` | NUM | the bound parameter's value mirror |
+   | `50001` | NUM | the bound parameter's value mirror (observed in the bound `10030401` dump; key is the param's short form) |
 
 **`mode` index -> source** (decimal index via `VALUE_PUT`; device echoes hex idx
 + name; the SET's own option list is DEGENERATE — it repeats the current value, so
@@ -425,7 +425,9 @@ set by index, do not read options):
 14-15 pedal 1-2 · 16-21 tip 1/ring 1/tip&ring 1/tip 2/ring 2/tip&ring 2 ·
 22 mod wheel · 23 breath con · 24 foot con · 25 damper · 26 portamento ·
 27 sostenuto · 28 soft · 29 hold 2 · 30 volume · 31 balance · 32 pan ·
-33 expression · 34-40 general 1-7 · … (52 total; named MIDI CCs continue)
+33 expression · 34-40 general 1-7 · … (indices 0-40 enumerated; the device
+reports 52 sources total — higher indices continue the named MIDI CC set, not
+yet enumerated)
 ```
 
 The named MIDI sources are the standard CCs (mod wheel = CC1, breath = CC2,

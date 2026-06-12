@@ -27,7 +27,9 @@ import {
   sourceOptions,
 } from './midi-map.js';
 import { MOD } from './sysex-commands.js';
+import { MIDI_MAP } from './constants.js';
 
+const REFRESH = MIDI_MAP.UI_REFRESH_MS; // device-echo settle before re-read/repaint
 const ASSIGN_COUNT = 8; // global assign slots (device-model §8b)
 const TYPE_OPTIONS = ['absolute', 'unipolar', 'bipolar']; // MOD.TYPE indices 0-2
 
@@ -89,7 +91,7 @@ export function openControllers() {
   panelEl.hidden = false;
   // The assign dumps land async; repaint shortly after.
   renderControllers();
-  setTimeout(renderControllers, 600);
+  setTimeout(renderControllers, REFRESH);
 }
 
 export function closeControllers() {
@@ -143,10 +145,7 @@ function renderControllers() {
         'mm-btn',
         () => {
           clearAssign(i);
-          setTimeout(() => {
-            refreshAssign(i);
-            setTimeout(renderControllers, 400);
-          }, 300);
+          refreshAssignThenRender(i);
         },
         false
       )
@@ -158,13 +157,18 @@ function renderControllers() {
   panelEl.append(panel);
 }
 
+// Re-fetch an assign slot, then repaint once its echo has had time to land.
+function refreshAssignThenRender(i) {
+  refreshAssign(i);
+  setTimeout(renderControllers, REFRESH);
+}
+
 // Learn: arm Capture, prompt the user to move a controller, refresh on Done.
 function learnAssign(i) {
   captureAssign(i, () => {
-    showLearnPrompt(panelEl, `Move a controller for assign ${i + 1}, then Done.`, () => {
-      refreshAssign(i);
-      setTimeout(renderControllers, 500);
-    });
+    showLearnPrompt(panelEl, `Move a controller for assign ${i + 1}, then Done.`, () =>
+      refreshAssignThenRender(i)
+    );
   });
 }
 
@@ -207,9 +211,12 @@ export function openParamMapping(param) {
   renderCard();
   bindParam(param.rowIndex, (setup) => {
     card.loading = false;
-    // The surface title is the binding proof; require it to name our param so
-    // a page mismatch can never write the mapping to the wrong target.
-    card.bound = setup && setup.title && setup.title.startsWith(strip(param.name)) ? setup : null;
+    // The surface title ("<param> setup") is the binding proof. Match the WHOLE
+    // first token + a trailing space, not just a prefix — a short name like
+    // "in" must NOT match "input gain setup" (review), or a wrong-row bind
+    // could write the mapping to the wrong parameter.
+    const want = strip(param.name) + ' ';
+    card.bound = setup && setup.title && setup.title.startsWith(want) ? setup : null;
     if (!card.bound) card.error = `Could not bind "${param.name}" (got "${setup?.title || '?'}")`;
     renderCard();
   });
@@ -342,7 +349,7 @@ function afterWrite() {
   setTimeout(() => {
     card && (card.bound = readParamSetup());
     renderCard();
-  }, 500);
+  }, REFRESH);
 }
 
 function field(label, control) {

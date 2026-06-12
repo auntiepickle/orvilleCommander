@@ -129,8 +129,10 @@ export const MIDI_MAP = {
   //                         sends the CC to be learned: the device needs to be
   //                         listening; 800ms is comfortably past the ~100ms
   //                         echo seen on the assign Capture probes, still snappy
-  WRITE_SETTLE_MS: 250, // wait after a modulation VALUE_PUT before reading back
-  //                       the echoed result (PUTs are self-confirming, §9)
+  UI_REFRESH_MS: 600, // the MIDI modals wait this long after a write/refresh
+  //                     before re-reading the device and repainting — long
+  //                     enough for the assign/surface OBJECTINFO + VALUE echoes
+  //                     to land (PUTs are self-confirming, §9)
   BIND_STEP_MS: 300, // pace between cursor keypresses while binding a parameter
   //                    (driving the device highlight to the target row)
   BIND_SETTLE_MS: 600, // wait after parameter/select-hold before reading the

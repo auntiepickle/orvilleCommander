@@ -195,6 +195,29 @@ describe('per-parameter modulation (bound surface)', () => {
     ]);
     expect(readParamSetup().param).toEqual({ unit: 'dB', min: -100, max: 0, span: 100 });
   });
+
+  test('readParamSetup collapses the printf %% escape to a single % unit', () => {
+    getNode.mockReturnValue([
+      { key: '10030401', type: 'COL', statement: 'size setup' },
+      {
+        key: '10030408',
+        type: 'NUM',
+        statement: 'range: +%4.0f %%',
+        value: '50',
+        min: '-100',
+        max: '100',
+      },
+      {
+        key: '50001',
+        type: 'NUM',
+        statement: 'size/decay: %3.0f %%',
+        value: '70',
+        min: '0',
+        max: '100',
+      },
+    ]);
+    expect(readParamSetup().param).toEqual({ unit: '%', min: 0, max: 100, span: 100 });
+  });
 });
 
 test('enableSequenceOut sets the setup toggle to new', () => {

@@ -239,9 +239,11 @@ export function refreshParamSetup() {
 
 // The display unit trailing a printf statement, e.g. 'level : %4.0f dB' -> 'dB',
 // 'con: %2.0f' -> ''. Used to give the bare `range` number its parameter units.
+// The device escapes a literal percent as '%%' (printf), e.g. 'size/decay: %3.0f
+// %%' — collapse it back to a single '%' so percent params don't read "%%".
 function unitOf(statement) {
   const m = String(statement || '').match(/%[-+ 0-9.]*[a-zA-Z](.*)$/);
-  return m ? m[1].trim() : '';
+  return m ? m[1].replace(/%%/g, '%').trim() : '';
 }
 
 /** Reads the bound modulation surface from the tree (title proves the binding). */

@@ -25,8 +25,8 @@ import {
   setParamType,
   captureParam,
   sourceOptions,
+  rangeForSpan,
   recordParamMapping,
-  resetParamMappings,
 } from './midi-map.js';
 import { MOD } from './sysex-commands.js';
 import { MIDI_MAP } from './constants.js';
@@ -53,7 +53,10 @@ export function setupMidiMapUI(cfg) {
 /** Closes both modals + clears card state (disconnect / Sync). */
 export function resetMidiMapUI() {
   card = null;
-  resetParamMappings(); // the badge state is per-program; clear on reconnect/Sync
+  // Badge state is intentionally NOT cleared here: it is program-scoped and
+  // persisted (midi-map.js), so it survives a reconnect/reload and a reconnect
+  // to a different program simply shows that program's badges. Clearing it here
+  // wiped the persisted store on every reconnect (the page-reload path).
   document.querySelector('.mm-learn-overlay')?.remove();
   if (panelEl) {
     panelEl.remove();
@@ -324,7 +327,11 @@ function renderCard() {
     v.textContent = d.value;
     body.append(field(d.label, v));
   }
-  // Range (depth) — the parameter's display units.
+  // Range (depth) — in the bound parameter's OWN display units, shown with the
+  // parameter's span as the reference (a bare "200" means nothing without it).
+  const unit = s.param?.unit || '';
+  const rangeWrap = document.createElement('div');
+  rangeWrap.className = 'mm-range-row';
   const range = document.createElement('input');
   range.type = 'number';
   range.className = 'mm-input';
@@ -333,11 +340,43 @@ function renderCard() {
     setParamRange(range.value);
     afterWrite();
   });
-  body.append(field('range', range));
+  rangeWrap.append(range);
+  if (unit) {
+    const u = document.createElement('span');
+    u.className = 'mm-unit';
+    u.textContent = unit;
+    rangeWrap.append(u);
+  }
+  if (s.param) {
+    // One click to the natural value: a full controller sweep = the parameter's
+    // full span (the device's `range` NUM is already in the parameter's units).
+    rangeWrap.append(
+      makeButton(
+        'full span',
+        'mm-btn mm-mini',
+        () => {
+          setParamRange(rangeForSpan(s.param.span));
+          afterWrite();
+        },
+        false
+      )
+    );
+  }
+  body.append(field('range', rangeWrap));
   const hint = document.createElement('div');
   hint.className = 'mm-note';
-  hint.textContent =
-    'range = how far the parameter moves across the full controller sweep, in its own units (e.g. dB / ms / %). Negative inverts.';
+  if (s.param) {
+    const span = Math.abs(Math.round(s.param.span));
+    const u = unit ? ` ${unit}` : '';
+    hint.textContent =
+      `${strip(card?.paramName || 'this parameter')} runs ${Math.round(s.param.min)}…${Math.round(s.param.max)}${u} ` +
+      `(${span}${u} wide). range = how much it moves across a full controller sweep: ` +
+      `${span} covers its whole span, ${span * 2} is twice as sensitive (hits both ends at mid-travel), ` +
+      `half that is gentler. Negative inverts.`;
+  } else {
+    hint.textContent =
+      'range = how far the parameter moves across the full controller sweep, in its own units (e.g. dB / ms / %). Negative inverts.';
+  }
   body.append(hint);
   // Type.
   body.append(field('type', typeSelect(s.type)));

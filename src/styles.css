@@ -1749,6 +1749,26 @@ body {
   color: var(--lcd-px);
   font-variant-numeric: tabular-nums;
 }
+/* Range row: the number input, its parameter-unit suffix, and a "full span"
+   shortcut, kept on one line so the unit reads as part of the value. */
+.mm-range-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mm-range-row .mm-input {
+  width: 6em;
+}
+.mm-unit {
+  font-family: var(--legend-font);
+  font-size: 12px;
+  color: var(--legend);
+  opacity: 0.85;
+}
+.mm-btn.mm-mini {
+  padding: 3px 8px;
+  font-size: 11px;
+}
 .mm-card-foot {
   display: flex;
   gap: 8px;

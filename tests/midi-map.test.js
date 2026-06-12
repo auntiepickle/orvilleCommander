@@ -63,6 +63,7 @@ import { sendValuePut, sendObjectInfoDump, sendValueDump, sendKeypress } from '.
 import { getNode } from '../src/tree.js';
 import { bindParam } from '../src/midi-map.js';
 import { emit } from '../src/events.js';
+import { appState } from '../src/state.js';
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -168,6 +169,32 @@ describe('per-parameter modulation (bound surface)', () => {
       monitor: '50.0',
     });
   });
+
+  test('readParamSetup surfaces the bound parameter span + unit (range context)', () => {
+    getNode.mockReturnValue([
+      { key: '10030401', type: 'COL', statement: 'level setup' },
+      { key: '10030402', value: '0 off' },
+      // the range NUM itself — must NOT be mistaken for the value mirror
+      {
+        key: '10030408',
+        type: 'NUM',
+        statement: 'range: +%4.0f dB',
+        value: '200',
+        min: '-32767',
+        max: '32767',
+      },
+      // the bound parameter's value mirror: its unit + full span live here
+      {
+        key: '50001',
+        type: 'NUM',
+        statement: 'level : %4.0f dB',
+        value: '-12',
+        min: '-100',
+        max: '0',
+      },
+    ]);
+    expect(readParamSetup().param).toEqual({ unit: 'dB', min: -100, max: 0, span: 100 });
+  });
 });
 
 test('enableSequenceOut sets the setup toggle to new', () => {
@@ -176,7 +203,11 @@ test('enableSequenceOut sets the setup toggle to new', () => {
 });
 
 describe('param mapping state (the LCD "mapped" badge, #146)', () => {
-  beforeEach(() => resetParamMappings());
+  beforeEach(() => {
+    appState.dspAName = '';
+    appState.dspBName = '';
+    resetParamMappings();
+  });
 
   test('record / read / off-clears / reset', () => {
     expect(paramMappingOf('4050001')).toBeNull();
@@ -189,10 +220,28 @@ describe('param mapping state (the LCD "mapped" badge, #146)', () => {
     expect(paramMappingOf('4060001')).toBeNull();
   });
 
-  test('a program:loaded event clears the badges (stale after a load, review)', () => {
+  test('scoped by program: a slot program change hides the old badge, each sticks', () => {
+    appState.dspAName = 'MonoDelay';
+    recordParamMapping('4050001', 'pan');
+    expect(paramMappingOf('4050001')).toBe('pan');
+    // a different program in the same slot -> its own set; no stale 'pan'
+    appState.dspAName = '1x4 Delay';
+    expect(paramMappingOf('4050001')).toBeNull();
+    // back to the mapped program -> the badge returns (stuck through the switch)
+    appState.dspAName = 'MonoDelay';
+    expect(paramMappingOf('4050001')).toBe('pan');
+  });
+
+  test('persists to midiConfig so a reload restores it', () => {
+    recordParamMapping('4050001', 'pan'); // dspAName '' -> slot fallback '4'
+    const stored = JSON.parse(localStorage.getItem('midiConfig')).midiMappings;
+    expect(stored['4']['4050001']).toBe('pan');
+  });
+
+  test('a program:loaded event no longer clears the badges (program-scoped + persisted)', () => {
     recordParamMapping('4050001', 'pan');
     emit('program:loaded', { dspSlot: 'A' });
-    expect(paramMappingOf('4050001')).toBeNull();
+    expect(paramMappingOf('4050001')).toBe('pan'); // sticks through the load
   });
 });
 

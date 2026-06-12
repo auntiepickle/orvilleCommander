@@ -14,38 +14,59 @@
 
 import { sendValuePut, sendObjectInfoDump, sendValueDump, sendKeypress } from './midi.js';
 import { keypressMasks } from './controls.js';
-import { MOD, MOD_SOURCES } from './sysex-commands.js';
+import { MOD, MOD_SOURCES, KEY_PREFIX } from './sysex-commands.js';
 import { MIDI_MAP } from './constants.js';
 import { getNode } from './tree.js';
-import { on } from './events.js';
+import { saveMidiMappings, loadMidiMappings } from './config.js';
+import { appState } from './state.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Observed per-parameter mapping state (param key -> source name), so the
-// renderer can flag mapped knobs WITHOUT re-binding each one. The device stores
-// the truth in the preset; this records what the app has set or read so far.
-// Cleared on disconnect/Sync (the mappings change with the loaded program).
-let mappedParams = {};
+// Observed per-parameter mapping state, so the renderer can flag mapped knobs
+// WITHOUT re-binding each one. The device stores the truth in the preset; this
+// records what the app has set or read so far, and persists it to midiConfig so
+// the badges survive a page reload (the dev server's HMR reload included).
+//
+// Keyed by PROGRAM: { [programId]: { [paramKey]: sourceName } }. A param key
+// lives in one DSP slot, and that slot's loaded program name identifies which
+// preset it is — so loading a different program naturally shows ITS badges and
+// never the previous program's stale ones (no blunt clear-on-load needed; the
+// lookup is self-correcting). Cleared wholesale only on an explicit reset.
+let mappedParams = loadMidiMappings();
+
+// The program a param key belongs to: its DSP slot's loaded program name. The
+// key prefix names the slot (A/B); appState holds each slot's program name. When
+// a slot's name is not yet known, fall back to the slot letter so a mapping set
+// before the name resolves is still recoverable. Null for non-preset keys (the
+// load menu / setup / gangs — never badged).
+function progIdOf(key) {
+  if (key?.startsWith(KEY_PREFIX.DSP_A)) return appState.dspAName || KEY_PREFIX.DSP_A;
+  if (key?.startsWith(KEY_PREFIX.DSP_B)) return appState.dspBName || KEY_PREFIX.DSP_B;
+  return null;
+}
 
 /** Records (or clears, when source is off/empty) a param's mapping for the badge. */
 export function recordParamMapping(key, source) {
-  if (!key) return;
-  if (!source || source === 'off') delete mappedParams[key];
-  else mappedParams[key] = source;
+  const prog = progIdOf(key);
+  if (!prog) return;
+  const forProg = mappedParams[prog] || (mappedParams[prog] = {});
+  if (!source || source === 'off') delete forProg[key];
+  else forProg[key] = source;
+  if (!Object.keys(forProg).length) delete mappedParams[prog]; // don't leave empty buckets
+  saveMidiMappings(mappedParams);
 }
 
 /** The source name a param is mapped to (for the lit badge), or null. */
 export function paramMappingOf(key) {
-  return mappedParams[key] || null;
+  const prog = progIdOf(key);
+  return (prog && mappedParams[prog]?.[key]) || null;
 }
 
-/** Clears all observed mappings (disconnect / Sync / program change). */
+/** Clears ALL observed mappings (explicit reset only — tests, hard reset). */
 export function resetParamMappings() {
   mappedParams = {};
+  saveMidiMappings(mappedParams);
 }
-
-// A program load (library.js) replaces a DSP's params, staling the badge state.
-on('program:loaded', resetParamMappings);
 
 /** The child key at `offset` within a slot/surface base key (hex math). */
 export function childKey(base, offset) {
@@ -216,10 +237,31 @@ export function refreshParamSetup() {
   sendValueDump(MOD.PARAM_SETUP);
 }
 
+// The display unit trailing a printf statement, e.g. 'level : %4.0f dB' -> 'dB',
+// 'con: %2.0f' -> ''. Used to give the bare `range` number its parameter units.
+function unitOf(statement) {
+  const m = String(statement || '').match(/%[-+ 0-9.]*[a-zA-Z](.*)$/);
+  return m ? m[1].trim() : '';
+}
+
 /** Reads the bound modulation surface from the tree (title proves the binding). */
 export function readParamSetup() {
   const node = getNode(MOD.PARAM_SETUP);
   const find = (k) => node?.find((o) => o.key === k);
+  // The bound parameter's own value mirror (device-model §8b): the surface's NUM
+  // that ISN'T the `range` NUM. It carries the parameter's display unit + its
+  // full span (min..max) — the reference that makes a `range` value meaningful
+  // (e.g. range 200 on a 100 dB-span parameter = twice its span).
+  const mirror = node?.find((o) => o.type === 'NUM' && o.key !== MOD.RANGE);
+  const param =
+    mirror && mirror.min !== '' && mirror.max !== ''
+      ? {
+          unit: unitOf(mirror.statement),
+          min: Number(mirror.min),
+          max: Number(mirror.max),
+          span: Number(mirror.max) - Number(mirror.min),
+        }
+      : null;
   return {
     title: node?.[0]?.statement || '',
     source: (find(MOD.MODE)?.value || '').replace(/^\w+\s/, '') || 'off',
@@ -227,6 +269,7 @@ export function readParamSetup() {
     range: find(MOD.RANGE)?.value || '',
     type: find(MOD.TYPE)?.value || '',
     monitor: find(MOD.MONITOR)?.value || '',
+    param,
     // channel + the con# (for MIDI single/double, this is the actual CC number).
     details: [subDetail(find(MOD.CHANNEL)), subDetail(find(MOD.SUB2))].filter(Boolean),
   };

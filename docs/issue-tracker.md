@@ -861,7 +861,8 @@ the IDLE slot B (explicit-slot targeting — idle name changed); getRememberedPr
 EXACT {bank 5, prog 0} just loaded (not a name guess); previewed '11 Delaytaps 2' onto B (overwrite);
 restored -> idle name back to '10 Delaytaps' (RESTORE-ROUND-TRIP PASS). Reviewed (correctness + docs);
 fixed one blocker (loadProgramToDsp now fires onDone on its sync-guard early-return so a browser load
-during a sync cannot stick the control lock — regression-tested).
+during a sync cannot stick the control lock — regression-tested). MERGED to main (PR #156, squash
+191cc2d; closed #153 and #135).
 
 2026-06-12 — MIDI MAPPING, device-native (#146, branch feat/midi-mapping-146 stacked on the browser
 branch, PR open). The flagship: map any MIDI source to any parameter, run IN THE DEVICE DSP (zero app
@@ -881,16 +882,65 @@ setupMidiMapUI, resetMidiMapUI at both reset seams. sysex-commands.js: MOD keys 
 constants.js: MIDI_MAP timings. Tests 280/280 (+27: midi-map ops/sources/bind, midi-map-ui modals,
 renderer badge), lint+format clean. VALIDATED LIVE end-to-end through the shipped module
 (logs/probe-midimap-e2e.mjs): bindParam('level') -> "level setup", set source=volume(CC7) via the
-module, then CC#7 drove level -100->0 dB with the app out of the runtime path. NEEDS browser smoke:
-the full UI click-through (badge -> card -> device) against the unit; the engine + bind are
-hardware-proven, the UI is jsdom-tested. Pre-merge reviewer pass pending. Foundation note: bindParam
-reaches params on a preset's MAIN param page; deeply-nested sub-page params need extra navigation (a
-follow-up). Also delivers #152 (inbound Program Change loads) — confirmed live.
-CONFIRMED LIVE BY MAINTAINER: bound a real controller and saw modulation on hardware. Polish batch
-(A/B sync, CC/con display, mapped badge, DSP-B/embedded params, range hint) + the completed 52-entry
-mode source table all hardware-verified (logs/probe-verify-batch.mjs): MIDI double surfaces the con
-(CC number); the A/B keypress toggles the DSP so a bind lands on the right engine; DSP-B params bind.
+module, then CC#7 drove level -100->0 dB with the app out of the runtime path. Also delivers #152
+(inbound Program Change loads) — confirmed live. CONFIRMED LIVE BY MAINTAINER: bound a real controller
+and saw modulation on hardware. Polish batch (A/B sync, CC/con display, mapped badge, DSP-B/embedded
+params, range hint) + the completed 52-entry mode source table all hardware-verified
+(logs/probe-verify-batch.mjs): MIDI double surfaces the con (CC number); the A/B keypress toggles the
+DSP so a bind lands on the right engine; DSP-B params bind. MERGED to main (PR #157, squash ccd1dde;
+closed #146 and #152). Reviewed (correctness + docs), no blockers; fixes applied pre-merge: bind
+title-guard tightened to a full-token match (a short name like "in" must not match "input gain setup"),
+UI settle constant named (MIDI_MAP.UI_REFRESH_MS), badge-persistence ordering fixed (record before LCD
+re-render so the badge lights), badges made program-scoped + persisted to midiConfig (survive reload),
+range shown in the parameter's own units with a span hint. Foundation note at merge: bindParam reached
+only a preset's MAIN param page; sub-block params were a follow-up — RESOLVED by PR #158 below.
+
+2026-06-12 — MIDI MAPPING FOLLOW-UPS (#146, PR #158, squash 02e7287). Two device-verified fixes found
+live-testing on the 'Horrors' multi-effect. (1) GENERIC SUB-BLOCK BIND: bindParam used a flat
+program->parameter->DOWN x row that only reached block 0 / page 0, so a sub-block param (reverb
+lowfreq) bound the wrong block ("Could not bind lowfreq (got fback setup)"). Rebuilt generically from
+the loaded program's tree (device-model.md §8b): soft1..soft4 select the program's blocks (the preset's
+COL children), re-pressing a block's softkey pages within it, and each page is a 4-row x 2-col
+column-major grid in dump order. New paramCoords(blockKey, paramKey) derives block index (softkey) +
+dump index from the tree (via tree.parentOf, since a COL's own dump header is self-parented); bindParam
+navigates program->parameter->soft(b+1) x (page+1)->RIGHT x col->DOWN x row->select-hold. Live-verified
+5/5 across pitch/chorus/reverb + both reverb pages (logs/probe-midimap-subblock.mjs). Blocks past the 4
+softkeys report a clean "not mappable yet". (2) SEQUENCE-OUT NO LONGER STARVES POLLING: 'sequence out =
+new' makes the device emit unsolicited 0x3C packets on every value change; the inbound handler rearmed
+the dump-wave idle watchdog on every raw packet (#107), so a continuously-changing value (a tempo-synced
+param under incoming MIDI clock) held every open wave to the 10s WATCHDOG_MAX_MS ceiling and meter
+polling (gated while a wave is open) stopped. A 0x3C emit is not a wave response, so it is now excluded
+from the watchdog rearm (CMD.SEQUENCE_OUT; multi-packet response streams still rearm). Reviewed
+(correctness + docs), no blockers. Tests 292/292, lint clean. CONFIRMED LIVE BY MAINTAINER.
+NOTE: this REVISES the #107 watchdog "rearms on every raw inbound packet" rule — unsolicited 0x3C
+sequence-out emits are now EXCLUDED (they are not wave responses).
+
+### MIDI mapping follow-ups (open, from #146/#157/#158)
+- [ ] M1  Map params in programs with MORE than 4 blocks — bindParam reaches blocks via soft1..soft4
+  only, so a 5th+ block's params report a clean "not mappable yet" (#158). Needs the device's
+  block-paging-beyond-soft4 navigation probed.  needs-hardware
+- [ ] M2  Map params in blocks with non-grid / 'a'-position layouts — bindParam assumes a 4-row x 2-col
+  column-major grid; non-grid pages currently safe-ABORT via the surface OBJECTINFO title check rather
+  than mis-writing (#146/#158). Generalize the coord derivation for these layouts.  needs-hardware
+- [ ] M3  (optional) Consume inbound 0x3C sequence-out for LIVE value mirroring — #158 excludes 0x3C
+  from the watchdog rearm but the app still DISCARDS the packets; the plan notes the app could parse
+  them to mirror live device-side changes into the UI. Overlaps GH #150 (automation record/playback).
+  Pairs with restoring `sequence out` on disconnect.  needs-decision
+
+2026-06-12 — GITHUB RECONCILIATION (preset-browser + MIDI-mapping milestones merged). Shipped: #153/#135
+(PR #156, squash 191cc2d), #146/#152 (PR #157, squash ccd1dde), #146 follow-ups (PR #158, squash
+02e7287). Closed on GitHub: #153, #135, #146, #152. NEW OPEN feature issues filed 2026-06-11 (not yet
+in any batch): #147 (full unit backup/restore to file), #148 (snapshots/scenes capture+recall), #149
+(preset save/rename/delete/organize), #150 (parameter automation record/playback via sequence out —
+overlaps MIDI-mapping follow-up M3). OPEN BOARD: #9, #10, #12, #14, #45 (G2b, gated), #147, #148, #149,
+#150, plus MIDI-mapping follow-ups M1-M3. Every bug-class issue remains closed; the open board is
+entirely feature enhancements + the gated live loop.
 
 ## Done (verified merged — do not redo)
+(This is a sparse quick-list; the authoritative record is the dated reconciliation log above.)
+- #138 single-source-of-truth load menu (preset-loader) — PR #155 (44e40c3)
+- #153/#135 preset browser + program preview + live Favorites — PR #156 (191cc2d)
+- #146/#152 device-native MIDI mapping — PR #157 (ccd1dde)
+- #146 MIDI-mapping follow-ups (generic sub-block bind + sequence-out polling fix) — PR #158 (02e7287)
 - A1  main.js debug-upload slice bounds — PR #24
 - 8-step decoupling refactor — PR #23

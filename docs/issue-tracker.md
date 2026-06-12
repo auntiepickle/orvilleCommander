@@ -936,6 +936,19 @@ overlaps MIDI-mapping follow-up M3). OPEN BOARD: #9, #10, #12, #14, #45 (G2b, ga
 #150, plus MIDI-mapping follow-ups M1-M3. Every bug-class issue remains closed; the open board is
 entirely feature enhancements + the gated live loop.
 
+2026-06-12 — BOARD COMPLETED + #151 CLEANUP. Filed the manual-feature-pass backlog items that lacked
+GitHub issues, and the MIDI-mapping follow-ups M1-M3, so the board mirrors the roadmap: #160 routing &
+setup storage, #161 tap tempo / BPM, #162 foot-pedal calibration, #163 A/B copy & compare, #164 display
+brightness/contrast, #165 optional app-layer MIDI bridge, #166 (M1) >4-block mapping, #167 (M2) non-grid
+block layouts, #168 (M3) live 0x3C value mirroring. CLOSED PR #151 ("docs: feature pass from the
+operating manual") as SUPERSEDED — two of its three commits were the sync-dialog/status-chip/search-
+gating work already shipped via #145 (bf60326), so it was a duplicate that only conflicted; its one new
+artifact, docs/design/feature-pass-manual.md, was salvaged onto branch docs/feature-roadmap, updated to
+mark the flagship + browse/load features shipped and to cross-reference the issue numbers. CURRENT OPEN
+BOARD: #9, #10, #12, #14, #45 (G2b, gated), #147, #148, #149, #150, #160-#168. All bug-class issues
+remain closed; the board is entirely feature enhancements + the gated live loop. Suggested next:
+#147 backup/restore (battery-RAM safety), then #148 snapshots.
+
 ## Done (verified merged — do not redo)
 (This is a sparse quick-list; the authoritative record is the dated reconciliation log above.)
 - #138 single-source-of-truth load menu (preset-loader) — PR #155 (44e40c3)

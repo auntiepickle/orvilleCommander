@@ -284,6 +284,17 @@ describe('loadProgramToDsp / preview slot targeting (#135)', () => {
     await loadProgramToDsp({ bankIdx: '0', programIdx: '1', programName: '1 X' }, 'A');
     expect(sendValueDump).toHaveBeenCalledWith('10020011');
   });
+
+  test('a load ignored mid-sync STILL fires onDone (review B1: no stuck UI lock)', async () => {
+    // Hold syncing=true: a sync with no bank list polls until it gives up.
+    getNode.mockReturnValue(undefined);
+    const syncPromise = syncLibrary(); // sets syncing=true synchronously
+    const done = jest.fn();
+    await loadProgramToDsp({ bankIdx: '5', programIdx: '0', programName: '0 X' }, 'A', done);
+    expect(done).toHaveBeenCalled(); // the lock-holder unlocks...
+    expect(sendValuePut).not.toHaveBeenCalledWith('1002001c', '1'); // ...but no load happened
+    await syncPromise;
+  });
 });
 
 describe('getRememberedProgram (preview restore, #135)', () => {

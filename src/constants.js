@@ -117,9 +117,10 @@ export const LIBRARY = {
   //                        trusted from the static library snapshot — it is
   //                        re-fetched live whenever viewed (#138/#135 follow-up)
   FAVORITES_REFRESH_MS: 1200, // settle after selecting bank 0 + dumping it: the
-  //                             MRU list is tiny (8 links) so its dump lands
-  //                             fast, but 2x BANK_SETTLE_MS leaves margin for
-  //                             the objectinfo:received listener to re-record it
+  //                             MRU list is small (default 8 links, device-model.md
+  //                             §"Bank 0") so its dump lands fast, but 2x
+  //                             BANK_SETTLE_MS leaves margin for the
+  //                             objectinfo:received listener to re-record it
 };
 
 // Demo mode (src/demo.js): the canned device built from a live capture.

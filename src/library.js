@@ -271,8 +271,11 @@ function stripIndexToken(name) {
 export async function loadProgramToDsp(target, dspSlot, onDone) {
   if (syncing) {
     // The scan owns the bank selection: a load interleaved with it would
-    // land in whatever bank the scan happens to be visiting (review).
+    // land in whatever bank the scan happens to be visiting (review). Still
+    // fire onDone — a caller holding a UI lock (the browser's withLoadLock)
+    // must unlock on this no-op, or its controls stick disabled (review B1).
     log('Load ignored: library sync in progress', 'error', 'error');
+    onDone?.();
     return;
   }
   const isA = dspSlot === 'A';

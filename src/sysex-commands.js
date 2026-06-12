@@ -38,6 +38,9 @@ export const CMD = {
   VALUE_DUMP: 0x2e, // in:  VALUE_DUMP response
   OBJECTINFO_DUMP: 0x31, // out: OBJECTINFO_DUMP request
   OBJECTINFO: 0x32, // in:  OBJECTINFO_DUMP response (ASCII sub-object lines)
+  SEQUENCE_OUT: 0x3c, // in:  UNSOLICITED emit of a changed field's key+value when
+  //                     `sequence out = new` is set (device-model §8b). Not a
+  //                     response to any request — see midi.js watchdog handling.
 };
 
 // Parameter keys referenced directly in application logic. Most keys are

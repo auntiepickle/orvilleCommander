@@ -150,6 +150,32 @@ describe('midi.js per-wave counter and watchdog (7c)', () => {
     expect(received[0]).toMatchObject({ reason: 'watchdog' });
   });
 
+  test('an unsolicited sequence-out (0x3C) emit does NOT rearm the watchdog (#146)', () => {
+    // sequence-out emits are not wave responses; if they rearmed the watchdog,
+    // a stream of them (a value moving under incoming MIDI clock) held every
+    // open wave to the 10s cap and starved meter polling. The idle watchdog
+    // must still fire on its original schedule despite the 0x3C traffic.
+    let handler;
+    const input = {
+      addListener: (type, fn) => {
+        handler = fn;
+      },
+      removeListener: jest.fn(),
+    };
+    setMidiPorts({ sendSysex: jest.fn() }, input, 0);
+    addSysexListener();
+
+    sendObjectInfoDump('a'); // idle watchdog armed: fires at t=1500
+    jest.advanceTimersByTime(1000); // t=1000
+    // F0 1C 70 dev 3C ... F7 — a complete unsolicited sequence-out frame.
+    handler({ data: [0xf0, 0x1c, 0x70, 0x00, 0x3c, 0x31, 0x30, 0xf7] });
+    jest.advanceTimersByTime(499); // t=1499: NOT rearmed, so still alive
+    expect(received).toHaveLength(0);
+    jest.advanceTimersByTime(1); // t=1500: the ORIGINAL idle deadline fires
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({ reason: 'watchdog' });
+  });
+
   test('isWaveOpen tracks outstanding across send/receive/watchdog (#107 poll gate)', () => {
     expect(isWaveOpen()).toBe(false);
     sendObjectInfoDump('a');

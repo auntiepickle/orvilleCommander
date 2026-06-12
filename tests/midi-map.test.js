@@ -7,6 +7,16 @@ jest.mock('../src/midi.js', () => ({
   sendValuePut: jest.fn(),
   sendObjectInfoDump: jest.fn(),
   sendValueDump: jest.fn(),
+  sendKeypress: jest.fn(),
+}));
+
+jest.mock('../src/controls.js', () => ({
+  keypressMasks: {
+    program: ['program'],
+    parameter: ['parameter'],
+    down: ['down'],
+    'select-hold': ['select-hold'],
+  },
 }));
 
 jest.mock('../src/tree.js', () => ({
@@ -15,7 +25,10 @@ jest.mock('../src/tree.js', () => ({
 
 jest.mock('../src/constants.js', () => {
   const actual = jest.requireActual('../src/constants.js');
-  return { ...actual, MIDI_MAP: { CAPTURE_SETTLE_MS: 1, WRITE_SETTLE_MS: 1 } };
+  return {
+    ...actual,
+    MIDI_MAP: { CAPTURE_SETTLE_MS: 1, WRITE_SETTLE_MS: 1, BIND_STEP_MS: 1, BIND_SETTLE_MS: 1 },
+  };
 });
 
 import {
@@ -36,8 +49,9 @@ import {
   readParamSetup,
   rangeForSpan,
 } from '../src/midi-map.js';
-import { sendValuePut, sendObjectInfoDump, sendValueDump } from '../src/midi.js';
+import { sendValuePut, sendObjectInfoDump, sendValueDump, sendKeypress } from '../src/midi.js';
 import { getNode } from '../src/tree.js';
+import { bindParam } from '../src/midi-map.js';
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -148,4 +162,34 @@ describe('per-parameter modulation (bound surface)', () => {
 test('enableSequenceOut sets the setup toggle to new', () => {
   enableSequenceOut();
   expect(sendValuePut).toHaveBeenCalledWith('10010016', '2');
+});
+
+describe('bindParam (the one keypress step)', () => {
+  test('drives program->parameter->DOWN x row->select-hold, then reads the surface', async () => {
+    getNode.mockReturnValue([
+      { key: '10030401', type: 'COL', statement: 't_delay setup' },
+      { key: '10030402', value: '0 off' },
+    ]);
+    let result;
+    await bindParam(1, (s) => (result = s)); // row 1 = second param
+    expect(sendKeypress.mock.calls.map((c) => c[0])).toEqual([
+      ['program'],
+      ['parameter'],
+      ['down'], // one DOWN for row index 1
+      ['select-hold'],
+    ]);
+    // The surface is read back; its title is the binding proof.
+    expect(result.title).toBe('t_delay setup');
+    expect(sendObjectInfoDump).toHaveBeenCalledWith('10030401');
+  });
+
+  test('row 0 binds with no DOWN presses', async () => {
+    getNode.mockReturnValue([{ key: '10030401', type: 'COL', statement: 'level setup' }]);
+    await bindParam(0);
+    expect(sendKeypress.mock.calls.map((c) => c[0])).toEqual([
+      ['program'],
+      ['parameter'],
+      ['select-hold'],
+    ]);
+  });
 });

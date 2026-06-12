@@ -12,7 +12,8 @@
 //
 // DOM-free like library.js: it reads the tree + sends SysEx, nothing else.
 
-import { sendValuePut, sendObjectInfoDump, sendValueDump } from './midi.js';
+import { sendValuePut, sendObjectInfoDump, sendValueDump, sendKeypress } from './midi.js';
+import { keypressMasks } from './controls.js';
 import { MOD, MOD_SOURCES } from './sysex-commands.js';
 import { MIDI_MAP } from './constants.js';
 import { getNode } from './tree.js';
@@ -97,10 +98,39 @@ export function clearAssign(i) {
   sendValuePut(assignSlot(i).mode, '0');
 }
 
-// --- Per-parameter modulation (surface must be BOUND first) ---------------
-// Binding is a SELECT-hold on the target parameter (the one keypress step); the
-// caller owns that + the screen-title verification. Once bound, these are pure
-// VALUE_PUT/OBJECTINFO on the fixed surface keys.
+// --- Per-parameter modulation ---------------------------------------------
+// Binding is the one keypress step: drive the device highlight to the target
+// parameter and SELECT-hold. After that, config is pure VALUE_PUT/OBJECTINFO on
+// the fixed surface keys, and the bind is verified by the surface's OBJECTINFO
+// title (no bitmap scraping).
+
+/**
+ * Binds the per-parameter modulation surface to the parameter at `rowIndex` on
+ * the active DSP's main parameter page (0-based, in dump order). Drives the
+ * device cursor there (program -> parameter resets to the top row, then DOWN x
+ * rowIndex) and SELECT-holds, then reads the bound surface back. The returned
+ * setup's `title` is the binding proof ("<param> setup") — the caller compares
+ * it to the expected parameter and aborts on mismatch rather than writing to
+ * the wrong target.
+ *
+ * @param {number} rowIndex
+ * @param {(setup: object) => void} [onDone] - called with readParamSetup()
+ */
+export async function bindParam(rowIndex, onDone) {
+  sendKeypress(keypressMasks.program); // reset to a known page...
+  await sleep(MIDI_MAP.BIND_STEP_MS);
+  sendKeypress(keypressMasks.parameter); // ...then the param page (cursor at top)
+  await sleep(MIDI_MAP.BIND_SETTLE_MS);
+  for (let i = 0; i < rowIndex; i++) {
+    sendKeypress(keypressMasks.down);
+    await sleep(MIDI_MAP.BIND_STEP_MS);
+  }
+  sendKeypress(keypressMasks['select-hold']);
+  await sleep(MIDI_MAP.BIND_SETTLE_MS);
+  refreshParamSetup();
+  await sleep(MIDI_MAP.BIND_SETTLE_MS);
+  onDone?.(readParamSetup());
+}
 
 /** Sets the bound parameter's modulation source by index (MOD_SOURCES). */
 export function setParamSource(index) {

@@ -131,6 +131,11 @@ export const MIDI_MAP = {
   //                         echo seen on the assign Capture probes, still snappy
   WRITE_SETTLE_MS: 250, // wait after a modulation VALUE_PUT before reading back
   //                       the echoed result (PUTs are self-confirming, §9)
+  BIND_STEP_MS: 300, // pace between cursor keypresses while binding a parameter
+  //                    (driving the device highlight to the target row)
+  BIND_SETTLE_MS: 600, // wait after parameter/select-hold before reading the
+  //                      bound surface back (the page swap is near-instant but
+  //                      the OBJECTINFO round-trip needs room)
 };
 
 // Demo mode (src/demo.js): the canned device built from a live capture.

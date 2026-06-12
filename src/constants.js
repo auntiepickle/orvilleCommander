@@ -123,6 +123,16 @@ export const LIBRARY = {
   //                             objectinfo:received listener to re-record it
 };
 
+// MIDI mapping (#146, src/midi-map.js): device-native modulation config.
+export const MIDI_MAP = {
+  CAPTURE_SETTLE_MS: 800, // wait after arming Capture Midi before the user/app
+  //                         sends the CC to be learned: the device needs to be
+  //                         listening; 800ms is comfortably past the ~100ms
+  //                         echo seen on the assign Capture probes, still snappy
+  WRITE_SETTLE_MS: 250, // wait after a modulation VALUE_PUT before reading back
+  //                       the echoed result (PUTs are self-confirming, §9)
+};
+
 // Demo mode (src/demo.js): the canned device built from a live capture.
 export const DEMO = {
   REPLY_LATENCY_MS: 25, // per-reply delay so the dump-wave lifecycle (BUSY

@@ -25,6 +25,8 @@ import {
   setParamType,
   captureParam,
   sourceOptions,
+  recordParamMapping,
+  resetParamMappings,
 } from './midi-map.js';
 import { MOD } from './sysex-commands.js';
 import { MIDI_MAP } from './constants.js';
@@ -51,6 +53,7 @@ export function setupMidiMapUI(cfg) {
 /** Closes both modals + clears card state (disconnect / Sync). */
 export function resetMidiMapUI() {
   card = null;
+  resetParamMappings(); // the badge state is per-program; clear on reconnect/Sync
   document.querySelector('.mm-learn-overlay')?.remove();
   if (panelEl) {
     panelEl.remove();
@@ -80,6 +83,14 @@ function modalShell(className) {
   el.hidden = true;
   document.body.appendChild(el);
   return el;
+}
+
+// "midi double · con 42" — appends the con# (the actual CC number) when the
+// source reveals one (MIDI single/double); otherwise just the source name.
+function sourceLabel(state) {
+  const con = (state.details || []).find((d) => /con/i.test(d.label));
+  const base = state.source || 'off';
+  return con ? `${base} · ${con.label} ${con.value}` : base;
 }
 
 // --- 1. Controllers panel -------------------------------------------------
@@ -132,7 +143,7 @@ function renderControllers() {
     label.textContent = `assign ${i + 1}`;
     const src = document.createElement('span');
     src.className = 'mm-row-src';
-    src.textContent = a.source || 'off';
+    src.textContent = sourceLabel(a);
     const mon = document.createElement('span');
     mon.className = 'mm-row-mon';
     mon.textContent = a.monitor ? `${Math.round(parseFloat(a.monitor))}%` : '';
@@ -239,7 +250,13 @@ function startLearnPoll(refresh, read, onClose, label) {
 export function openParamMapping(param) {
   if (!cardEl) cardEl = modalShell('mm-modal');
   enableSequenceOut();
-  card = { paramName: param.name, rowIndex: param.rowIndex, bound: null, loading: true };
+  card = {
+    key: param.key,
+    paramName: param.name,
+    rowIndex: param.rowIndex,
+    bound: null,
+    loading: true,
+  };
   cardEl.hidden = false;
   renderCard();
   bindParam(param.rowIndex, (setup) => {
@@ -251,6 +268,8 @@ export function openParamMapping(param) {
     const want = strip(param.name) + ' ';
     card.bound = setup && setup.title && setup.title.startsWith(want) ? setup : null;
     if (!card.bound) card.error = `Could not bind "${param.name}" (got "${setup?.title || '?'}")`;
+    // Record what the bind read so the LCD badge reflects the real state.
+    if (card.bound) recordParamMapping(card.key, card.bound.source);
     renderCard();
   });
 }
@@ -297,6 +316,14 @@ function renderCard() {
 
   // Source picker (set by index; degenerate device options, so we own the list).
   body.append(field('source', sourceSelect(s.source)));
+  // Sub-fields the source reveals: channel, and the con# for MIDI single/double
+  // (this is where the actual CC number shows). Read-only info for now.
+  for (const d of s.details || []) {
+    const v = document.createElement('span');
+    v.className = 'mm-mon';
+    v.textContent = d.value;
+    body.append(field(d.label, v));
+  }
   // Range (depth) — the parameter's display units.
   const range = document.createElement('input');
   range.type = 'number';
@@ -307,6 +334,11 @@ function renderCard() {
     afterWrite();
   });
   body.append(field('range', range));
+  const hint = document.createElement('div');
+  hint.className = 'mm-note';
+  hint.textContent =
+    'range = how far the parameter moves across the full controller sweep, in its own units (e.g. dB / ms / %). Negative inverts.';
+  body.append(hint);
   // Type.
   body.append(field('type', typeSelect(s.type)));
   // Live monitor.
@@ -389,7 +421,10 @@ function afterWrite() {
   refreshParamSetup();
   onChange?.();
   setTimeout(() => {
-    card && (card.bound = readParamSetup());
+    if (card) {
+      card.bound = readParamSetup();
+      recordParamMapping(card.key, card.bound.source); // keep the LCD badge in sync
+    }
     renderCard();
   }, REFRESH);
 }

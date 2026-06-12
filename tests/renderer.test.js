@@ -1,6 +1,13 @@
 import { renderScreen } from '../src/renderer.js';
 import { appState } from '../src/state.js';
-import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from '../src/midi.js';
+import {
+  sendObjectInfoDump,
+  sendValueDump,
+  sendValuePut,
+  sendSysEx,
+  sendKeypress,
+} from '../src/midi.js';
+import { recordParamMapping, resetParamMappings } from '../src/midi-map.js';
 import { showLoading } from '../src/main.js';
 import { log as mockLog } from '../src/logger.js';
 import { recordDump, reset as treeReset } from '../src/tree.js';
@@ -12,10 +19,11 @@ jest.mock('../src/midi.js', () => ({
   sendValueDump: jest.fn(),
   sendValuePut: jest.fn(),
   sendSysEx: jest.fn(),
+  sendKeypress: jest.fn(),
 }));
 
 jest.mock('../src/controls.js', () => ({
-  keypressMasks: { enter: [0xff, 0xff, 0xff, 0xef] },
+  keypressMasks: { enter: [0xff, 0xff, 0xff, 0xef], ab: [0xfd, 0xff, 0xfd, 0xff] },
 }));
 
 jest.mock('../src/main.js', () => ({
@@ -1850,5 +1858,38 @@ describe('renderer.js', () => {
     // T1b: ancestry derived from the tree — root is the preset's parent.
     expect(appState.keyStack.map((e) => e.key)).toEqual(['0']);
     expect(sendObjectInfoDump).toHaveBeenCalledWith('801000b', null);
+    // #146: the view switch also presses the device A/B so the unit follows,
+    // keeping a MIDI-map bind on the right DSP.
+    expect(sendKeypress).toHaveBeenCalledWith([0xfd, 0xff, 0xfd, 0xff]); // keypressMasks.ab
+  });
+
+  test('a mapped DSP param shows its source lit on the badge (#146)', () => {
+    resetParamMappings();
+    recordParamMapping('4070001', 'pan'); // app has mapped this knob
+    appState.currentKey = '401000b';
+    const subs = [
+      {
+        type: 'COL',
+        position: '0',
+        key: '401000b',
+        parent: '401000b',
+        statement: 'Black Hole',
+        tag: '',
+      },
+      {
+        type: 'NUM',
+        position: '0',
+        key: '4070001',
+        parent: '401000b',
+        statement: 'diff/time : %3.0f %%',
+        tag: '',
+        value: '50',
+      },
+    ];
+    renderScreen(subs, '', mockLog);
+    const badge = document.querySelector('.lcd-midi-badge');
+    expect(badge.classList.contains('lcd-midi-mapped')).toBe(true);
+    expect(badge.textContent).toBe('pan'); // mapped source shown, not "MIDI"
+    resetParamMappings();
   });
 });

@@ -1790,3 +1790,11 @@ body {
 .lcd-midi-badge:hover {
   background: var(--lcd-px);
 }
+/* A mapped parameter: the badge shows its source, lit, so mapped knobs read at
+   a glance vs the dim "MIDI" affordance on unmapped ones (#146). */
+.lcd-midi-mapped {
+  color: var(--lcd-bg);
+  background: var(--lcd-px);
+  box-shadow: 0 0 5px var(--lcd-glow);
+  text-transform: none;
+}

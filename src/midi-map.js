@@ -20,6 +20,29 @@ import { getNode } from './tree.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Observed per-parameter mapping state (param key -> source name), so the
+// renderer can flag mapped knobs WITHOUT re-binding each one. The device stores
+// the truth in the preset; this records what the app has set or read so far.
+// Cleared on disconnect/Sync (the mappings change with the loaded program).
+let mappedParams = {};
+
+/** Records (or clears, when source is off/empty) a param's mapping for the badge. */
+export function recordParamMapping(key, source) {
+  if (!key) return;
+  if (!source || source === 'off') delete mappedParams[key];
+  else mappedParams[key] = source;
+}
+
+/** The source name a param is mapped to (for the lit badge), or null. */
+export function paramMappingOf(key) {
+  return mappedParams[key] || null;
+}
+
+/** Clears all observed mappings (disconnect / Sync / program change). */
+export function resetParamMappings() {
+  mappedParams = {};
+}
+
 /** The child key at `offset` within a slot/surface base key (hex math). */
 export function childKey(base, offset) {
   return (parseInt(base, 16) + offset).toString(16);
@@ -62,6 +85,21 @@ export function assignSlot(i) {
   };
 }
 
+// A modulation sub-field (channel / con#) made presentable, or null when it is
+// the blank "-----" placeholder. For "MIDI single"/"MIDI double" sources the
+// device reveals a `con` (controller-number) sub here — this is how the actual
+// CC number surfaces. Strips the format spec from the label and the leading
+// index token from a SET value: { label: 'con', value: '42' }.
+function subDetail(o) {
+  if (!o || o.tag === '-----') return null;
+  const label = String(o.statement || '')
+    .replace(/\s*:?\s*%[-0-9.]*[a-z%].*$/i, '')
+    .trim();
+  if (!label || /^[-\s]+$/.test(label)) return null;
+  const raw = String(o.value ?? '');
+  return { label, value: raw.replace(/^[0-9a-f]+\s/i, '') || raw };
+}
+
 /** Reads assign slot `i`'s current state from the tree (after a refresh). */
 export function readAssign(i) {
   const s = assignSlot(i);
@@ -72,6 +110,10 @@ export function readAssign(i) {
     source: (find(s.mode)?.value || '').replace(/^\w+\s/, '') || 'off',
     channel: find(s.channel)?.value || '',
     monitor: find(s.monitor)?.value || '',
+    // channel + the con# (for MIDI single/double) as presentable detail.
+    details: [subDetail(find(s.channel)), subDetail(find(childKey(s.base, MOD.OFF_SUB)))].filter(
+      Boolean
+    ),
   };
 }
 
@@ -179,6 +221,8 @@ export function readParamSetup() {
     range: find(MOD.RANGE)?.value || '',
     type: find(MOD.TYPE)?.value || '',
     monitor: find(MOD.MONITOR)?.value || '',
+    // channel + the con# (for MIDI single/double, this is the actual CC number).
+    details: [subDetail(find(MOD.CHANNEL)), subDetail(find(MOD.SUB2))].filter(Boolean),
   };
 }
 

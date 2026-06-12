@@ -55,6 +55,9 @@ import {
   captureParam,
   readParamSetup,
   rangeForSpan,
+  recordParamMapping,
+  paramMappingOf,
+  resetParamMappings,
 } from '../src/midi-map.js';
 import { sendValuePut, sendObjectInfoDump, sendValueDump, sendKeypress } from '../src/midi.js';
 import { getNode } from '../src/tree.js';
@@ -109,7 +112,7 @@ describe('global assign controllers', () => {
       { key: '10010112', value: '0 base + 0' },
       { key: '10010114', value: '62.5' },
     ]);
-    expect(readAssign(0)).toEqual({
+    expect(readAssign(0)).toMatchObject({
       index: 0,
       source: 'volume',
       channel: '0 base + 0',
@@ -169,6 +172,37 @@ describe('per-parameter modulation (bound surface)', () => {
 test('enableSequenceOut sets the setup toggle to new', () => {
   enableSequenceOut();
   expect(sendValuePut).toHaveBeenCalledWith('10010016', '2');
+});
+
+describe('param mapping state (the LCD "mapped" badge, #146)', () => {
+  beforeEach(() => resetParamMappings());
+
+  test('record / read / off-clears / reset', () => {
+    expect(paramMappingOf('4050001')).toBeNull();
+    recordParamMapping('4050001', 'pan');
+    expect(paramMappingOf('4050001')).toBe('pan');
+    recordParamMapping('4050001', 'off'); // off (or empty) un-marks it
+    expect(paramMappingOf('4050001')).toBeNull();
+    recordParamMapping('4060001', 'volume');
+    resetParamMappings();
+    expect(paramMappingOf('4060001')).toBeNull();
+  });
+});
+
+test('readParamSetup surfaces the con# (CC number) for MIDI single/double', () => {
+  getNode.mockReturnValue([
+    { key: '10030401', type: 'COL', statement: 'level setup' },
+    { key: '10030402', value: '1f midi double' },
+    { key: '10030403', statement: 'channel: %-11s', tag: 'channel', value: '0 base + 0' },
+    { key: '10030404', statement: 'con: %2.0f', tag: 'con', value: '42' },
+  ]);
+  const s = readParamSetup();
+  expect(s.source).toBe('midi double');
+  // the channel + the actual CC number, presentable.
+  expect(s.details).toEqual([
+    { label: 'channel', value: 'base + 0' },
+    { label: 'con', value: '42' },
+  ]);
 });
 
 describe('bindParam (the one keypress step)', () => {

@@ -3,7 +3,14 @@ import { appState } from './state.js';
 import { CMD, KEY, KEY_PREFIX, ROOT_SOFTKEYS, TYPE_EMPTY, PARAM_TYPES } from './sysex-commands.js';
 import { TIMING, LAYOUT, RENDER } from './constants.js';
 import { setState } from './store.js';
-import { sendObjectInfoDump, sendValueDump, sendValuePut, sendSysEx } from './midi.js';
+import {
+  sendObjectInfoDump,
+  sendValueDump,
+  sendValuePut,
+  sendSysEx,
+  sendKeypress,
+} from './midi.js';
+import { keypressMasks } from './controls.js';
 import { showLoading } from './main.js';
 import {
   getNode,
@@ -16,6 +23,7 @@ import {
 import { log } from './logger.js';
 import { isSyncing, loadProgram, isFavoritesBank, refreshFavoritesBank } from './library.js';
 import { openParamMapping } from './midi-map-ui.js';
+import { paramMappingOf } from './midi-map.js';
 import {
   isLoadMenuActive,
   hasLibrary,
@@ -68,6 +76,7 @@ const handleLcdClick = (e) => {
     // verifies by title before writing — see midi-map-ui.openParamMapping.
     e.stopPropagation();
     openParamMapping({
+      key: e.target.dataset.midiKey || '',
       name: e.target.dataset.midiName || '',
       rowIndex: parseInt(e.target.dataset.midiRow, 10) || 0,
     });
@@ -75,6 +84,13 @@ const handleLcdClick = (e) => {
   }
   if (e.target.classList.contains('dsp-clickable')) {
     const newPresetKey = e.target.dataset.key;
+    // Keep the DEVICE on the same DSP as the glass view: a MIDI-map bind drives
+    // the device's "parameter" page, which follows the unit's current DSP — so
+    // a view-only A/B toggle used to bind the WRONG DSP (maintainer). Press the
+    // unit's A/B when the view actually switches so they stay in lockstep (#146).
+    if (newPresetKey !== appState.presetKey) {
+      sendKeypress(keypressMasks.ab);
+    }
     const patch = {
       presetKey: newPresetKey,
       currentKey: newPresetKey,
@@ -922,17 +938,26 @@ export function renderScreen(subs, ascii, logParam) {
         .filter((s) => PARAM_TYPES.includes(s.type) && s.position !== 'a')
         .map((s, i) => [s.key, i])
     );
-    const midiBadge = (s) => {
+    const midiBadge = (s, rowMap) => {
       if (prePainting) return '';
       // Only preset parameters are modulatable (keys under DSP A/B). The load
       // menu / setup / gang SETs are not, and the bind's "parameter" keypress
       // navigates to the active preset's page — so a badge only makes sense on
       // a DSP preset param.
       if (!s.key.startsWith(KEY_PREFIX.DSP_A) && !s.key.startsWith(KEY_PREFIX.DSP_B)) return '';
-      const row = midiRowByKey.get(s.key);
+      const row = rowMap.get(s.key);
       if (row === undefined) return '';
       const name = escapeHtml(s.statement || s.tag || '');
-      return ` <span class="lcd-midi-badge" data-midi-row="${row}" data-midi-name="${name}" title="Map a MIDI controller to this parameter">MIDI</span>`;
+      // A mapped param shows its source lit (e.g. "pan"); an unmapped one shows
+      // a dim "MIDI" affordance (#146). Mapping state is what the app has set or
+      // read — see midi-map.paramMappingOf.
+      const mapped = paramMappingOf(s.key);
+      const cls = mapped ? 'lcd-midi-badge lcd-midi-mapped' : 'lcd-midi-badge';
+      const label = mapped ? escapeHtml(mapped) : 'MIDI';
+      const title = mapped
+        ? `Mapped to ${escapeHtml(mapped)} — click to edit`
+        : 'Map a MIDI controller to this parameter';
+      return ` <span class="${cls}" data-midi-key="${s.key}" data-midi-row="${row}" data-midi-name="${name}" title="${title}">${label}</span>`;
     };
     subs.slice(1).forEach((s) => {
       if (prePainting) {
@@ -958,7 +983,7 @@ export function renderScreen(subs, ascii, logParam) {
         if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key);
         const formatStr = s.statement || s.tag || '';
         fullText = formatValue(formatStr, value);
-        fullHtml = formatValue(formatStr, value, true, s.key) + midiBadge(s);
+        fullHtml = formatValue(formatStr, value, true, s.key) + midiBadge(s, midiRowByKey);
       } else if (s.type === 'INF') {
         let value = appState.currentValues[s.key] || s.value || '';
         if (appState.currentValues[s.key] === undefined && !s.value) sendValueDump(s.key, logParam);
@@ -988,7 +1013,9 @@ export function renderScreen(subs, ascii, logParam) {
           selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${escapeHtml(option.desc)}</option>`;
         });
         selectHtml += `</select>`;
-        fullHtml = escapeHtml(s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml) + midiBadge(s);
+        fullHtml =
+          escapeHtml(s.statement || '').replace(/%(-)?(\d*)s/g, selectHtml) +
+          midiBadge(s, midiRowByKey);
       } else if (s.type === 'CON') {
         let meterValue = parseFloat(appState.currentValues[s.key] || s.value) || 0;
         if (isNaN(meterValue)) {
@@ -1086,6 +1113,15 @@ export function renderScreen(subs, ascii, logParam) {
     // existed for label-filtered children) is retired.
     for (let local of potentialEmbedSubs) {
       const childSubs = getNode(local.key) || [];
+      // #146: the embedded child IS the preset's main param page (what the
+      // device's "parameter" key shows), so its params get badges too — DSP B's
+      // params render here when the view sits on the preset root.
+      const embedRowByKey = new Map(
+        childSubs
+          .slice(1)
+          .filter((s) => PARAM_TYPES.includes(s.type) && s.position !== 'a')
+          .map((s, i) => [s.key, i])
+      );
       if (childSubs.length > 0 && !embeddedKey) {
         embeddedKey = local.key; // Only embed the first local COL
         paramLines.push(''); // Blank line separator
@@ -1106,7 +1142,8 @@ export function renderScreen(subs, ascii, logParam) {
             if (appState.currentValues[cs.key] === undefined) sendValueDump(cs.key); // empty string = confirmed-absent, do not refetch (C1 review)
             const formatStr = cs.statement || cs.tag || '';
             childFullText = formatValue(formatStr, value);
-            childFullHtml = formatValue(formatStr, value, true, cs.key);
+            childFullHtml =
+              formatValue(formatStr, value, true, cs.key) + midiBadge(cs, embedRowByKey);
           } else if (cs.type === 'INF') {
             let value = appState.currentValues[cs.key] || cs.value || '';
             if (appState.currentValues[cs.key] === undefined && !cs.value)
@@ -1143,7 +1180,9 @@ export function renderScreen(subs, ascii, logParam) {
               selectHtml += `<option value="${option.index}" ${isSelected ? 'selected' : ''}>${escapeHtml(option.desc)}</option>`;
             });
             selectHtml += `</select>`;
-            childFullHtml = escapeHtml(cs.statement || '').replace(/%(-)?(\d*)s/g, selectHtml);
+            childFullHtml =
+              escapeHtml(cs.statement || '').replace(/%(-)?(\d*)s/g, selectHtml) +
+              midiBadge(cs, embedRowByKey);
           } else if (cs.type === 'CON') {
             let meterValue = parseFloat(appState.currentValues[cs.key] || cs.value) || 0;
             if (isNaN(meterValue)) {

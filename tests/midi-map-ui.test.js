@@ -35,6 +35,8 @@ jest.mock('../src/midi-map.js', () => ({
     { index: 0, name: 'off' },
     { index: 30, name: 'volume' },
   ]),
+  recordParamMapping: jest.fn(),
+  resetParamMappings: jest.fn(),
 }));
 
 import {

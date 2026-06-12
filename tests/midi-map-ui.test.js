@@ -54,15 +54,23 @@ import {
   captureParam,
 } from '../src/midi-map.js';
 
+import { MIDI_MAP } from '../src/constants.js';
+
 const q = (sel) => document.querySelector(sel);
 const qa = (sel) => [...document.querySelectorAll(sel)];
 
 describe('midi-map-ui', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useFakeTimers(); // the Learn poll + repaint use setTimeout
     document.body.innerHTML = '';
     resetMidiMapUI();
     setupMidiMapUI({ onChange: jest.fn() });
+  });
+
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
   });
 
   describe('controllers panel', () => {
@@ -79,9 +87,21 @@ describe('midi-map-ui', () => {
       q('.mm-row .mm-learn').click();
       expect(captureAssign).toHaveBeenCalledWith(0, expect.any(Function));
       expect(q('.mm-learn-overlay')).toBeTruthy();
-      // Done dismisses the prompt.
+      expect(q('.mm-learn-msg').textContent).toMatch(/move your controller/i);
+      // Cancel dismisses the prompt.
       q('.mm-learn-overlay .mm-learn').click();
       expect(q('.mm-learn-overlay')).toBeNull();
+    });
+
+    test('Learn polls the device and shows the captured source (live feedback)', () => {
+      openControllers(); // mock readAssign(0).source === 'volume'
+      q('.mm-row .mm-learn').click();
+      expect(q('.mm-learn-msg').textContent).toMatch(/move your controller/i);
+      // One poll cycle later, the device reports a captured source.
+      jest.advanceTimersByTime(MIDI_MAP.UI_REFRESH_MS + 20);
+      expect(q('.mm-learn-msg').textContent).toMatch(/captured: volume/i);
+      // and the button becomes Done.
+      expect(q('.mm-learn-overlay .mm-learn').textContent).toBe('Done');
     });
 
     test('clear clears the assign source', () => {

@@ -51,6 +51,7 @@ export function setupMidiMapUI(cfg) {
 /** Closes both modals + clears card state (disconnect / Sync). */
 export function resetMidiMapUI() {
   card = null;
+  document.querySelector('.mm-learn-overlay')?.remove();
   if (panelEl) {
     panelEl.remove();
     panelEl = null;
@@ -163,35 +164,67 @@ function refreshAssignThenRender(i) {
   setTimeout(renderControllers, REFRESH);
 }
 
-// Learn: arm Capture, prompt the user to move a controller, refresh on Done.
+// Learn: arm Capture, then POLL the device until it reports a captured source,
+// showing it live (the device gives no "done" signal, so we watch its readback).
 function learnAssign(i) {
-  captureAssign(i, () => {
-    showLearnPrompt(panelEl, `Move a controller for assign ${i + 1}, then Done.`, () =>
-      refreshAssignThenRender(i)
-    );
-  });
+  captureAssign(i, () =>
+    startLearnPoll(
+      () => refreshAssign(i),
+      () => readAssign(i).source,
+      () => renderControllers(),
+      `assign ${i + 1}`
+    )
+  );
 }
 
-// A small overlay prompt shared by both Learn flows.
-function showLearnPrompt(host, message, onDone) {
+// True once the slot/surface reports a real source (not off, not the "CAPTURE"
+// armed-but-waiting placeholder).
+function isCaptured(src) {
+  return !!src && src !== 'off' && src.toUpperCase() !== 'CAPTURE';
+}
+
+// A live Learn overlay: prompt to move a controller, poll `read` (after each
+// `refresh`) until it returns a captured source, show it, then `onClose`
+// re-reads + repaints behind the dismissed overlay. Appended to <body> (not the
+// panel/card) so a deferred repaint of the modal cannot wipe it mid-Learn.
+function startLearnPoll(refresh, read, onClose, label) {
+  document.querySelector('.mm-learn-overlay')?.remove(); // never stack two
   const ov = document.createElement('div');
   ov.className = 'mm-learn-overlay';
   const msg = document.createElement('div');
   msg.className = 'mm-learn-msg';
-  msg.textContent = message;
-  ov.append(
-    msg,
-    makeButton(
-      'Done',
-      'mm-btn mm-learn',
-      () => {
-        ov.remove();
-        onDone();
-      },
-      false
-    )
-  );
-  host.append(ov);
+  msg.textContent = `Move your controller for ${label}…`;
+  let stopped = false;
+  const finish = () => {
+    stopped = true;
+    ov.remove();
+    onClose();
+  };
+  const btn = makeButton('Cancel', 'mm-btn mm-learn', finish, false);
+  ov.append(msg, btn);
+  document.body.append(ov);
+
+  let tries = 0;
+  const poll = () => {
+    if (stopped) return;
+    refresh();
+    setTimeout(() => {
+      if (stopped) return;
+      const src = read();
+      if (isCaptured(src)) {
+        msg.textContent = `Captured: ${src}`;
+        btn.textContent = 'Done';
+        return; // stop polling; Done dismisses + repaints with the result
+      }
+      if (++tries >= MIDI_MAP.LEARN_POLL_TRIES) {
+        msg.textContent = 'No controller heard. Move it and retry (check the MIDI channel / omni).';
+        btn.textContent = 'Close';
+        return;
+      }
+      poll();
+    }, REFRESH);
+  };
+  poll();
 }
 
 // --- 2. Per-parameter mapping card ---------------------------------------
@@ -337,9 +370,18 @@ function typeSelect(currentValue) {
 }
 
 function learnParam() {
-  captureParam(() => {
-    showLearnPrompt(cardEl, 'Move a controller, then Done.', afterWrite);
-  });
+  captureParam(() =>
+    startLearnPoll(
+      () => refreshParamSetup(),
+      () => readParamSetup().source,
+      () => {
+        if (card) card.bound = readParamSetup();
+        renderCard();
+        onChange?.();
+      },
+      strip(card?.paramName || 'this parameter')
+    )
+  );
 }
 
 // Re-read the bound surface + let the rest of the app refresh, then repaint.

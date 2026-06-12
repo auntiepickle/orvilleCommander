@@ -127,9 +127,17 @@ export async function bindParam(rowIndex, onDone) {
   }
   sendKeypress(keypressMasks['select-hold']);
   await sleep(MIDI_MAP.BIND_SETTLE_MS);
-  refreshParamSetup();
-  await sleep(MIDI_MAP.BIND_SETTLE_MS);
-  onDone?.(readParamSetup());
+  // The bound surface OBJECTINFO can lag the page swap — poll it a few times
+  // rather than reading once (a single short wait reported a blank title and
+  // "could not bind" even when the bind had landed; review).
+  let setup = { title: '' };
+  for (let i = 0; i < MIDI_MAP.BIND_READ_TRIES; i++) {
+    refreshParamSetup();
+    await sleep(MIDI_MAP.BIND_SETTLE_MS);
+    setup = readParamSetup();
+    if (setup.title) break;
+  }
+  onDone?.(setup);
 }
 
 /** Sets the bound parameter's modulation source by index (MOD_SOURCES). */

@@ -138,6 +138,11 @@ export const MIDI_MAP = {
   BIND_SETTLE_MS: 600, // wait after parameter/select-hold before reading the
   //                      bound surface back (the page swap is near-instant but
   //                      the OBJECTINFO round-trip needs room)
+  BIND_READ_TRIES: 4, // re-request the bound surface up to this many times if its
+  //                     OBJECTINFO hasn't landed yet (a single read sometimes
+  //                     came back blank and falsely reported "could not bind")
+  LEARN_POLL_TRIES: 20, // how many times the Learn flow polls for a captured
+  //                       controller before giving up (x UI_REFRESH_MS ~= 12s)
 };
 
 // Demo mode (src/demo.js): the canned device built from a live capture.

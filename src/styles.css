@@ -1758,10 +1758,12 @@ body {
 .mm-card-foot .mm-btn:last-child {
   margin-left: auto;
 }
-/* The Learn "move your controller" prompt overlay. */
+/* The Learn "move your controller" prompt overlay. Top-level (on <body>) so a
+   modal repaint can't wipe it mid-Learn; sits above the modals (z 56). */
 .mm-learn-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 56;
   display: flex;
   flex-direction: column;
   align-items: center;

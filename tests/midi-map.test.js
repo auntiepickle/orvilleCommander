@@ -27,7 +27,14 @@ jest.mock('../src/constants.js', () => {
   const actual = jest.requireActual('../src/constants.js');
   return {
     ...actual,
-    MIDI_MAP: { CAPTURE_SETTLE_MS: 1, WRITE_SETTLE_MS: 1, BIND_STEP_MS: 1, BIND_SETTLE_MS: 1 },
+    MIDI_MAP: {
+      CAPTURE_SETTLE_MS: 1,
+      UI_REFRESH_MS: 1,
+      BIND_STEP_MS: 1,
+      BIND_SETTLE_MS: 1,
+      BIND_READ_TRIES: 4,
+      LEARN_POLL_TRIES: 3,
+    },
   };
 });
 

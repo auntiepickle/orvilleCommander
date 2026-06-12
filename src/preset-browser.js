@@ -153,7 +153,9 @@ function renderBanks(lib) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className =
-      'pb-bank' + (bank.idx === selectedBankIdx ? ' pb-bank-sel' : '') + (live ? ' pb-bank-live' : '');
+      'pb-bank' +
+      (bank.idx === selectedBankIdx ? ' pb-bank-sel' : '') +
+      (live ? ' pb-bank-live' : '');
     btn.textContent = bank.name;
     if (live) {
       // The Favorites bank is the device's live MRU — flag it and re-read it
@@ -250,7 +252,9 @@ function renderBanner() {
   msg.append(
     document.createTextNode('Previewing '),
     bold(previewState.previewing.programName),
-    document.createTextNode(` on DSP ${previewState.dspSlot} — Keep replaces DSP ${previewState.dspSlot}.`)
+    document.createTextNode(
+      ` on DSP ${previewState.dspSlot} — Keep replaces DSP ${previewState.dspSlot}.`
+    )
   );
   bar.append(msg);
 

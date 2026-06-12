@@ -249,7 +249,9 @@ function activeSlot() {
 
 /** Strips a leading index token ('16 Black Hole' -> 'Black Hole'). */
 function stripIndexToken(name) {
-  return String(name).trim().replace(/^\d+\s+/, '');
+  return String(name)
+    .trim()
+    .replace(/^\d+\s+/, '');
 }
 
 /**

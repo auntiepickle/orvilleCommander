@@ -1,0 +1,366 @@
+// midi-map-ui.js
+// The MIDI-mapping UI (#146): two themed modals over the device-native engine
+// in midi-map.js. Device I/O goes through that module; this file only renders
+// and sequences, and injects a post-change refresh (onChange) so the rest of
+// the app re-reads the device — the modules never send SysEx themselves beyond
+// midi-map's calls.
+//
+//   1. CONTROLLERS panel — the 8 global assign sources (read / Learn / clear).
+//      Pure object access, no parameter binding.
+//   2. Per-parameter CARD — opened from a parameter's MIDI badge: binds the
+//      modulation surface to that parameter (the one keypress step) then edits
+//      source / range / type / Learn as plain object writes.
+
+import {
+  enableSequenceOut,
+  readAssign,
+  refreshAssign,
+  captureAssign,
+  clearAssign,
+  bindParam,
+  readParamSetup,
+  refreshParamSetup,
+  setParamSource,
+  setParamRange,
+  setParamType,
+  captureParam,
+  sourceOptions,
+} from './midi-map.js';
+import { MOD } from './sysex-commands.js';
+
+const ASSIGN_COUNT = 8; // global assign slots (device-model §8b)
+const TYPE_OPTIONS = ['absolute', 'unipolar', 'bipolar']; // MOD.TYPE indices 0-2
+
+let onChange = null; // injected: re-read device + repaint after a write
+let panelEl = null; // controllers modal
+let cardEl = null; // per-parameter modal
+let card = null; // { paramName, rowIndex, bound, loading, learning }
+
+/**
+ * Wires the post-change refresh once at boot (kept out of this module so it
+ * never sends SysEx). Also turns on sequence-out so live monitors update.
+ *
+ * @param {{onChange: () => void}} cfg
+ */
+export function setupMidiMapUI(cfg) {
+  onChange = cfg?.onChange || null;
+}
+
+/** Closes both modals + clears card state (disconnect / Sync). */
+export function resetMidiMapUI() {
+  card = null;
+  if (panelEl) {
+    panelEl.remove();
+    panelEl = null;
+  }
+  if (cardEl) {
+    cardEl.remove();
+    cardEl = null;
+  }
+}
+
+// --- shared helpers -------------------------------------------------------
+
+function makeButton(label, className, onClick, disabled) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = className;
+  b.textContent = label;
+  if (disabled) b.disabled = true;
+  else b.addEventListener('click', onClick);
+  return b;
+}
+
+function modalShell(className) {
+  const el = document.createElement('div');
+  el.className = className;
+  el.hidden = true;
+  document.body.appendChild(el);
+  return el;
+}
+
+// --- 1. Controllers panel -------------------------------------------------
+
+/** Opens the global MIDI controllers panel. */
+export function openControllers() {
+  if (!panelEl) panelEl = modalShell('mm-modal');
+  enableSequenceOut(); // live monitors
+  for (let i = 0; i < ASSIGN_COUNT; i++) refreshAssign(i);
+  panelEl.hidden = false;
+  // The assign dumps land async; repaint shortly after.
+  renderControllers();
+  setTimeout(renderControllers, 600);
+}
+
+export function closeControllers() {
+  if (panelEl) panelEl.hidden = true;
+}
+
+function renderControllers() {
+  if (!panelEl || panelEl.hidden) return;
+  panelEl.innerHTML = '';
+  const panel = document.createElement('div');
+  panel.className = 'mm-panel';
+
+  const head = document.createElement('header');
+  head.className = 'mm-head';
+  const title = document.createElement('span');
+  title.className = 'mm-title';
+  title.textContent = 'MIDI CONTROLLERS';
+  head.append(title, makeButton('refresh', 'mm-btn', openControllers, false));
+  head.append(makeButton('✕', 'mm-close', closeControllers, false));
+  panel.append(head);
+
+  const note = document.createElement('div');
+  note.className = 'mm-note';
+  note.textContent =
+    '8 reusable sources. Learn, then move your controller. Used by params as "assign N".';
+  panel.append(note);
+
+  const list = document.createElement('ul');
+  list.className = 'mm-list';
+  for (let i = 0; i < ASSIGN_COUNT; i++) {
+    const a = readAssign(i);
+    const li = document.createElement('li');
+    li.className = 'mm-row';
+
+    const label = document.createElement('span');
+    label.className = 'mm-row-label';
+    label.textContent = `assign ${i + 1}`;
+    const src = document.createElement('span');
+    src.className = 'mm-row-src';
+    src.textContent = a.source || 'off';
+    const mon = document.createElement('span');
+    mon.className = 'mm-row-mon';
+    mon.textContent = a.monitor ? `${Math.round(parseFloat(a.monitor))}%` : '';
+
+    const actions = document.createElement('span');
+    actions.className = 'mm-row-actions';
+    actions.append(
+      makeButton('Learn', 'mm-btn mm-learn', () => learnAssign(i), false),
+      makeButton(
+        'clear',
+        'mm-btn',
+        () => {
+          clearAssign(i);
+          setTimeout(() => {
+            refreshAssign(i);
+            setTimeout(renderControllers, 400);
+          }, 300);
+        },
+        false
+      )
+    );
+    li.append(label, src, mon, actions);
+    list.append(li);
+  }
+  panel.append(list);
+  panelEl.append(panel);
+}
+
+// Learn: arm Capture, prompt the user to move a controller, refresh on Done.
+function learnAssign(i) {
+  captureAssign(i, () => {
+    showLearnPrompt(panelEl, `Move a controller for assign ${i + 1}, then Done.`, () => {
+      refreshAssign(i);
+      setTimeout(renderControllers, 500);
+    });
+  });
+}
+
+// A small overlay prompt shared by both Learn flows.
+function showLearnPrompt(host, message, onDone) {
+  const ov = document.createElement('div');
+  ov.className = 'mm-learn-overlay';
+  const msg = document.createElement('div');
+  msg.className = 'mm-learn-msg';
+  msg.textContent = message;
+  ov.append(
+    msg,
+    makeButton(
+      'Done',
+      'mm-btn mm-learn',
+      () => {
+        ov.remove();
+        onDone();
+      },
+      false
+    )
+  );
+  host.append(ov);
+}
+
+// --- 2. Per-parameter mapping card ---------------------------------------
+
+/**
+ * Opens the mapping card for a parameter and BINDS the modulation surface to
+ * it (the one keypress step). rowIndex is the parameter's 0-based row on the
+ * active DSP's main parameter page; paramName is its label for the bind check.
+ *
+ * @param {{name: string, rowIndex: number}} param
+ */
+export function openParamMapping(param) {
+  if (!cardEl) cardEl = modalShell('mm-modal');
+  enableSequenceOut();
+  card = { paramName: param.name, rowIndex: param.rowIndex, bound: null, loading: true };
+  cardEl.hidden = false;
+  renderCard();
+  bindParam(param.rowIndex, (setup) => {
+    card.loading = false;
+    // The surface title is the binding proof; require it to name our param so
+    // a page mismatch can never write the mapping to the wrong target.
+    card.bound = setup && setup.title && setup.title.startsWith(strip(param.name)) ? setup : null;
+    if (!card.bound) card.error = `Could not bind "${param.name}" (got "${setup?.title || '?'}")`;
+    renderCard();
+  });
+}
+
+export function closeParamMapping() {
+  card = null;
+  if (cardEl) cardEl.hidden = true;
+}
+
+// "level  : %4.0f dB" -> "level"
+function strip(label) {
+  return String(label).split(/[: ]/)[0];
+}
+
+function renderCard() {
+  if (!cardEl || cardEl.hidden) return;
+  cardEl.innerHTML = '';
+  const panel = document.createElement('div');
+  panel.className = 'mm-panel mm-card';
+
+  const head = document.createElement('header');
+  head.className = 'mm-head';
+  const title = document.createElement('span');
+  title.className = 'mm-title';
+  title.textContent = `MAP ${strip(card?.paramName || '')}`.toUpperCase();
+  head.append(title, makeButton('✕', 'mm-close', closeParamMapping, false));
+  panel.append(head);
+
+  if (card?.loading) {
+    panel.append(note('binding to the parameter…'));
+    cardEl.append(panel);
+    return;
+  }
+  if (!card?.bound) {
+    panel.append(note(card?.error || 'not bound'));
+    panel.append(makeButton('Close', 'mm-btn', closeParamMapping, false));
+    cardEl.append(panel);
+    return;
+  }
+
+  const s = readParamSetup();
+  const body = document.createElement('div');
+  body.className = 'mm-card-body';
+
+  // Source picker (set by index; degenerate device options, so we own the list).
+  body.append(field('source', sourceSelect(s.source)));
+  // Range (depth) — the parameter's display units.
+  const range = document.createElement('input');
+  range.type = 'number';
+  range.className = 'mm-input';
+  range.value = parseFloat(s.range) || 0;
+  range.addEventListener('change', () => {
+    setParamRange(range.value);
+    afterWrite();
+  });
+  body.append(field('range', range));
+  // Type.
+  body.append(field('type', typeSelect(s.type)));
+  // Live monitor.
+  const mon = document.createElement('span');
+  mon.className = 'mm-mon';
+  mon.textContent = s.monitor ? `${Math.round(parseFloat(s.monitor))}%` : '—';
+  body.append(field('monitor', mon));
+  panel.append(body);
+
+  const foot = document.createElement('div');
+  foot.className = 'mm-card-foot';
+  foot.append(
+    makeButton('Learn', 'mm-btn mm-learn', learnParam, false),
+    makeButton(
+      'clear',
+      'mm-btn',
+      () => {
+        setParamSource(0);
+        afterWrite();
+      },
+      false
+    ),
+    makeButton('Done', 'mm-btn', closeParamMapping, false)
+  );
+  panel.append(foot);
+  cardEl.append(panel);
+}
+
+function sourceSelect(currentName) {
+  const sel = document.createElement('select');
+  sel.className = 'mm-input';
+  for (const { index, name } of sourceOptions()) {
+    const o = document.createElement('option');
+    o.value = String(index);
+    o.textContent = name;
+    if (name === currentName) o.selected = true;
+    sel.append(o);
+  }
+  sel.addEventListener('change', () => {
+    setParamSource(parseInt(sel.value, 10));
+    afterWrite();
+  });
+  return sel;
+}
+
+function typeSelect(currentValue) {
+  const sel = document.createElement('select');
+  sel.className = 'mm-input';
+  TYPE_OPTIONS.forEach((name, index) => {
+    const o = document.createElement('option');
+    o.value = String(index);
+    o.textContent = name;
+    if (currentValue.includes(name)) o.selected = true;
+    sel.append(o);
+  });
+  sel.addEventListener('change', () => {
+    setParamType(parseInt(sel.value, 10));
+    afterWrite();
+  });
+  return sel;
+}
+
+function learnParam() {
+  captureParam(() => {
+    showLearnPrompt(cardEl, 'Move a controller, then Done.', afterWrite);
+  });
+}
+
+// Re-read the bound surface + let the rest of the app refresh, then repaint.
+function afterWrite() {
+  refreshParamSetup();
+  onChange?.();
+  setTimeout(() => {
+    card && (card.bound = readParamSetup());
+    renderCard();
+  }, 500);
+}
+
+function field(label, control) {
+  const row = document.createElement('label');
+  row.className = 'mm-field';
+  const l = document.createElement('span');
+  l.className = 'mm-field-label';
+  l.textContent = label;
+  row.append(l, control);
+  return row;
+}
+
+function note(text) {
+  const d = document.createElement('div');
+  d.className = 'mm-note';
+  d.textContent = text;
+  return d;
+}
+
+// Re-export the surface key for callers that need it (e.g. tests).
+export const PARAM_SURFACE_KEY = MOD.PARAM_SETUP;

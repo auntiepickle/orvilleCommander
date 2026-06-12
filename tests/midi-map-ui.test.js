@@ -10,7 +10,7 @@ jest.mock('../src/midi-map.js', () => ({
   refreshAssign: jest.fn(),
   captureAssign: jest.fn((i, onDone) => onDone?.()),
   clearAssign: jest.fn(),
-  bindParam: jest.fn((row, onDone) =>
+  bindParam: jest.fn((block, key, onDone) =>
     onDone?.({
       title: 'level setup',
       source: 'off',
@@ -123,8 +123,8 @@ describe('midi-map-ui', () => {
 
   describe('per-parameter card', () => {
     test('binds the surface then renders source / range / type from the bound setup', () => {
-      openParamMapping({ name: 'level  : %4.0f dB', rowIndex: 0 });
-      expect(bindParam).toHaveBeenCalledWith(0, expect.any(Function));
+      openParamMapping({ name: 'level  : %4.0f dB', key: '42e0001', block: '41e0001' });
+      expect(bindParam).toHaveBeenCalledWith('41e0001', '42e0001', expect.any(Function));
       // The card shows the editable fields (bind succeeded — title matched).
       expect(q('.mm-card')).toBeTruthy();
       expect(qa('.mm-field')).toHaveLength(4); // source, range, type, monitor
@@ -132,7 +132,7 @@ describe('midi-map-ui', () => {
     });
 
     test('changing the source writes it by index (clean object PUT)', () => {
-      openParamMapping({ name: 'level  : %4.0f dB', rowIndex: 0 });
+      openParamMapping({ name: 'level  : %4.0f dB', key: '42e0001', block: '41e0001' });
       const sourceSel = q('.mm-card-body select');
       sourceSel.value = '30'; // volume / CC7
       sourceSel.dispatchEvent(new Event('change', { bubbles: true }));
@@ -140,7 +140,7 @@ describe('midi-map-ui', () => {
     });
 
     test('changing the range writes it', () => {
-      openParamMapping({ name: 'level  : %4.0f dB', rowIndex: 0 });
+      openParamMapping({ name: 'level  : %4.0f dB', key: '42e0001', block: '41e0001' });
       const range = q('.mm-card-body input[type="number"]');
       range.value = '50';
       range.dispatchEvent(new Event('change', { bubbles: true }));
@@ -148,14 +148,14 @@ describe('midi-map-ui', () => {
     });
 
     test('Learn on the card arms Capture for the bound param', () => {
-      openParamMapping({ name: 'level  : %4.0f dB', rowIndex: 0 });
+      openParamMapping({ name: 'level  : %4.0f dB', key: '42e0001', block: '41e0001' });
       q('.mm-card-foot .mm-learn').click();
       expect(captureParam).toHaveBeenCalled();
     });
 
     test('a bind whose title does NOT match the param aborts with an error (no mis-write)', () => {
-      bindParam.mockImplementationOnce((row, onDone) => onDone({ title: 'something else' }));
-      openParamMapping({ name: 'level  : %4.0f dB', rowIndex: 0 });
+      bindParam.mockImplementationOnce((block, key, onDone) => onDone({ title: 'something else' }));
+      openParamMapping({ name: 'level  : %4.0f dB', key: '42e0001', block: '41e0001' });
       // No editable fields; an error + Close instead.
       expect(qa('.mm-field')).toHaveLength(0);
       expect(q('.mm-card .mm-note').textContent).toMatch(/could not bind/i);
@@ -164,7 +164,7 @@ describe('midi-map-ui', () => {
 
   test('resetMidiMapUI removes both modals', () => {
     openControllers();
-    openParamMapping({ name: 'level  : %4.0f dB', rowIndex: 0 });
+    openParamMapping({ name: 'level  : %4.0f dB', key: '42e0001', block: '41e0001' });
     expect(qa('.mm-modal').length).toBeGreaterThan(0);
     resetMidiMapUI();
     expect(qa('.mm-modal')).toHaveLength(0);

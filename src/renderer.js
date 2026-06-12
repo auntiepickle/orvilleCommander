@@ -72,13 +72,14 @@ export function updateScreen(logParam = null) {
 const handleLcdClick = (e) => {
   if (e.target.classList.contains('lcd-midi-badge')) {
     // #146: map a MIDI controller to this parameter. Opens the mapping card,
-    // which binds the device modulation surface to the param (row index) and
-    // verifies by title before writing — see midi-map-ui.openParamMapping.
+    // which binds the device modulation surface to the param (derived from the
+    // param's block + key) and verifies by title before writing — see
+    // midi-map-ui.openParamMapping.
     e.stopPropagation();
     openParamMapping({
       key: e.target.dataset.midiKey || '',
+      block: e.target.dataset.midiBlock || '',
       name: e.target.dataset.midiName || '',
-      rowIndex: parseInt(e.target.dataset.midiRow, 10) || 0,
     });
     return;
   }
@@ -928,10 +929,11 @@ export function renderScreen(subs, ascii, logParam) {
       paramLines.push(graphicEqLine);
       paramHtmlLines.push(graphicEqHtml);
     }
-    // #146 MIDI-map: the modulatable params in device cursor order (how many
-    // DOWN presses from the top of the parameter page reach each one). NUM/SET
-    // get a "MIDI" badge whose data-midi-row drives the bind. The bind verifies
-    // by surface title, so a mismatch (wrong page) aborts rather than mis-writes.
+    // #146 MIDI-map: the set of modulatable params on this page. NUM/SET get a
+    // "MIDI" badge; the bind derives the device keypath from the param's block
+    // (s.parent) + key (midi-map.paramCoords), and verifies by surface title, so
+    // a mismatch aborts rather than mis-writes. This map is just the membership
+    // gate — which rows are mappable params (not gang 'a'-grouped, not COL/TRG).
     const midiRowByKey = new Map(
       subs
         .slice(1)
@@ -945,8 +947,7 @@ export function renderScreen(subs, ascii, logParam) {
       // navigates to the active preset's page — so a badge only makes sense on
       // a DSP preset param.
       if (!s.key.startsWith(KEY_PREFIX.DSP_A) && !s.key.startsWith(KEY_PREFIX.DSP_B)) return '';
-      const row = rowMap.get(s.key);
-      if (row === undefined) return '';
+      if (rowMap.get(s.key) === undefined) return '';
       const name = escapeHtml(s.statement || s.tag || '');
       // A mapped param shows its source lit (e.g. "pan"); an unmapped one shows
       // a dim "MIDI" affordance (#146). Mapping state is what the app has set or
@@ -957,7 +958,7 @@ export function renderScreen(subs, ascii, logParam) {
       const title = mapped
         ? `Mapped to ${escapeHtml(mapped)} — click to edit`
         : 'Map a MIDI controller to this parameter';
-      return ` <span class="${cls}" data-midi-key="${s.key}" data-midi-row="${row}" data-midi-name="${name}" title="${title}">${label}</span>`;
+      return ` <span class="${cls}" data-midi-key="${s.key}" data-midi-block="${s.parent || ''}" data-midi-name="${name}" title="${title}">${label}</span>`;
     };
     subs.slice(1).forEach((s) => {
       if (prePainting) {

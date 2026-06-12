@@ -419,11 +419,16 @@ describe('renderer.js', () => {
     renderScreen(subs, '', mockLog);
     const badges = document.querySelectorAll('.lcd-midi-badge');
     expect(badges).toHaveLength(2); // one per modulatable param
-    expect(badges[0].dataset.midiRow).toBe('0'); // first param = row 0 (no DOWN)
-    expect(badges[1].dataset.midiRow).toBe('1');
+    // The badge carries the param's block (parent COL) + key — the bind derives
+    // the device keypath from those (midi-map.paramCoords), not a flat row.
+    expect(badges[0].dataset.midiBlock).toBe('401000b');
+    expect(badges[0].dataset.midiKey).toBe('4070001');
+    expect(badges[1].dataset.midiKey).toBe('4060001');
 
     badges[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    expect(openParamMapping).toHaveBeenCalledWith(expect.objectContaining({ rowIndex: 1 }));
+    expect(openParamMapping).toHaveBeenCalledWith(
+      expect.objectContaining({ key: '4060001', block: '401000b' })
+    );
   });
 
   test('non-DSP params (load menu / setup) get NO MIDI badge (#146)', () => {

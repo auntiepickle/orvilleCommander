@@ -143,6 +143,18 @@ export const MIDI_MAP = {
   //                     came back blank and falsely reported "could not bind")
   LEARN_POLL_TRIES: 20, // how many times the Learn flow polls for a captured
   //                       controller before giving up (x UI_REFRESH_MS ~= 12s)
+  // The device's parameter-page grid, probed live (device-model §8b "navigation
+  // to a parameter"). A program's params are grouped into blocks (the preset's
+  // COL children); the device shows ONE block at a time as a grid of GRID_ROWS x
+  // GRID_COLS cells, filled COLUMN-MAJOR in the block's dump order. Pressing the
+  // block's softkey selects it (page 0); each FURTHER press of the same softkey
+  // advances one page (cursor returns to the page's top-left each press). So a
+  // param at dump-index i in block b is reached by:
+  //   program -> parameter -> soft(b+1) x (floor(i/PAGE)+1)
+  //            -> RIGHT x floor((i%PAGE)/GRID_ROWS) -> DOWN x ((i%PAGE)%GRID_ROWS)
+  GRID_ROWS: 4, // params per column on a parameter page (DOWN clamps at row 3)
+  GRID_COLS: 2, // columns shown per page (RIGHT clamps at col 1; col 2+ = next page)
+  BLOCK_SOFTKEYS: 4, // soft1..soft4 select blocks 0..3; more blocks aren't reachable
 };
 
 // Demo mode (src/demo.js): the canned device built from a live capture.

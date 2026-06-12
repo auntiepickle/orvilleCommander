@@ -16,7 +16,7 @@ import { sendValuePut, sendObjectInfoDump, sendValueDump, sendKeypress } from '.
 import { keypressMasks } from './controls.js';
 import { MOD, MOD_SOURCES, KEY_PREFIX } from './sysex-commands.js';
 import { MIDI_MAP } from './constants.js';
-import { getNode } from './tree.js';
+import { getNode, parentOf } from './tree.js';
 import { saveMidiMappings, loadMidiMappings } from './config.js';
 import { appState } from './state.js';
 
@@ -174,23 +174,79 @@ export function clearAssign(i) {
 // title (no bitmap scraping).
 
 /**
- * Binds the per-parameter modulation surface to the parameter at `rowIndex` on
- * the active DSP's main parameter page (0-based, in dump order). Drives the
- * device cursor there (program -> parameter resets to the top row, then DOWN x
- * rowIndex) and SELECT-holds, then reads the bound surface back. The returned
- * setup's `title` is the binding proof ("<param> setup") — the caller compares
- * it to the expected parameter and aborts on mismatch rather than writing to
- * the wrong target.
+ * The device keypath to a parameter, derived from the loaded program's tree
+ * (generic for any program — device-model §8b). A param belongs to a block (its
+ * parent COL); the block's order among the preset's COL children is the softkey
+ * index, and the param's order in the block's dump is the device cursor index.
+ * Returns null when the tree isn't loaded or the param can't be placed.
  *
- * @param {number} rowIndex
+ * @returns {{blockIndex:number, paramIndex:number}|null}
+ */
+export function paramCoords(blockKey, paramKey) {
+  const block = getNode(blockKey);
+  if (!block) return null;
+  const paramIndex = block.slice(1).findIndex((c) => c.key === paramKey);
+  if (paramIndex < 0) return null;
+  // The block's TRUE parent is the preset — from the tree's recorded child->
+  // parent links, NOT block[0].parent (a COL's own dump header is self-parented).
+  const preset = getNode(parentOf(blockKey));
+  // Softkeys select the preset's blocks in dump order (the COL children).
+  const blockIndex = (preset || [])
+    .slice(1)
+    .filter((c) => c.type === 'COL')
+    .findIndex((c) => c.key === blockKey);
+  if (blockIndex < 0) return null;
+  return { blockIndex, paramIndex };
+}
+
+/**
+ * Binds the per-parameter modulation surface to `paramKey` (a param in block
+ * `blockKey`) by driving the device cursor to it and SELECT-holding, then reads
+ * the bound surface back. The navigation is generic — see MIDI_MAP grid notes:
+ * select the block's softkey (paging within it for params past the first page),
+ * then RIGHT across columns and DOWN within a column. The returned setup's
+ * `title` ("<param> setup") is the binding proof; the caller compares it to the
+ * expected name and aborts on mismatch rather than writing to the wrong target.
+ * Returns `{title:''}` (or `unreachable:true`) when the param can't be placed or
+ * sits past the reachable blocks, so the caller reports a clean failure.
+ *
+ * @param {string} blockKey - the param's block (its parent COL key)
+ * @param {string} paramKey - the param's own key
  * @param {(setup: object) => void} [onDone] - called with readParamSetup()
  */
-export async function bindParam(rowIndex, onDone) {
+export async function bindParam(blockKey, paramKey, onDone) {
+  const coords = paramCoords(blockKey, paramKey);
+  if (!coords) {
+    onDone?.({ title: '' });
+    return;
+  }
+  const { blockIndex, paramIndex } = coords;
+  if (blockIndex >= MIDI_MAP.BLOCK_SOFTKEYS) {
+    onDone?.({ title: '', unreachable: true });
+    return;
+  }
+  const pageSize = MIDI_MAP.GRID_ROWS * MIDI_MAP.GRID_COLS;
+  const page = Math.floor(paramIndex / pageSize);
+  const inPage = paramIndex % pageSize;
+  const col = Math.floor(inPage / MIDI_MAP.GRID_ROWS);
+  const row = inPage % MIDI_MAP.GRID_ROWS;
+  const softkey = keypressMasks[`soft${blockIndex + 1}`];
+
   sendKeypress(keypressMasks.program); // reset to a known page...
   await sleep(MIDI_MAP.BIND_STEP_MS);
-  sendKeypress(keypressMasks.parameter); // ...then the param page (cursor at top)
+  sendKeypress(keypressMasks.parameter); // ...then the param area (block 0, page 0)
   await sleep(MIDI_MAP.BIND_SETTLE_MS);
-  for (let i = 0; i < rowIndex; i++) {
+  // Select the block, then advance to the param's page: one softkey press
+  // selects the block (page 0), each further press pages it (page+1 total).
+  for (let p = 0; p <= page; p++) {
+    sendKeypress(softkey);
+    await sleep(MIDI_MAP.BIND_STEP_MS);
+  }
+  for (let c = 0; c < col; c++) {
+    sendKeypress(keypressMasks.right);
+    await sleep(MIDI_MAP.BIND_STEP_MS);
+  }
+  for (let r = 0; r < row; r++) {
     sendKeypress(keypressMasks.down);
     await sleep(MIDI_MAP.BIND_STEP_MS);
   }

@@ -326,8 +326,17 @@ export function addSysexListener() {
   // docs/protocol.md "Capturing screens (HIL)".)
   let sysexBuffer = [];
   const handler = (e) => {
-    noteLinkActivity(); // #107: partial packets are not silence
     const data = Array.from(e.data);
+    // #107: partial packets of a streaming RESPONSE (bitmap/OBJECTINFO) are
+    // activity, not silence, so they rearm the wave watchdog. But an UNSOLICITED
+    // sequence-out emit (0x3C, enabled by MIDI mapping) is NOT a wave response —
+    // letting it rearm meant a stream of them (e.g. a tempo-synced value moving
+    // under incoming MIDI clock) held every open wave to the WATCHDOG_MAX_MS
+    // ceiling, starving meter polling (gated while a wave is open). Exclude the
+    // start of a sequence-out frame; response continuation packets (no F0
+    // header) still count.
+    const isSequenceOut = data[0] === SYSEX.START && data[4] === CMD.SEQUENCE_OUT;
+    if (!isSequenceOut) noteLinkActivity();
     if (data[0] === SYSEX.START) sysexBuffer = data;
     else sysexBuffer = sysexBuffer.concat(data);
     // Flush only a properly framed message (starts F0, ends F7). The F0 guard

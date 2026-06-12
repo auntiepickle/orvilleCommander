@@ -15,12 +15,18 @@ jest.mock('../src/controls.js', () => ({
     program: ['program'],
     parameter: ['parameter'],
     down: ['down'],
+    right: ['right'],
     'select-hold': ['select-hold'],
+    soft1: ['soft1'],
+    soft2: ['soft2'],
+    soft3: ['soft3'],
+    soft4: ['soft4'],
   },
 }));
 
 jest.mock('../src/tree.js', () => ({
   getNode: jest.fn(),
+  parentOf: jest.fn(),
 }));
 
 jest.mock('../src/constants.js', () => {
@@ -28,6 +34,7 @@ jest.mock('../src/constants.js', () => {
   return {
     ...actual,
     MIDI_MAP: {
+      ...actual.MIDI_MAP, // keep the real grid geometry (GRID_ROWS/COLS, BLOCK_SOFTKEYS)
       CAPTURE_SETTLE_MS: 1,
       UI_REFRESH_MS: 1,
       BIND_STEP_MS: 1,
@@ -60,8 +67,8 @@ import {
   resetParamMappings,
 } from '../src/midi-map.js';
 import { sendValuePut, sendObjectInfoDump, sendValueDump, sendKeypress } from '../src/midi.js';
-import { getNode } from '../src/tree.js';
-import { bindParam } from '../src/midi-map.js';
+import { getNode, parentOf } from '../src/tree.js';
+import { bindParam, paramCoords } from '../src/midi-map.js';
 import { emit } from '../src/events.js';
 import { appState } from '../src/state.js';
 
@@ -284,32 +291,89 @@ test('readParamSetup surfaces the con# (CC number) for MIDI single/double', () =
   ]);
 });
 
-describe('bindParam (the one keypress step)', () => {
-  test('drives program->parameter->DOWN x row->select-hold, then reads the surface', async () => {
-    getNode.mockReturnValue([
-      { key: '10030401', type: 'COL', statement: 't_delay setup' },
-      { key: '10030402', value: '0 off' },
-    ]);
+describe('bindParam (generic block + grid navigation)', () => {
+  // A program (preset PRE) with three blocks; reverb is block index 2 -> soft3.
+  const PRE = '401000b';
+  const REVERB = '41e0001';
+  const presetNode = [
+    { key: PRE, type: 'COL', parent: '0', statement: 'Horrors' },
+    { key: '4040001', type: 'COL', parent: PRE, statement: 'pitch params' },
+    { key: '40f0001', type: 'COL', parent: PRE, statement: 'chorus params' },
+    { key: REVERB, type: 'COL', parent: PRE, statement: 'reverb params' },
+  ];
+  // reverb block: header (parent = preset) + 9 params, lowfreq at dump index 8.
+  const reverbNode = [
+    { key: REVERB, type: 'COL', parent: PRE, statement: 'reverb params' },
+    { key: '42e0001', type: 'NUM' }, // 0 level
+    { key: '41f0001', type: 'SET' }, // 1 t_rdecay
+    { key: '4220001', type: 'NUM' }, // 2 rdecay
+    { key: '42c0001', type: 'NUM' }, // 3 rsize
+    { key: '4270001', type: 'NUM' }, // 4 predly
+    { key: '4280001', type: 'NUM' }, // 5 hicut
+    { key: '4290001', type: 'NUM' }, // 6 lowcut
+    { key: '42a0001', type: 'NUM' }, // 7 hifreq
+    { key: '42b0001', type: 'NUM' }, // 8 lowfreq
+  ];
+  const surface = (title) => [{ key: '10030401', type: 'COL', statement: title }];
+
+  function mockTree(preset, surfaceTitle) {
+    getNode.mockImplementation((k) => {
+      if (k === PRE) return preset;
+      if (k === REVERB) return reverbNode;
+      if (k === '10030401') return surface(surfaceTitle);
+      return null;
+    });
+    // The block's true parent (preset) comes from the tree's child->parent map.
+    parentOf.mockImplementation((k) => (k === REVERB ? PRE : undefined));
+  }
+
+  test('paramCoords derives block index (softkey) + dump index from the tree', () => {
+    mockTree(presetNode, 'lowfreq setup');
+    expect(paramCoords(REVERB, '42b0001')).toEqual({ blockIndex: 2, paramIndex: 8 });
+    expect(paramCoords(REVERB, '42e0001')).toEqual({ blockIndex: 2, paramIndex: 0 });
+  });
+
+  test('lowfreq (block 2, idx 8 = page 1 top-left) binds via soft3 x2, no RIGHT/DOWN', async () => {
+    mockTree(presetNode, 'lowfreq setup');
     let result;
-    await bindParam(1, (s) => (result = s)); // row 1 = second param
+    await bindParam(REVERB, '42b0001', (s) => (result = s));
     expect(sendKeypress.mock.calls.map((c) => c[0])).toEqual([
       ['program'],
       ['parameter'],
-      ['down'], // one DOWN for row index 1
+      ['soft3'], // select reverb (page 0)
+      ['soft3'], // page to page 1
       ['select-hold'],
     ]);
-    // The surface is read back; its title is the binding proof.
-    expect(result.title).toBe('t_delay setup');
+    expect(result.title).toBe('lowfreq setup');
     expect(sendObjectInfoDump).toHaveBeenCalledWith('10030401');
   });
 
-  test('row 0 binds with no DOWN presses', async () => {
-    getNode.mockReturnValue([{ key: '10030401', type: 'COL', statement: 'level setup' }]);
-    await bindParam(0);
+  test('a page-0 grid cell (idx 5 = col 1 row 1) uses RIGHT then DOWN', async () => {
+    mockTree(presetNode, 'hicut setup');
+    await bindParam(REVERB, '4280001'); // idx 5
     expect(sendKeypress.mock.calls.map((c) => c[0])).toEqual([
       ['program'],
       ['parameter'],
+      ['soft3'], // select reverb (page 0)
+      ['right'], // col 1
+      ['down'], // row 1
       ['select-hold'],
     ]);
+  });
+
+  test('a block past the 4 softkeys reports unreachable and sends no keypress', async () => {
+    const sixBlocks = [
+      presetNode[0],
+      { key: 'b0', type: 'COL', parent: PRE },
+      { key: 'b1', type: 'COL', parent: PRE },
+      { key: 'b2', type: 'COL', parent: PRE },
+      { key: 'b3', type: 'COL', parent: PRE },
+      { key: REVERB, type: 'COL', parent: PRE }, // index 4 -> soft5, unreachable
+    ];
+    mockTree(sixBlocks, 'x');
+    let result;
+    await bindParam(REVERB, '42b0001', (s) => (result = s));
+    expect(result.unreachable).toBe(true);
+    expect(sendKeypress).not.toHaveBeenCalled();
   });
 });

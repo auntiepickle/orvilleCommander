@@ -438,9 +438,34 @@ foot = CC4, volume = CC7, pan = CC10, expression = CC11, general 1-8 = CC16-23).
 `VALUE_PUT(10030402, 3)` over SysEx flipped the mode `low -> high` and the bound
 parameter moved in response — no keypress needed for the config. The one
 UI-driven step is **binding**: drive the device cursor onto the target parameter
-(`program`->`parameter`->`CURSOR-DOWN`×n, masks in `system_commands.txt`) then
-SELECT-hold, verified by the screen title `<param> setup`. After binding, all
-config is `VALUE_PUT` to the fixed keys above.
+then SELECT-hold, verified by the screen title `<param> setup`. After binding,
+all config is `VALUE_PUT` to the fixed keys above.
+
+**Navigation to any parameter (generic, probed live 2026-06-12 on `Horrors`,
+`logs/probe-reverb-nav*.mjs`).** A program's params are grouped into **blocks**
+— the preset's COL children (e.g. `Horrors` `401000b` -> `pitch`/`chorus`/
+`reverb`/`info`). The parameter area shows ONE block at a time:
+
+- **Block select / paging.** The bottom **softkeys** `soft1..soft4` select
+  blocks 0..3 (dump order). Pressing a block's softkey selects it at **page 0**;
+  pressing the *same* softkey again advances **one page** (cursor resets to the
+  page's top-left each press). So block `b`, page `p` = `soft(b+1)` pressed
+  `p+1` times. (`program`->`parameter` lands on block 0 page 0.)
+- **Within a page: a 4-row × 2-column grid, column-major, in dump order.**
+  `DOWN` walks a column (clamps at row 3); `RIGHT` moves to the next column
+  (clamps at col 1 — a third column is the next *page*, not a `RIGHT`). So the
+  on-screen page holds 8 params; param `i` within a block sits at
+  `page = floor(i/8)`, `col = floor((i%8)/4)`, `row = (i%8)%4`.
+- **Device cursor order == OBJECTINFO dump order**, so a param's index in its
+  block's dump IS its navigation index. Full recipe (live-verified 5/5 across
+  blocks + both reverb pages, `probe-midimap-subblock.mjs`):
+  `program -> parameter -> soft(b+1)×(page+1) -> RIGHT×col -> DOWN×row ->
+  SELECT-hold`, then read `10030401`'s title as the bind proof.
+
+This is what `midi-map.js bindParam` does, deriving `b`/`i` from the loaded
+tree (`paramCoords`), so it works for any program — not the legacy flat
+`CURSOR-DOWN×row` model, which only reached block 0 page 0 and mis-bound every
+sub-block param (it walked block 0 and hit whatever sat at that row).
 
 **`sequence out`** (`10010016`, options off/old/new): set to `new`, the unit
 EMITS the key of any field changed — `F0 1C 70 <dev> 3C <ascii-hex key> 20

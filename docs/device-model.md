@@ -425,9 +425,10 @@ set by index, do not read options):
 14-15 pedal 1-2 · 16-21 tip 1/ring 1/tip&ring 1/tip 2/ring 2/tip&ring 2 ·
 22 mod wheel · 23 breath con · 24 foot con · 25 damper · 26 portamento ·
 27 sostenuto · 28 soft · 29 hold 2 · 30 volume · 31 balance · 32 pan ·
-33 expression · 34-40 general 1-7 · … (indices 0-40 enumerated; the device
-reports 52 sources total — higher indices continue the named MIDI CC set, not
-yet enumerated)
+33 expression · 34-41 general 1-8 · 42 MIDI single · 43 MIDI double (raw CC by
+number — the con sub carries the CC) · 44 chan pressure · 45 pitch wheel ·
+46 note on · 47 note switch · 48 MIDI program · 49 MIDI clock · 50 MIDI start ·
+51 MIDI stop (all 52 enumerated live)
 ```
 
 The named MIDI sources are the standard CCs (mod wheel = CC1, breath = CC2,

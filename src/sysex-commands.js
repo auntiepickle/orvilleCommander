@@ -104,12 +104,9 @@ export const MOD = {
 // The per-parameter `mode` SET source list, by DECIMAL index (device-model
 // §8b). The SET's own option list is degenerate (it repeats the current value),
 // so sources MUST be set by index, not picked from the dump. Indices 4-13
-// reference the global assign/trig slots above. INDICES 0-40 ARE ENUMERATED
-// HERE (probed live 2026-06-12, logs/probe-midi-phase0.mjs); the device reports
-// 52 sources total — the higher indices (more general/CC controllers) continue
-// the standard MIDI set and are not enumerated yet (a param can still select
-// them by index once captured). Setting an out-of-list index falls back to the
-// device's name, which the echo reports.
+// reference the global assign/trig slots above; "MIDI single"/"MIDI double" are
+// a raw CC by number (the con sub-field carries the CC). All 52 indices probed
+// live (logs/probe-midi-phase0.mjs + probe-verify-batch.mjs, 2026-06-12).
 export const MOD_SOURCES = [
   'off',
   'low',
@@ -152,6 +149,17 @@ export const MOD_SOURCES = [
   'general 5',
   'general 6',
   'general 7',
+  'general 8',
+  'MIDI single', // a raw 7-bit CC by number (con sub-field = the CC number)
+  'MIDI double', // a 14-bit CC pair by number (con sub-field = the CC number)
+  'chan pressure',
+  'pitch wheel',
+  'note on',
+  'note switch',
+  'MIDI program',
+  'MIDI clock',
+  'MIDI start',
+  'MIDI stop',
 ];
 
 // First-char prefix and suffix tests on dynamically-discovered keys.

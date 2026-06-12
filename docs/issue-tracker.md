@@ -886,6 +886,10 @@ the full UI click-through (badge -> card -> device) against the unit; the engine
 hardware-proven, the UI is jsdom-tested. Pre-merge reviewer pass pending. Foundation note: bindParam
 reaches params on a preset's MAIN param page; deeply-nested sub-page params need extra navigation (a
 follow-up). Also delivers #152 (inbound Program Change loads) — confirmed live.
+CONFIRMED LIVE BY MAINTAINER: bound a real controller and saw modulation on hardware. Polish batch
+(A/B sync, CC/con display, mapped badge, DSP-B/embedded params, range hint) + the completed 52-entry
+mode source table all hardware-verified (logs/probe-verify-batch.mjs): MIDI double surfaces the con
+(CC number); the A/B keypress toggles the DSP so a bind lands on the right engine; DSP-B params bind.
 
 ## Done (verified merged — do not redo)
 - A1  main.js debug-upload slice bounds — PR #24

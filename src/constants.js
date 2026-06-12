@@ -111,6 +111,15 @@ export const LIBRARY = {
   LOAD_SETTLE_MS: 600, // wait between the search-load sequence's puts (bank ->
   //                      program -> load trigger): same settle rationale as
   //                      BANK_SETTLE_MS, applied to each step
+  FAVORITES_BANK_IDX: 0, // bank 0 is the device's LIVE most-recently-used
+  //                        "Favorites" bank (device-model.md §"Bank 0"): it
+  //                        reorders on every load, so its program list is never
+  //                        trusted from the static library snapshot — it is
+  //                        re-fetched live whenever viewed (#138/#135 follow-up)
+  FAVORITES_REFRESH_MS: 1200, // settle after selecting bank 0 + dumping it: the
+  //                             MRU list is tiny (8 links) so its dump lands
+  //                             fast, but 2x BANK_SETTLE_MS leaves margin for
+  //                             the objectinfo:received listener to re-record it
 };
 
 // Demo mode (src/demo.js): the canned device built from a live capture.

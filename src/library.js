@@ -234,38 +234,60 @@ export async function syncLibrary(onProgress) {
   return library;
 }
 
+// Per-slot memory of the last program THIS APP loaded into each DSP (#135).
+// Preview restore needs the EXACT program a slot held before previewing, and
+// program names repeat across banks — so we remember indices, not names. Only
+// app-initiated loads are tracked (the device's own front-panel loads are not
+// observable here); getRememberedProgram falls back to a best-effort name
+// lookup when the app has not loaded into a slot this session.
+let lastLoadedBySlot = { A: null, B: null };
+
+/** The DSP slot ('A' | 'B') currently active, from the presetKey prefix. */
+function activeSlot() {
+  return appState.presetKey.startsWith(KEY_PREFIX.DSP_A) ? 'A' : 'B';
+}
+
+/** Strips a leading index token ('16 Black Hole' -> 'Black Hole'). */
+function stripIndexToken(name) {
+  return String(name).trim().replace(/^\d+\s+/, '');
+}
+
 /**
- * Loads a bank+program into the ACTIVE DSP: bank PUT, program PUT (with a
- * readback), then the active-DSP load trigger — each step settled (the
- * device re-lists between steps). The single device-touching action for
- * BOTH search hits and the preset-loader dropdowns (#138). Optimistically
- * updates the top-bar DSP name so the load feels immediate; the caller's
- * root refetch (onDone) reconciles the real name (~2s, device-bound).
+ * Loads a bank+program into a CHOSEN DSP slot: bank PUT, program PUT (with a
+ * readback), then that slot's load trigger — each step settled (the device
+ * re-lists between steps). The single device-touching apply path, shared by
+ * search hits, the preset-loader dropdowns (#138), and the preset browser /
+ * preview (#135). Optimistically updates that slot's top-bar name so the
+ * load feels immediate; the caller's root refetch (onDone) reconciles the
+ * real name (~2s, device-bound). Records the load into lastLoadedBySlot so a
+ * later preview of the same slot can restore it exactly.
  *
  * @param {{bankIdx: string, programIdx: string, programName: string}} target
+ * @param {'A'|'B'} dspSlot - Which engine to load into, regardless of which
+ *   is currently active (preview loads the non-active slot).
  * @param {Function} [onDone] - Called after the load trigger fires (the
  *   caller refreshes the screen / root names).
  */
-export async function loadProgram(target, onDone) {
+export async function loadProgramToDsp(target, dspSlot, onDone) {
   if (syncing) {
     // The scan owns the bank selection: a load interleaved with it would
     // land in whatever bank the scan happens to be visiting (review).
     log('Load ignored: library sync in progress', 'error', 'error');
     return;
   }
-  const activeIsA = appState.presetKey.startsWith(KEY_PREFIX.DSP_A);
+  const isA = dspSlot === 'A';
   log(
-    `Load: '${target.programName}' (bank ${target.bankIdx}) -> DSP ${activeIsA ? 'A' : 'B'}`,
+    `Load: '${target.programName}' (bank ${target.bankIdx}) -> DSP ${dspSlot}`,
     'info',
     'general'
   );
-  // Optimistic top-bar name: show the loaded program on the active DSP at
+  // Optimistic top-bar name: show the loaded program on the chosen DSP at
   // once; the root refetch in onDone confirms or corrects it.
   if (target.programName) {
-    const cleanName = String(target.programName)
-      .trim()
-      .replace(/^\d+\s+/, ''); // strip a leading index token if present
-    setState({ [activeIsA ? 'dspAName' : 'dspBName']: cleanName }, 'library:load-optimistic-name');
+    setState(
+      { [isA ? 'dspAName' : 'dspBName']: stripIndexToken(target.programName) },
+      'library:load-optimistic-name'
+    );
   }
   sendValuePut(KEY.BANK_SELECT, target.bankIdx);
   await sleep(LIBRARY.LOAD_SETTLE_MS);
@@ -275,8 +297,84 @@ export async function loadProgram(target, onDone) {
   // — the echo lands in currentValues/the log for the eye to catch.
   sendValueDump(KEY.PROGRAM_SELECT);
   await sleep(LIBRARY.LOAD_SETTLE_MS);
-  sendValuePut(activeIsA ? KEY.LOAD_TRIGGER_A : KEY.LOAD_TRIGGER_B, '1');
+  sendValuePut(isA ? KEY.LOAD_TRIGGER_A : KEY.LOAD_TRIGGER_B, '1');
   await sleep(LIBRARY.LOAD_SETTLE_MS);
+  // Remember (exact indices) what this slot now holds, for preview restore.
+  lastLoadedBySlot[dspSlot] = {
+    bankIdx: target.bankIdx,
+    programIdx: target.programIdx,
+    programName: target.programName,
+  };
+  onDone?.();
+}
+
+/**
+ * Loads a bank+program into the ACTIVE DSP — thin caller over
+ * loadProgramToDsp for the search hits and load-menu dropdowns, which always
+ * target whichever engine is in focus.
+ *
+ * @param {{bankIdx: string, programIdx: string, programName: string}} target
+ * @param {Function} [onDone]
+ */
+export function loadProgram(target, onDone) {
+  return loadProgramToDsp(target, activeSlot(), onDone);
+}
+
+/**
+ * The exact program to restore into a slot after a preview (#135). Prefers
+ * the indices the app last loaded into that slot this session (exact); falls
+ * back to a best-effort lookup of the slot's running name against the
+ * library (which can mis-resolve a name shared across banks — the caller
+ * surfaces this as best-effort). null when neither is available.
+ *
+ * @param {'A'|'B'} dspSlot
+ * @returns {{bankIdx: string, programIdx: string, programName: string}|null}
+ */
+export function getRememberedProgram(dspSlot) {
+  if (lastLoadedBySlot[dspSlot]) return { ...lastLoadedBySlot[dspSlot] };
+  if (!library) return null;
+  const runningName = stripIndexToken(dspSlot === 'A' ? appState.dspAName : appState.dspBName);
+  if (!runningName) return null;
+  for (const bank of library.banks) {
+    const program = bank.programs.find((p) => stripIndexToken(p.name) === runningName);
+    if (program) {
+      return { bankIdx: bank.idx, programIdx: program.idx, programName: program.name };
+    }
+  }
+  return null;
+}
+
+/** Clears the per-slot load memory (disconnect / Sync — see resetters). */
+export function resetLibraryLoadMemory() {
+  lastLoadedBySlot = { A: null, B: null };
+}
+
+/** True for the live MRU "Favorites" bank (bank 0), which must be live-read. */
+export function isFavoritesBank(bankIdx) {
+  return parseInt(bankIdx, 10) === LIBRARY.FAVORITES_BANK_IDX;
+}
+
+/**
+ * Re-reads the live Favorites bank (bank 0) from the device (#138/#135
+ * follow-up). Bank 0 is an auto-generated most-recently-used list that
+ * reorders on every load, so its static library snapshot goes stale the
+ * moment anything is loaded — both the load menu and the preset browser
+ * re-fetch it before showing it. Selects bank 0 and dumps it; the
+ * objectinfo:received listener below re-records library.banks[0] from the
+ * fresh memo. No-op (just callback) while a full sync owns the bank cursor.
+ *
+ * @param {Function} [onDone] - Called once the fresh dump has settled.
+ */
+export async function refreshFavoritesBank(onDone) {
+  if (syncing) {
+    onDone?.();
+    return;
+  }
+  sendValuePut(KEY.BANK_SELECT, String(LIBRARY.FAVORITES_BANK_IDX));
+  await sleep(LIBRARY.BANK_SETTLE_MS);
+  sendObjectInfoDump(KEY.FAVORITES);
+  sendValueDump(KEY.FAVORITES);
+  await sleep(LIBRARY.FAVORITES_REFRESH_MS);
   onDone?.();
 }
 

@@ -14,7 +14,7 @@ import {
   GANG_MAX_DEPTH,
 } from './tree.js';
 import { log } from './logger.js';
-import { isSyncing, loadProgram } from './library.js';
+import { isSyncing, loadProgram, isFavoritesBank, refreshFavoritesBank } from './library.js';
 import {
   isLoadMenuActive,
   hasLibrary,
@@ -183,8 +183,24 @@ const handleSelectChange = (e) => {
   // every async repaint is idempotent. The device is touched only by the
   // explicit '<- load program in A/B' TRG (handleParamClick -> loadProgram).
   if (isLoadMenuActive() && hasLibrary() && isLoadMenuChooser({ key })) {
-    if (key === KEY.BANK_SELECT) selectBank(parseInt(selectedIndex, 10));
-    else selectProgram(parseInt(selectedIndex, 10));
+    if (key === KEY.BANK_SELECT) {
+      const bankIdx = parseInt(selectedIndex, 10);
+      selectBank(bankIdx);
+      renderScreen(appState.currentSubs, appState.lastAscii); // instant local paint
+      // EXCEPTION to the no-traffic rule: bank 0 is the device's live MRU
+      // "Favorites" bank, which reorders on every load — its library snapshot
+      // is always stale. Re-fetch it, then re-stage to its fresh first program
+      // and repaint. The 70 static banks stay pure local staging.
+      if (isFavoritesBank(bankIdx)) {
+        showLoading();
+        refreshFavoritesBank(() => {
+          selectBank(bankIdx);
+          renderScreen(appState.currentSubs, appState.lastAscii);
+        });
+      }
+      return;
+    }
+    selectProgram(parseInt(selectedIndex, 10));
     renderScreen(appState.currentSubs, appState.lastAscii);
     return;
   }

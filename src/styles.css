@@ -22,20 +22,23 @@
   --lcd-px: #3bf06e;
   --lcd-px-dim: #1e7a3c;
   --lcd-glow: color-mix(in srgb, var(--lcd-px) 45%, transparent);
-  /* The hardware cell is 6x8 and so is the font's, so at x3 the natural
-     advance is 18px — EXACTLY the x3 canvas pitch (720/40 = 18px per
-     column), no letter-spacing tricks. All in-LCD widths derive from this
-     variable so the grid geometry has one source of truth. */
-  --lcd-advance: 18px;
-  --lcd-cell-h: 24px;
-  /* Row leading (maintainer feedback: contiguous hardware rows read
-     cramped at x3): +6px = two hardware scanlines at x3 = 25% leading,
-     the dense-monospace norm — and a 3px multiple, so glyphs stay on
-     the integer pixel grid. Section grouping still comes from the
-     renderer's blank separator lines, as on the device. */
-  --lcd-row-gap: 6px;
+  /* The hardware cell is 6x8 and so is the font's, so at an integer scale the
+     advance is 6 * scale px with no letter-spacing tricks. Rendered at x4 (the
+     glass is the faceplate's centerpiece — maintainer direction): 6*4 = 24px
+     per column, EXACTLY the x4 canvas pitch (960/40 = 24px). The font is a
+     bitmap face so ONLY integer scales stay crisp (x3=18, x4=24, x5=30).
+     All in-LCD widths derive from this variable so the grid geometry has one
+     source of truth. */
+  --lcd-advance: 24px;
+  --lcd-cell-h: 32px; /* 8px cell * x4 */
+  /* Row leading (maintainer feedback: contiguous hardware rows read cramped):
+     two hardware scanlines of leading = 25%, the dense-monospace norm. At x4
+     that is 2 * 4 = 8px, an integer-grid multiple so glyphs stay pixel-aligned.
+     Section grouping still comes from the renderer's blank separator lines, as
+     on the device. */
+  --lcd-row-gap: 8px;
   --lcd-row-h: calc(var(--lcd-cell-h) + var(--lcd-row-gap));
-  --lcd-pad: 12px; /* glass margin around the character grid */
+  --lcd-pad: 16px; /* glass margin around the character grid (4px native * x4) */
   --bezel-pad: 14px; /* the recess ring around the lit glass — kept thin
                         (was 24px): pure black on near-black read as a
                         dead moat (maintainer feedback) */
@@ -48,8 +51,8 @@
    100LX 6x8 (Ultimate Oldschool PC Font Pack, CC BY-SA 4.0, src/fonts/) is
    a true 6x8 cell — each glyph keeps its native 1px gutter, which is what
    lets the phosphor glow form a distinct halo per character instead of
-   smearing. Design size is 8px; rendered at x3 (24px) only — fractional
-   scales smear pixel fonts. */
+   smearing. Design size is 8px; rendered at an integer scale only (x4 = 32px
+   today) — fractional scales smear pixel fonts. */
 @font-face {
   font-family: 'OrvilleLCD';
   src: url('fonts/PxPlus_HP_100LX_6x8.ttf') format('truetype');
@@ -145,15 +148,17 @@ body {
 .panel {
   flex: 1;
   display: grid;
-  /* The LCD column (col 2) is a fixed 772px (bezel around a 40-char grid that
-     must not scale — see #lcd). The controls track is minmax(0, 1fr) so it may
-     shrink BELOW its content's natural width: paired with .function-keys
-     flex-wrap, the key row reflows instead of overflowing the faceplate's right
-     edge when the viewport is tight. Below the stacking breakpoint (responsive
-     section) the whole panel goes single-column. */
-  grid-template-columns: 170px auto minmax(0, 1fr) 56px;
+  /* Glass-forward faceplate: a slim brand rail + the LCD glass as the
+     centerpiece. The physical front-panel keys (keypad, cursor pad, DATA knob,
+     function keys) moved to the service drawer — they were redundant with
+     clicking the glass directly — which frees the whole right side for the
+     glass. The LCD column is fixed (~1012px: a 40-char grid at x4 plus bezel)
+     and must not scale; it is centred in the remaining space. Below the
+     stacking breakpoint (responsive section) the panel goes single-column. */
+  grid-template-columns: 170px 1fr;
   gap: 24px;
   padding: 24px 24px 28px;
+  align-items: start;
 }
 
 /* ---------- brand block ------------------------------------------------- */
@@ -304,10 +309,6 @@ body {
   letter-spacing: 0.12em;
   color: var(--legend-dim);
 }
-.status-led.busy.lit i {
-  background: var(--led-amber);
-  box-shadow: 0 0 5px color-mix(in srgb, var(--led-amber) 60%, transparent);
-}
 
 /* ---------- the display -------------------------------------------------- */
 .display-block {
@@ -315,6 +316,7 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 10px;
+  justify-self: center; /* centre the glass in the freed right-hand space */
 }
 .bezel {
   position: relative; /* anchors the .glass overlay */
@@ -885,6 +887,66 @@ body {
   height: 22px;
 }
 
+/* ---------- BUSY scanner ------------------------------------------------- */
+/* Link-activity indicator under the glass (the manual p.10 BUSY LED). While a
+   dump wave is open, event-bridge.js adds .lit to #busy-led and a bright band
+   sweeps the track — the Larson/Knight-Rider vocabulary the sync dialog uses
+   (.sync-scanner), so "data is moving" reads consistently across the app. Idle
+   it is a calm dim rail. Amber, the hardware BUSY colour, distinct from the
+   phosphor glass above it. Width matches the bezel so it aligns to the glass. */
+.busy-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: calc(40 * var(--lcd-advance) + 2 * var(--lcd-pad) + 2 * var(--bezel-pad));
+  max-width: 100%;
+  padding: 2px;
+}
+.busy-track {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: #0b0c0d;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
+}
+.busy-scan {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 22%;
+  border-radius: 3px;
+  background: var(--led-amber);
+  box-shadow: 0 0 8px var(--led-amber);
+  opacity: 0; /* hidden until a wave opens */
+}
+/* 78% = 100% - the band's 22% width, so the head never clips the right edge. */
+#busy-led.lit .busy-scan {
+  opacity: 1;
+  animation: busy-larson 1.1s ease-in-out infinite alternate;
+}
+@keyframes busy-larson {
+  from {
+    left: 0;
+  }
+  to {
+    left: 78%;
+  }
+}
+.busy-legend {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--legend-dim);
+  transition: color 0.2s;
+}
+#busy-led.lit .busy-legend {
+  color: var(--led-amber);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--led-amber) 60%, transparent);
+}
+
 /* ---------- keys --------------------------------------------------------- */
 .key {
   font-family: var(--legend-font);
@@ -924,6 +986,9 @@ body {
   color: var(--led-amber);
 }
 
+/* Lives in the service drawer's Front Panel column now (the emulated physical
+   keys left the hero faceplate). Left-aligned within the drawer; the function
+   keys wrap to keep the cluster inside the column on narrow drawers. */
 .controls-block {
   display: grid;
   grid-template-columns: auto auto;
@@ -933,7 +998,7 @@ body {
     'wheel keypad';
   gap: 18px 24px;
   align-content: start;
-  justify-content: end;
+  justify-content: start;
 }
 .key-group {
   display: flex;
@@ -941,13 +1006,6 @@ body {
 }
 .function-keys {
   grid-area: fn;
-  justify-content: flex-end;
-  /* Reflow the five key columns into a second row when the controls track is
-     squeezed rather than spilling past the faceplate. The row needs 390px
-     (5 x 78px, no inter-column gap); the controls track only reaches that at
-     ~1588px rack width, so between the 1520px stacking breakpoint and ~1588px
-     the keys wrap to two rows (intended — wrap beats clip). Above ~1588px they
-     sit on one row; below 1520px the panel goes single-column anyway. */
   flex-wrap: wrap;
 }
 .key-col {
@@ -1064,39 +1122,8 @@ body {
   grid-column: 2 / 4;
 }
 
-/* Memory card slot + BUSY LED (manual p.10 items Q/R/S). BUSY is wired:
-   event-bridge lights it while a dump wave is open. */
-.card-block {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding-top: 4px;
-}
-.card-slot {
-  width: 10px;
-  height: 110px;
-  border-radius: 2px;
-  background: #060708;
-  box-shadow:
-    inset 0 0 4px rgba(0, 0, 0, 1),
-    0 1px 0 rgba(255, 255, 255, 0.04);
-  border: 1px solid #000;
-}
-.card-release {
-  width: 14px;
-  height: 8px;
-  border-radius: 2px;
-  background: linear-gradient(var(--btn-cap-hi), var(--btn-cap));
-  border: 1px solid var(--btn-edge);
-}
-.card-legend {
-  font-size: 7px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  color: var(--legend-dim);
-  writing-mode: vertical-rl;
-}
+/* (The memory-card slot + old dot-style BUSY LED were removed with the
+   glass-forward redesign — BUSY is now the .busy-bar scanner under the glass.) */
 
 /* ---------- shared utility widgets -------------------------------------- */
 .util-btn {
@@ -1250,9 +1277,12 @@ body {
   border-radius: 2px;
   opacity: 0.7;
 }
+/* Auto-fitting columns: the drawer gained a fourth column (Front panel) when
+   the emulated keys moved here from the faceplate, so the tracks wrap instead
+   of being pinned at three. Each column is >=300px and shares the slack. */
 .service-body {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 24px;
   padding: 20px;
   margin-top: 2px;
@@ -1285,6 +1315,7 @@ body {
   border: 1px solid var(--btn-edge);
   border-radius: 2px;
   image-rendering: pixelated;
+  max-width: 100%;
 }
 .toggle {
   display: inline-flex;
@@ -1358,14 +1389,13 @@ body {
 }
 
 /* ---------- responsive --------------------------------------------------- */
-/* 1520px is the narrowest the 4-column hero faceplate fits without clipping:
-   ears 80 + panel padding 48 + 3 gaps 72 + brand 170 + LCD/bezel 772 + the
-   wrapped controls floor 320 (the cursor 128 + gap 24 + keypad 168 row, wider
-   than a wrapped key row) + card 56 ~= 1518. Below it, stack to a single
-   centred column. (Was 1100px — far below the real minimum, which left a dead
-   band where the right-hand controls overflowed the faceplate at high-DPI /
-   OS-scaled widths; #130 follow-up.) */
-@media (max-width: 1520px) {
+/* 1350px is the narrowest the glass-forward (brand + glass) faceplate fits
+   side-by-side: ears 80 + panel padding 48 + 1 gap 24 + brand 170 + LCD/bezel
+   1020 (a 40-char grid at x4 plus the bezel ring) ~= 1342. Below it, stack the
+   brand above the glass, both centred. (The physical keys left the faceplate
+   for the service drawer, so there is no controls column to fit any more — the
+   binding constraint is now the enlarged glass itself; #130 follow-ups.) */
+@media (max-width: 1350px) {
   .panel {
     grid-template-columns: 1fr;
     justify-items: center;
@@ -1380,9 +1410,6 @@ body {
     margin: 0 0 0 auto;
     border: none;
     padding: 0;
-  }
-  .controls-block {
-    justify-content: center;
   }
   .conn-strip {
     flex-wrap: wrap;

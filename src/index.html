@@ -128,85 +128,16 @@
               <button id="soft3-btn" class="key key-soft" aria-label="Soft key 3"></button>
               <button id="soft4-btn" class="key key-soft" aria-label="Soft key 4"></button>
             </div>
-          </div>
-
-          <div class="controls-block">
-            <!-- Hold sub-labels are the manual's real hold functions (p.8-9):
-                 PROGRAM-hold = routing storage, PARAMETER-hold = patch
-                 editor, SELECT-hold = remote-control setup. -->
-            <div class="key-group function-keys">
-              <div class="key-col">
-                <button id="ab-btn" class="key key-accent">DSP A/B</button>
-                <div class="bypass-leds" aria-hidden="true">
-                  <span class="status-led"><i></i><b>A</b></span>
-                  <span class="status-led"><i></i><b>B</b></span>
-                </div>
-                <button id="bypass-btn" class="key key-danger">BYPASS</button>
-              </div>
-              <div class="key-col">
-                <button id="program-btn" class="key">PROGRAM</button>
-                <button id="program-hold-btn" class="key key-hold">HOLD · ROUTING</button>
-              </div>
-              <div class="key-col">
-                <button id="parameter-btn" class="key">PARAMETER</button>
-                <button id="parameter-hold-btn" class="key key-hold">HOLD · PATCH</button>
-              </div>
-              <div class="key-col">
-                <button id="select-btn" class="key">SELECT</button>
-                <button id="select-hold-btn" class="key key-hold">HOLD · REMOTE</button>
-              </div>
-              <div class="key-col">
-                <button id="levels-btn" class="key">LEVELS</button>
-                <button id="setup-btn" class="key">SETUP</button>
-              </div>
+            <!-- Link-activity indicator (manual p.10 BUSY LED), reimagined as a
+                 phosphor scanner bar under the glass: a knight-rider sweep while
+                 a dump wave moves data, calm and dim when idle. id + the .lit
+                 toggle are unchanged (event-bridge.js). The physical front-panel
+                 keys (redundant with clicking the glass) and the decorative
+                 memory-card slot moved to the service drawer's Front Panel col. -->
+            <div id="busy-led" class="busy-bar" role="status" aria-label="MIDI link activity">
+              <span class="busy-track" aria-hidden="true"><i class="busy-scan"></i></span>
+              <b class="busy-legend">BUSY</b>
             </div>
-
-            <div class="key-group cursor-keys">
-              <button id="up-btn" class="key key-cursor" aria-label="Cursor up">▲</button>
-              <button id="left-btn" class="key key-cursor" aria-label="Cursor left">◀</button>
-              <button id="right-btn" class="key key-cursor" aria-label="Cursor right">▶</button>
-              <button id="down-btn" class="key key-cursor" aria-label="Cursor down">▼</button>
-            </div>
-
-            <!-- Manual p.9 items L/O: the KNOB plus INC/DEC keys. The knob
-                 answers wheel-scroll and vertical drag (controls.js). -->
-            <div class="key-group wheel-keys">
-              <span class="group-legend">DATA</span>
-              <div id="data-knob" class="knob" role="slider" aria-label="Data knob" tabindex="0">
-                <i class="knob-pointer"></i>
-              </div>
-              <div class="incdec">
-                <button id="inc-btn" class="key key-wheel" aria-label="Increment">▲</button>
-                <button id="dec-btn" class="key key-wheel" aria-label="Decrement">▼</button>
-              </div>
-            </div>
-
-            <div class="key-group keypad">
-              <button id="7-btn" class="key key-num">7</button>
-              <button id="8-btn" class="key key-num">8</button>
-              <button id="9-btn" class="key key-num">9</button>
-              <button id="4-btn" class="key key-num">4</button>
-              <button id="5-btn" class="key key-num">5</button>
-              <button id="6-btn" class="key key-num">6</button>
-              <button id="1-btn" class="key key-num">1</button>
-              <button id="2-btn" class="key key-num">2</button>
-              <button id="3-btn" class="key key-num">3</button>
-              <button id="dot-btn" class="key key-num">·</button>
-              <button id="0-btn" class="key key-num">0</button>
-              <button id="minus-btn" class="key key-num">−</button>
-              <button id="cxl-btn" class="key key-num key-danger">CXL</button>
-              <button id="enter-btn" class="key key-num key-accent keypad-enter">ENT</button>
-            </div>
-          </div>
-
-          <!-- Manual p.10 items Q/R/S: BUSY LED (wired to dump waves —
-               lit while data moves on the MIDI link) over the memory card
-               slot and its release key (decorative). -->
-          <div class="card-block">
-            <span id="busy-led" class="status-led busy"><i></i><b>BUSY</b></span>
-            <div class="card-slot" aria-hidden="true"></div>
-            <span class="card-release" aria-hidden="true"></span>
-            <b class="card-legend" aria-hidden="true">MEMORY CARD</b>
           </div>
         </div>
 
@@ -217,6 +148,79 @@
       <details class="service-panel">
         <summary><span class="hazard"></span>SERVICE<span class="hazard"></span></summary>
         <div class="service-body">
+          <!-- Front panel: the emulated physical keys. Redundant with clicking
+               the glass directly, so they live here off the hero faceplate
+               (maintainer direction) — still fully wired (controls.js binds by
+               id, location-independent). Hold sub-labels are the manual's real
+               hold functions (p.8-9): PROGRAM-hold = routing storage,
+               PARAMETER-hold = patch editor, SELECT-hold = remote-control setup.
+               The KNOB answers wheel-scroll and vertical drag (controls.js). -->
+          <div class="service-col service-col-frontpanel">
+            <h3 class="service-heading">Front panel</h3>
+            <div class="controls-block">
+              <div class="key-group function-keys">
+                <div class="key-col">
+                  <button id="ab-btn" class="key key-accent">DSP A/B</button>
+                  <div class="bypass-leds" aria-hidden="true">
+                    <span class="status-led"><i></i><b>A</b></span>
+                    <span class="status-led"><i></i><b>B</b></span>
+                  </div>
+                  <button id="bypass-btn" class="key key-danger">BYPASS</button>
+                </div>
+                <div class="key-col">
+                  <button id="program-btn" class="key">PROGRAM</button>
+                  <button id="program-hold-btn" class="key key-hold">HOLD · ROUTING</button>
+                </div>
+                <div class="key-col">
+                  <button id="parameter-btn" class="key">PARAMETER</button>
+                  <button id="parameter-hold-btn" class="key key-hold">HOLD · PATCH</button>
+                </div>
+                <div class="key-col">
+                  <button id="select-btn" class="key">SELECT</button>
+                  <button id="select-hold-btn" class="key key-hold">HOLD · REMOTE</button>
+                </div>
+                <div class="key-col">
+                  <button id="levels-btn" class="key">LEVELS</button>
+                  <button id="setup-btn" class="key">SETUP</button>
+                </div>
+              </div>
+
+              <div class="key-group cursor-keys">
+                <button id="up-btn" class="key key-cursor" aria-label="Cursor up">▲</button>
+                <button id="left-btn" class="key key-cursor" aria-label="Cursor left">◀</button>
+                <button id="right-btn" class="key key-cursor" aria-label="Cursor right">▶</button>
+                <button id="down-btn" class="key key-cursor" aria-label="Cursor down">▼</button>
+              </div>
+
+              <div class="key-group wheel-keys">
+                <span class="group-legend">DATA</span>
+                <div id="data-knob" class="knob" role="slider" aria-label="Data knob" tabindex="0">
+                  <i class="knob-pointer"></i>
+                </div>
+                <div class="incdec">
+                  <button id="inc-btn" class="key key-wheel" aria-label="Increment">▲</button>
+                  <button id="dec-btn" class="key key-wheel" aria-label="Decrement">▼</button>
+                </div>
+              </div>
+
+              <div class="key-group keypad">
+                <button id="7-btn" class="key key-num">7</button>
+                <button id="8-btn" class="key key-num">8</button>
+                <button id="9-btn" class="key key-num">9</button>
+                <button id="4-btn" class="key key-num">4</button>
+                <button id="5-btn" class="key key-num">5</button>
+                <button id="6-btn" class="key key-num">6</button>
+                <button id="1-btn" class="key key-num">1</button>
+                <button id="2-btn" class="key key-num">2</button>
+                <button id="3-btn" class="key key-num">3</button>
+                <button id="dot-btn" class="key key-num">·</button>
+                <button id="0-btn" class="key key-num">0</button>
+                <button id="minus-btn" class="key key-num">−</button>
+                <button id="cxl-btn" class="key key-num key-danger">CXL</button>
+                <button id="enter-btn" class="key key-num key-accent keypad-enter">ENT</button>
+              </div>
+            </div>
+          </div>
           <div class="service-col">
             <h3 class="service-heading">True screen (0x17 capture)</h3>
             <canvas id="lcd-canvas"></canvas>

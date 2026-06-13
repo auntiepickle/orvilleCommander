@@ -943,9 +943,11 @@ body {
   grid-area: fn;
   justify-content: flex-end;
   /* Reflow the five key columns into a second row when the controls track is
-     squeezed (intermediate viewport widths) rather than spilling past the
-     faceplate. The hero side-by-side layout (wide viewports) keeps them on one
-     row; below the stacking breakpoint the panel goes single-column anyway. */
+     squeezed rather than spilling past the faceplate. The row needs 390px
+     (5 x 78px, no inter-column gap); the controls track only reaches that at
+     ~1588px rack width, so between the 1520px stacking breakpoint and ~1588px
+     the keys wrap to two rows (intended — wrap beats clip). Above ~1588px they
+     sit on one row; below 1520px the panel goes single-column anyway. */
   flex-wrap: wrap;
 }
 .key-col {
@@ -1357,8 +1359,9 @@ body {
 
 /* ---------- responsive --------------------------------------------------- */
 /* 1520px is the narrowest the 4-column hero faceplate fits without clipping:
-   ears 80 + panel padding 48 + 3 gaps 72 + brand 170 + LCD/bezel 772 + a
-   wrapped controls floor 316 + card 56 ~= 1514. Below it, stack to a single
+   ears 80 + panel padding 48 + 3 gaps 72 + brand 170 + LCD/bezel 772 + the
+   wrapped controls floor 320 (the cursor 128 + gap 24 + keypad 168 row, wider
+   than a wrapped key row) + card 56 ~= 1518. Below it, stack to a single
    centred column. (Was 1100px — far below the real minimum, which left a dead
    band where the right-hand controls overflowed the faceplate at high-DPI /
    OS-scaled widths; #130 follow-up.) */

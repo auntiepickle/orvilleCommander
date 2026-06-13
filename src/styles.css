@@ -145,7 +145,13 @@ body {
 .panel {
   flex: 1;
   display: grid;
-  grid-template-columns: 170px auto 1fr 56px;
+  /* The LCD column (col 2) is a fixed 772px (bezel around a 40-char grid that
+     must not scale — see #lcd). The controls track is minmax(0, 1fr) so it may
+     shrink BELOW its content's natural width: paired with .function-keys
+     flex-wrap, the key row reflows instead of overflowing the faceplate's right
+     edge when the viewport is tight. Below the stacking breakpoint (responsive
+     section) the whole panel goes single-column. */
+  grid-template-columns: 170px auto minmax(0, 1fr) 56px;
   gap: 24px;
   padding: 24px 24px 28px;
 }
@@ -936,6 +942,11 @@ body {
 .function-keys {
   grid-area: fn;
   justify-content: flex-end;
+  /* Reflow the five key columns into a second row when the controls track is
+     squeezed (intermediate viewport widths) rather than spilling past the
+     faceplate. The hero side-by-side layout (wide viewports) keeps them on one
+     row; below the stacking breakpoint the panel goes single-column anyway. */
+  flex-wrap: wrap;
 }
 .key-col {
   display: flex;
@@ -1345,7 +1356,13 @@ body {
 }
 
 /* ---------- responsive --------------------------------------------------- */
-@media (max-width: 1100px) {
+/* 1520px is the narrowest the 4-column hero faceplate fits without clipping:
+   ears 80 + panel padding 48 + 3 gaps 72 + brand 170 + LCD/bezel 772 + a
+   wrapped controls floor 316 + card 56 ~= 1514. Below it, stack to a single
+   centred column. (Was 1100px — far below the real minimum, which left a dead
+   band where the right-hand controls overflowed the faceplate at high-DPI /
+   OS-scaled widths; #130 follow-up.) */
+@media (max-width: 1520px) {
   .panel {
     grid-template-columns: 1fr;
     justify-items: center;

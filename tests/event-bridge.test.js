@@ -375,7 +375,10 @@ describe('event-bridge (C1: dumpComplete-driven rendering)', () => {
   });
 
   test('BUSY LED lights on wave:opened and clears on dumpComplete (#131)', () => {
-    document.body.innerHTML = '<span id="busy-led" class="status-led busy"></span>';
+    // The glass-forward redesign made BUSY a scanner bar; the .lit toggle on
+    // #busy-led (the only thing event-bridge drives) is unchanged.
+    document.body.innerHTML =
+      '<div id="busy-led" class="busy-bar"><span class="busy-track"><i class="busy-scan"></i></span><b class="busy-legend">BUSY</b></div>';
     const led = document.getElementById('busy-led');
 
     emit('wave:opened', { kind: 'objectinfo' });

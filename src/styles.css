@@ -826,8 +826,11 @@ body {
   margin: 0;
   width: auto;
   display: inline;
-  height: 24px;
-  line-height: 24px;
+  /* Match the character cell so the in-glass dropdown lines up with its text
+     row at any LCD scale (derive, don't pin — these were 24px literals that
+     only happened to equal the cell at x3 and fell short at x4). */
+  height: var(--lcd-cell-h);
+  line-height: var(--lcd-cell-h);
 }
 #lcd select:hover {
   background: var(--lcd-px);
@@ -839,6 +842,9 @@ body {
 #lcd select option {
   background: var(--lcd-bg);
   color: var(--lcd-px);
+  /* The opened option list is the OS-native popup, not in-glass, so it uses a
+     normal monospace at a fixed readable size — intentionally decoupled from
+     the LCD scale (the bitmap LCD font renders poorly in a native popup). */
   font-family: ui-monospace, Consolas, monospace;
   font-size: 14px;
 }
@@ -916,7 +922,7 @@ body {
   top: 0;
   bottom: 0;
   left: 0;
-  width: 22%;
+  width: 22%; /* Larson band: ~1/5 of the track, the classic scanner proportion */
   border-radius: 3px;
   background: var(--led-amber);
   box-shadow: 0 0 8px var(--led-amber);

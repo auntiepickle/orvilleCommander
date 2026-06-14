@@ -179,13 +179,14 @@ export const DEMO = {
   //                       parser inside the send call
 };
 
-// Canvas presentation for the bitmap screen (CSS, cosmetic only).
-// x3 integer scale (240x64 -> 720x192) so the bitmap mirror and the virtual
-// #lcd are the SAME physical size — one display, two modes (#130; the
-// pixel font is likewise locked to x3, fractional scales smear it).
+// Canvas presentation for the true-screen (0x17) bitmap capture in the service
+// drawer (CSS, cosmetic only). CSS_WIDTH is the x3 integer base (240 -> 720px);
+// height is NOT pinned — ASPECT_RATIO governs it so the canvas scales down to
+// its drawer column without distorting the 240x64 capture. (The hero glass is
+// the text #lcd at x4 now; the capture is decoupled from it, so they no longer
+// need to be the same physical size — #130 follow-up.)
 export const CANVAS = {
   CSS_WIDTH: '720px',
-  CSS_HEIGHT: '192px',
   ASPECT_RATIO: '240 / 64',
   IMAGE_RENDERING: 'pixelated',
 };

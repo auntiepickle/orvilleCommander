@@ -72,9 +72,11 @@ export function renderBitmap(canvasId, rawBytes) {
   }
   canvas.width = width;
   canvas.height = height;
-  canvas.style.width = CANVAS.CSS_WIDTH;
-  canvas.style.height = CANVAS.CSS_HEIGHT;
-  canvas.style.aspectRatio = CANVAS.ASPECT_RATIO; // Force aspect ratio
+  canvas.style.width = CANVAS.CSS_WIDTH; // x3 base width; CSS max-width caps it to the drawer column
+  // Height is governed by aspect-ratio (not pinned) so a column-capped width
+  // scales the capture proportionally instead of squashing it. An explicit
+  // height would override aspect-ratio, which was the distortion bug.
+  canvas.style.aspectRatio = CANVAS.ASPECT_RATIO;
   canvas.style.imageRendering = CANVAS.IMAGE_RENDERING; // Sharp pixels
   const imgData = ctx.getImageData(0, 0, width, height);
   imgData.data.set(computePixels(rawBytes, { width, height, ...themePixelColors() }));

@@ -1319,7 +1319,11 @@ body {
      bitmap.js sets an inline width (720px) + aspect-ratio (240/64) and no
      pinned height; max-width caps the width to the column and height:auto lets
      the aspect-ratio derive the height. (A pinned inline height used to defeat
-     the aspect-ratio and squash the capture when the width was capped.) */
+     the aspect-ratio and squash the capture when the width was capped.)
+     content-box (overriding the global border-box) so the aspect-ratio governs
+     the IMAGE area, not the border box — otherwise the 1px border insets the
+     pixels and scales them ~1.4% non-uniformly. */
+  box-sizing: content-box;
   max-width: 100%;
   height: auto;
 }

@@ -1315,10 +1315,11 @@ body {
   border: 1px solid var(--btn-edge);
   border-radius: 2px;
   image-rendering: pixelated;
-  /* Scale to fit the drawer column WITHOUT distorting the 240x64 native
-     aspect: cap the width and let height track it (height:auto). max-width
-     alone shrank the width while the attribute height stayed fixed, squashing
-     the capture vertically. */
+  /* Scale to fit the drawer column without distorting the 240x64 capture:
+     bitmap.js sets an inline width (720px) + aspect-ratio (240/64) and no
+     pinned height; max-width caps the width to the column and height:auto lets
+     the aspect-ratio derive the height. (A pinned inline height used to defeat
+     the aspect-ratio and squash the capture when the width was capped.) */
   max-width: 100%;
   height: auto;
 }

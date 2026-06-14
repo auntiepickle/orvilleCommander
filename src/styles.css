@@ -1315,7 +1315,12 @@ body {
   border: 1px solid var(--btn-edge);
   border-radius: 2px;
   image-rendering: pixelated;
+  /* Scale to fit the drawer column WITHOUT distorting the 240x64 native
+     aspect: cap the width and let height track it (height:auto). max-width
+     alone shrank the width while the attribute height stayed fixed, squashing
+     the capture vertically. */
   max-width: 100%;
+  height: auto;
 }
 .toggle {
   display: inline-flex;
